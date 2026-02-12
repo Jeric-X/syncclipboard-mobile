@@ -6,17 +6,18 @@
 
 ## 🔥 高优先级 (本周必须完成)
 
-- [ ] 初始化 Expo 项目
-- [ ] 配置 TypeScript、ESLint、Prettier
-- [ ] 创建基础目录结构
-- [ ] 搭建 Git 仓库和提交规范
+- [x] 初始化 Expo 项目 ✅
+- [x] 配置 TypeScript、ESLint、Prettier ✅
+- [x] 创建基础目录结构 ✅
+- [ ] 搭建 UI 组件库
+- [ ] 实现主题系统
 
 ## 📌 中优先级 (近期完成)
 
-- [ ] 配置 React Navigation
-- [ ] 搭建主题系统
+- [x] 配置 React Navigation ✅
+- [ ] 搭建主题系统（暗色/亮色模式）
 - [ ] 实现 API 客户端基础结构
-- [ ] 实现基础组件库
+- [ ] 实现基础组件库（Button、Card、Input）
 
 ## 📝 低优先级 (可以延后)
 
@@ -29,22 +30,22 @@
 ## 🎯 分模块任务
 
 ### 项目初始化
-- [ ] 运行 `npx create-expo-app`
-- [ ] 安装依赖包
-- [ ] 配置 `app.json`
-- [ ] 配置 `tsconfig.json`
-- [ ] 配置 `.eslintrc.js`
-- [ ] 配置 `.prettierrc`
-- [ ] 添加 `.gitignore`
+- [x] 运行 `npx create-expo-app` ✅
+- [x] 安装依赖包 ✅
+- [x] 配置 `app.json` ✅
+- [x] 配置 `tsconfig.json` ✅
+- [x] 配置 `.eslintrc.js` ✅
+- [x] 配置 `.prettierrc` ✅
+- [x] 添加 `.gitignore` ✅
 
 ### 架构搭建
-- [ ] 创建 `src/` 目录结构
+- [x] 创建 `src/` 目录结构 ✅
 - [ ] 创建 `components/` 基础组件
-- [ ] 创建 `services/` 目录
-- [ ] 创建 `stores/` 目录
-- [ ] 创建 `types/` 目录
-- [ ] 创建 `utils/` 目录
-- [ ] 创建 `constants/` 目录
+- [x] 创建 `services/` 目录 ✅
+- [x] 创建 `stores/` 目录 ✅
+- [x] 创建 `types/` 目录 ✅
+- [x] 创建 `utils/` 目录 ✅
+- [x] 创建 `constants/` 目录 ✅
 
 ### API 客户端
 - [ ] 实现 `APIClient` 基类
