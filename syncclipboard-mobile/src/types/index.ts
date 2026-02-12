@@ -8,6 +8,9 @@ export * from './api';
 // Export Clipboard types
 export * from './clipboard';
 
+// Export Sync types
+export * from './sync';
+
 // API Response Types
 export interface ApiResponse<T = any> {
   success: boolean;

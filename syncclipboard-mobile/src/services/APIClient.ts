@@ -154,7 +154,8 @@ export class APIClient {
     }
 
     // 未知错误
-    return new APIError(error.message || 'Unknown error occurred');
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return new APIError(message);
   }
 
   /**

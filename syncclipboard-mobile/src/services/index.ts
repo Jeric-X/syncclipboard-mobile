@@ -18,6 +18,9 @@ export { WebDAVClient, type WebDAVConfig } from './WebDAVClient';
 export { ClipboardManager, clipboardManager } from './ClipboardManager';
 export { ClipboardMonitor, clipboardMonitor } from './ClipboardMonitor';
 
+// Sync Manager
+export { SyncManager } from './SyncManager';
+
 // Factory function to create appropriate API client
 import { SyncClipboardAPI } from './SyncClipboardAPI';
 import { WebDAVClient } from './WebDAVClient';

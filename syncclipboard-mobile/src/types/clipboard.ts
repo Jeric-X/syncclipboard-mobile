@@ -64,6 +64,9 @@ export interface ClipboardContent {
 
   /** 内容 hash */
   hash?: string;
+
+  /** 文件数据（二进制） */
+  fileData?: ArrayBuffer;
 }
 
 /**

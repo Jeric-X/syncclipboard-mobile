@@ -63,9 +63,9 @@ export interface ServerConfig {
 export type SyncOperation = 'upload' | 'download' | 'bidirectional';
 
 /**
- * 同步结果
+ * API 同步结果
  */
-export interface SyncResult {
+export interface APISyncResult {
   /** 是否成功 */
   success: boolean;
 
