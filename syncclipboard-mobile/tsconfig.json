@@ -4,46 +4,19 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "src/*"
-      ],
-      "@components/*": [
-        "src/components/*"
-      ],
-      "@screens/*": [
-        "src/screens/*"
-      ],
-      "@services/*": [
-        "src/services/*"
-      ],
-      "@stores/*": [
-        "src/stores/*"
-      ],
-      "@types/*": [
-        "src/types/*"
-      ],
-      "@utils/*": [
-        "src/utils/*"
-      ],
-      "@constants/*": [
-        "src/constants/*"
-      ],
-      "@navigation/*": [
-        "src/navigation/*"
-      ],
-      "@hooks/*": [
-        "src/hooks/*"
-      ],
-      "@assets/*": [
-        "src/assets/*"
-      ]
+      "@/*": ["src/*"],
+      "@components/*": ["src/components/*"],
+      "@screens/*": ["src/screens/*"],
+      "@services/*": ["src/services/*"],
+      "@stores/*": ["src/stores/*"],
+      "@types/*": ["src/types/*"],
+      "@utils/*": ["src/utils/*"],
+      "@constants/*": ["src/constants/*"],
+      "@navigation/*": ["src/navigation/*"],
+      "@hooks/*": ["src/hooks/*"],
+      "@assets/*": ["src/assets/*"]
     }
   },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"]
 }

@@ -3,10 +3,10 @@
  * Implements SyncClipboard API using WebDAV protocol
  */
 
-import { APIClient, APIClientConfig } from './APIClient';
+import { APIClient } from './APIClient';
 import { ProfileDto, ServerInfo } from '../types/api';
 import { ISyncClipboardAPI } from './SyncClipboardAPI';
-import { ValidationError, ServerError } from './errors';
+import { ValidationError } from './errors';
 import { AuthService } from './AuthService';
 
 /**
@@ -50,9 +50,7 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
   async getClipboard(): Promise<ProfileDto> {
     try {
       // WebDAV GET 请求获取文件
-      const profile = await this.get<ProfileDto>(
-        `/${WebDAVClient.PROFILE_FILENAME}`
-      );
+      const profile = await this.get<ProfileDto>(`/${WebDAVClient.PROFILE_FILENAME}`);
 
       // 验证响应数据
       this.validateProfile(profile);
@@ -179,10 +177,7 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
    */
   async getServerInfo(): Promise<ServerInfo> {
     try {
-      const [version, serverTime] = await Promise.all([
-        this.getVersion(),
-        this.getServerTime(),
-      ]);
+      const [version, serverTime] = await Promise.all([this.getVersion(), this.getServerTime()]);
 
       return {
         version,
@@ -225,7 +220,7 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
    */
   async listDirectory(path: string = '/'): Promise<string[]> {
     try {
-      const response = await this.client.request({
+      await this.client.request({
         method: 'PROPFIND',
         url: path,
         headers: {

@@ -51,7 +51,7 @@ export class AuthService {
     }
 
     const { username, password } = this.credentials;
-    
+
     // 使用 btoa 进行 Base64 编码
     // 注意：在 React Native 中，btoa 可能需要 polyfill
     const encoded = btoa(`${username}:${password}`);

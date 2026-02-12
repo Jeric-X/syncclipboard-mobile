@@ -4,13 +4,7 @@
  */
 
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import type { ThemeMode } from '@/theme';
@@ -30,17 +24,14 @@ export const SettingsScreen = () => {
         {/* 主题设置部分 */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>外观</Text>
-          
+
           <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
             <Text style={[styles.cardTitle, { color: theme.colors.text }]}>主题模式</Text>
-            
+
             {themeOptions.map((option) => (
               <TouchableOpacity
                 key={option.value}
-                style={[
-                  styles.optionItem,
-                  { borderBottomColor: theme.colors.divider },
-                ]}
+                style={[styles.optionItem, { borderBottomColor: theme.colors.divider }]}
                 onPress={() => setThemeMode(option.value)}
               >
                 <Text style={[styles.optionLabel, { color: theme.colors.text }]}>
@@ -48,7 +39,7 @@ export const SettingsScreen = () => {
                 </Text>
                 {themeMode === option.value && (
                   <View style={[styles.checkmark, { backgroundColor: theme.colors.primary }]}>
-                    <Text style={styles.checkmarkIcon}>✓</Text>
+                    <Text style={[styles.checkmarkIcon, { color: theme.colors.surface }]}>✓</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -59,17 +50,13 @@ export const SettingsScreen = () => {
         {/* 应用信息部分 */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>关于</Text>
-          
+
           <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
             <View style={[styles.infoRow, { borderBottomColor: theme.colors.divider }]}>
-              <Text style={[styles.infoLabel, { color: theme.colors.textSecondary }]}>
-                版本
-              </Text>
-              <Text style={[styles.infoValue, { color: theme.colors.text }]}>
-                1.0.0 (Beta)
-              </Text>
+              <Text style={[styles.infoLabel, { color: theme.colors.textSecondary }]}>版本</Text>
+              <Text style={[styles.infoValue, { color: theme.colors.text }]}>1.0.0 (Beta)</Text>
             </View>
-            
+
             <View style={styles.infoRow}>
               <Text style={[styles.infoLabel, { color: theme.colors.textSecondary }]}>
                 当前主题
@@ -114,7 +101,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     borderRadius: 12,
     overflow: 'hidden',
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -146,7 +132,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   checkmarkIcon: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
   },

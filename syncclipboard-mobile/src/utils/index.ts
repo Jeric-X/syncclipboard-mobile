@@ -59,5 +59,5 @@ export const isValidUrl = (url: string): boolean => {
 // Export hash utilities
 export * from './hash';
 
-// Export clipboard utilities  
+// Export clipboard utilities
 export * from './clipboard';

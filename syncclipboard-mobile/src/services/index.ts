@@ -43,10 +43,8 @@ export function createAPIClient(config: ServerConfig): SyncClipboardAPI | WebDAV
   }
 
   if (type === 'standalone') {
-    const authService = username && password 
-      ? new AuthService(username, password) 
-      : undefined;
-    
+    const authService = username && password ? new AuthService(username, password) : undefined;
+
     return new SyncClipboardAPI({ baseURL: url, authService });
   }
 

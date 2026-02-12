@@ -5,11 +5,7 @@
 
 import { AppState, AppStateStatus, Platform } from 'react-native';
 import { ClipboardManager } from './ClipboardManager';
-import {
-  ClipboardContent,
-  ClipboardChangeCallback,
-  ClipboardMonitorOptions,
-} from '@/types';
+import { ClipboardContent, ClipboardChangeCallback, ClipboardMonitorOptions } from '@/types';
 
 /**
  * 剪贴板监听器类
@@ -19,9 +15,9 @@ export class ClipboardMonitor {
   private callbacks: Set<ClipboardChangeCallback> = new Set();
   private isMonitoring: boolean = false;
   private pollingInterval: NodeJS.Timeout | null = null;
-  private appStateSubscription: any = null;
+  private appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
   private lastContent: ClipboardContent | null = null;
-  
+
   // 配置选项
   private options: Required<ClipboardMonitorOptions> = {
     pollingInterval: 1000, // iOS 默认 1 秒轮询
@@ -33,7 +29,7 @@ export class ClipboardMonitor {
 
   constructor(clipboardManager: ClipboardManager, options?: ClipboardMonitorOptions) {
     this.clipboardManager = clipboardManager;
-    
+
     if (options) {
       this.options = { ...this.options, ...options };
     }
@@ -52,10 +48,7 @@ export class ClipboardMonitor {
 
     // 监听应用状态变化
     if (this.options.stopOnBackground) {
-      this.appStateSubscription = AppState.addEventListener(
-        'change',
-        this.handleAppStateChange
-      );
+      this.appStateSubscription = AppState.addEventListener('change', this.handleAppStateChange);
     }
 
     // 开始轮询（iOS）或设置监听器（Android）
@@ -131,10 +124,7 @@ export class ClipboardMonitor {
   private startPolling(): void {
     this.stopPolling(); // 先停止现有轮询
 
-    this.pollingInterval = setInterval(
-      () => this.checkClipboard(),
-      this.options.pollingInterval
-    );
+    this.pollingInterval = setInterval(() => this.checkClipboard(), this.options.pollingInterval);
   }
 
   /**

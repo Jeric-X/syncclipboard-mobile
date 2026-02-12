@@ -32,7 +32,10 @@ export class AuthenticationError extends APIError {
  * 网络错误
  */
 export class NetworkError extends APIError {
-  constructor(message: string = 'Network request failed', public originalError?: any) {
+  constructor(
+    message: string = 'Network request failed',
+    public originalError?: any
+  ) {
     super(message);
     this.name = 'NetworkError';
     Object.setPrototypeOf(this, NetworkError.prototype);

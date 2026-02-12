@@ -31,9 +31,7 @@ const HistoryScreen = () => {
   return (
     <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
       <Text style={[styles.text, { color: theme.colors.text }]}>历史记录</Text>
-      <Text style={[styles.subtext, { color: theme.colors.textSecondary }]}>
-        查看剪贴板历史
-      </Text>
+      <Text style={[styles.subtext, { color: theme.colors.textSecondary }]}>查看剪贴板历史</Text>
     </View>
   );
 };
@@ -114,4 +112,3 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
-

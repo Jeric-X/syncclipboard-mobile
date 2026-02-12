@@ -13,22 +13,22 @@ import { ValidationError } from './errors';
 export interface ISyncClipboardAPI {
   /** 获取剪贴板配置 */
   getClipboard(): Promise<ProfileDto>;
-  
+
   /** 上传剪贴板配置 */
   putClipboard(profile: ProfileDto): Promise<void>;
-  
+
   /** 获取文件数据 */
   getFile(fileName: string): Promise<Blob>;
-  
+
   /** 上传文件数据 */
   putFile(fileName: string, data: Blob): Promise<void>;
-  
+
   /** 获取服务器时间 */
   getServerTime(): Promise<Date>;
-  
+
   /** 获取服务器版本 */
   getVersion(): Promise<string>;
-  
+
   /** 获取服务器信息 */
   getServerInfo(): Promise<ServerInfo>;
 }
@@ -50,10 +50,10 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
   async getClipboard(): Promise<ProfileDto> {
     try {
       const profile = await this.get<ProfileDto>(SyncClipboardAPI.PROFILE_ENDPOINT);
-      
+
       // 验证响应数据
       this.validateProfile(profile);
-      
+
       return profile;
     } catch (error) {
       console.error('[SyncClipboardAPI] Failed to get clipboard:', error);
@@ -68,7 +68,7 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
     try {
       // 验证输入数据
       this.validateProfile(profile);
-      
+
       await this.put(SyncClipboardAPI.PROFILE_ENDPOINT, profile);
     } catch (error) {
       console.error('[SyncClipboardAPI] Failed to put clipboard:', error);
@@ -89,7 +89,7 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
       const blob = await this.get<Blob>(url, {
         responseType: 'blob',
       });
-      
+
       return blob;
     } catch (error) {
       console.error(`[SyncClipboardAPI] Failed to get file ${fileName}:`, error);
@@ -130,11 +130,11 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
       // 尝试从响应头获取服务器时间
       const response = await this.client.head('/');
       const dateHeader = response.headers['date'];
-      
+
       if (dateHeader) {
         return new Date(dateHeader);
       }
-      
+
       // 如果没有 date 头，返回当前时间
       return new Date();
     } catch (error) {
@@ -163,10 +163,7 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
    */
   async getServerInfo(): Promise<ServerInfo> {
     try {
-      const [version, serverTime] = await Promise.all([
-        this.getVersion(),
-        this.getServerTime(),
-      ]);
+      const [version, serverTime] = await Promise.all([this.getVersion(), this.getServerTime()]);
 
       return {
         version,

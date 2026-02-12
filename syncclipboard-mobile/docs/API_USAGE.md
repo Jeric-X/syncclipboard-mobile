@@ -66,11 +66,11 @@ const api = new SyncClipboardAPI({
 ```typescript
 try {
   const profile = await api.getClipboard();
-  
+
   console.log('剪贴板类型:', profile.type);
   console.log('文本内容:', profile.text);
   console.log('哈希值:', profile.hash);
-  
+
   if (profile.hasData) {
     console.log('数据文件:', profile.dataName);
     console.log('文件大小:', profile.size);
@@ -117,11 +117,11 @@ const imageProfile: ProfileDto = {
 try {
   // 1. 上传配置
   await api.putClipboard(imageProfile);
-  
+
   // 2. 上传图片文件
   const imageBlob = await fetchImageBlob(); // 获取图片数据
   await api.putFile('image.png', imageBlob);
-  
+
   console.log('图片上传成功！');
 } catch (error) {
   console.error('图片上传失败:', error);
@@ -133,11 +133,11 @@ try {
 ```typescript
 try {
   const profile = await api.getClipboard();
-  
+
   if (profile.hasData && profile.dataName) {
     // 下载文件数据
     const fileBlob = await api.getFile(profile.dataName);
-    
+
     // 保存到本地
     await saveToLocal(fileBlob, profile.dataName);
     console.log('文件下载成功！');
@@ -152,7 +152,7 @@ try {
 ```typescript
 try {
   const serverInfo = await api.getServerInfo();
-  
+
   console.log('服务器版本:', serverInfo.version);
   console.log('服务器时间:', serverInfo.serverTime);
   console.log('在线状态:', serverInfo.online);
@@ -248,27 +248,27 @@ function handleAPIError(error: unknown): string {
   if (error instanceof AuthenticationError) {
     return '认证失败，请检查用户名和密码';
   }
-  
+
   if (error instanceof NetworkError) {
     return '网络连接失败，请检查网络';
   }
-  
+
   if (error instanceof TimeoutError) {
     return '请求超时，请稍后重试';
   }
-  
+
   if (error instanceof ServerError) {
     return `服务器错误 (${error.statusCode})`;
   }
-  
+
   if (error instanceof ValidationError) {
     return `数据验证失败: ${error.message}`;
   }
-  
+
   if (error instanceof APIError) {
     return error.message;
   }
-  
+
   return '未知错误';
 }
 
@@ -304,7 +304,7 @@ const loaded = await authService.loadFromStorage();
 
 if (loaded) {
   console.log('认证信息加载成功');
-  
+
   // 使用加载的认证信息
   const api = new SyncClipboardAPI({
     baseURL: 'https://your-server.com',
@@ -385,7 +385,7 @@ function ClipboardSync() {
         hash: calculateHash(text),
         hasData: false,
       };
-      
+
       await api.putClipboard(profile);
       Alert.alert('成功', '剪贴板上传成功');
     } catch (error) {
@@ -402,7 +402,7 @@ function ClipboardSync() {
         onPress={fetchClipboard}
         disabled={loading}
       />
-      
+
       {profile && (
         <View>
           <Text>类型: {profile.type}</Text>

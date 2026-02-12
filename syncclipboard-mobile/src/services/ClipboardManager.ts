@@ -5,8 +5,8 @@
 
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
-import { ClipboardContent, ClipboardContentType } from '@/types';
-import { calculateTextHash, calculateFileHash } from '@/utils/hash';
+import { ClipboardContent } from '@/types';
+import { calculateTextHash } from '@/utils/hash';
 
 /**
  * 剪贴板管理器类
@@ -193,7 +193,7 @@ export class ClipboardManager {
 
       // 选择图片
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'images' as any,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
         quality: 1,
       });

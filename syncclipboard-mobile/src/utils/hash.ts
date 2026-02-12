@@ -4,7 +4,6 @@
  */
 
 import * as Crypto from 'expo-crypto';
-import * as FileSystem from 'expo-file-system';
 
 /**
  * 计算字符串的 SHA256 hash
@@ -17,11 +16,9 @@ export async function calculateTextHash(text: string): Promise<string> {
   }
 
   try {
-    const hash = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      text,
-      { encoding: Crypto.CryptoEncoding.HEX }
-    );
+    const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, text, {
+      encoding: Crypto.CryptoEncoding.HEX,
+    });
     return hash.toLowerCase();
   } catch (error) {
     console.error('[HashUtils] Failed to calculate text hash:', error);
@@ -40,11 +37,9 @@ export async function calculateFileHash(fileUri: string): Promise<string> {
   }
 
   try {
-    const hash = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      fileUri,
-      { encoding: Crypto.CryptoEncoding.HEX }
-    );
+    const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, fileUri, {
+      encoding: Crypto.CryptoEncoding.HEX,
+    });
     return hash.toLowerCase();
   } catch (error) {
     console.error('[HashUtils] Failed to calculate file hash:', error);
@@ -61,20 +56,18 @@ export async function calculateBlobHash(blob: Blob): Promise<string> {
   try {
     // 将 Blob 转换为 ArrayBuffer
     const arrayBuffer = await blob.arrayBuffer();
-    
+
     // 转换为 Uint8Array
     const uint8Array = new Uint8Array(arrayBuffer);
-    
+
     // 转换为 base64 字符串
     const base64 = btoa(String.fromCharCode(...uint8Array));
-    
+
     // 计算 hash
-    const hash = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      base64,
-      { encoding: Crypto.CryptoEncoding.HEX }
-    );
-    
+    const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, base64, {
+      encoding: Crypto.CryptoEncoding.HEX,
+    });
+
     return hash.toLowerCase();
   } catch (error) {
     console.error('[HashUtils] Failed to calculate blob hash:', error);

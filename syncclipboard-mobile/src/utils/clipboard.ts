@@ -10,7 +10,7 @@ import { calculateTextHash } from '@/utils/hash';
  * 将 ClipboardContent 转换为 ProfileDto
  */
 export async function contentToProfileDto(content: ClipboardContent): Promise<ProfileDto> {
-  const { type, text = '', hash, imageUri, fileUri, fileName, fileSize } = content;
+  const { type, text = '', hash, fileName, fileSize } = content;
 
   // 计算 hash（如果没有提供）
   const calculatedHash = hash || (text ? await calculateTextHash(text) : undefined);
@@ -103,7 +103,7 @@ function generateDataFileName(hash?: string, extension: string = 'dat'): string 
     // 使用 hash 的前 16 位作为文件名
     return `${hash.substring(0, 16)}.${extension}`;
   }
-  
+
   // 使用时间戳作为后备
   return `${Date.now()}.${extension}`;
 }
@@ -144,11 +144,11 @@ export function getExtensionFromFileName(fileName: string): string {
  */
 export function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
-  
+
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  
+
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 

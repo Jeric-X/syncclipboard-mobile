@@ -20,13 +20,13 @@ import {
 export interface APIClientConfig {
   /** 基础 URL */
   baseURL: string;
-  
+
   /** 超时时间（毫秒） */
   timeout?: number;
-  
+
   /** 认证服务 */
   authService?: AuthService;
-  
+
   /** 附加请求头 */
   headers?: Record<string, string>;
 }
@@ -109,7 +109,7 @@ export class APIClient {
   /**
    * 统一错误处理
    */
-  protected handleError(error: any): APIError {
+  protected handleError(error: unknown): APIError {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError;
 
@@ -145,11 +145,7 @@ export class APIClient {
       }
 
       // 其他 HTTP 错误
-      return new ServerError(
-        `HTTP ${status}: ${axiosError.message}`,
-        status,
-        data
-      );
+      return new ServerError(`HTTP ${status}: ${axiosError.message}`, status, data);
     }
 
     // 其他类型的错误
@@ -194,11 +190,7 @@ export class APIClient {
   /**
    * POST 请求
    */
-  protected async post<T = any>(
-    url: string,
-    data?: any,
-    config?: AxiosRequestConfig
-  ): Promise<T> {
+  protected async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
     const response = await this.client.post<T>(url, data, config);
     return response.data;
   }
@@ -206,11 +198,7 @@ export class APIClient {
   /**
    * PUT 请求
    */
-  protected async put<T = any>(
-    url: string,
-    data?: any,
-    config?: AxiosRequestConfig
-  ): Promise<T> {
+  protected async put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
     const response = await this.client.put<T>(url, data, config);
     return response.data;
   }
@@ -226,11 +214,7 @@ export class APIClient {
   /**
    * PATCH 请求
    */
-  protected async patch<T = any>(
-    url: string,
-    data?: any,
-    config?: AxiosRequestConfig
-  ): Promise<T> {
+  protected async patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
     const response = await this.client.patch<T>(url, data, config);
     return response.data;
   }
@@ -242,7 +226,7 @@ export class APIClient {
     try {
       await this.get('/');
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
