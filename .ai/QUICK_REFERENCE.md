@@ -32,13 +32,13 @@ DEVELOPMENT_PLAN.md            # 完整开发规划
 
 ### 服务器参考
 ```
-c:\Nextcloud\Code\SyncClipboard\src\
-  SyncClipboard.Server.Core\
-    Controllers\
+../SyncClipboard/src/
+  SyncClipboard.Server.Core/
+    Controllers/
       SyncClipboardController.cs    # API 控制器
-c:\Nextcloud\Code\SyncClipboard\docs\
+../SyncClipboard/docs/
   Hash.md                           # Hash 计算
-c:\Nextcloud\Code\SyncClipboard\script\
+../SyncClipboard/script/
   SyncAutoxJs.js                    # Android 参考
 ```
 

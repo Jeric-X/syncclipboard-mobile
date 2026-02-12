@@ -111,7 +111,7 @@ src/
 
 ### 重要上下文
 ```
-项目位置: c:\Users\ddjia\Desktop\code\syncclipboard-mobile\syncclipboard-mobile
+项目位置: .
 当前阶段: Phase 1 Week 3-4 - 核心功能开发 60%
 整体进度: 35%
 API 客户端: ✅ 完成
@@ -235,7 +235,7 @@ src/
 
 ### 重要上下文
 ```
-项目位置: c:\Users\ddjia\Desktop\code\syncclipboard-mobile\syncclipboard-mobile
+项目位置: .
 当前阶段: Phase 1 Week 3-4 - 核心功能开发 30%
 整体进度: 25%
 API 客户端: ✅ 完成
@@ -321,7 +321,7 @@ src/
 
 ### 重要上下文
 ```
-项目位置: c:\Users\ddjia\Desktop\code\syncclipboard-mobile\syncclipboard-mobile
+项目位置: .
 当前阶段: Phase 1 Week 1-2 - 75% 完成
 整体进度: 15%
 主题系统: ✅ 完成
@@ -407,8 +407,8 @@ syncclipboard-mobile/
 
 ### 重要上下文
 ```
-项目位置: c:\Users\ddjia\Desktop\code\syncclipboard-mobile\syncclipboard-mobile
-服务器参考: c:\Nextcloud\Code\SyncClipboard
+项目位置: .
+服务器参考: ../SyncClipboard
 当前阶段: Phase 1 Week 1 - 50% 完成
 进度: 8% (项目初始化完成)
 已安装包: 977 个
@@ -463,8 +463,8 @@ syncclipboard-mobile/
 
 ### 重要上下文
 ```
-项目位置: c:\Users\ddjia\Desktop\code\syncclipboard-mobile
-服务器参考: c:\Nextcloud\Code\SyncClipboard
+项目位置: .
+服务器参考: ../SyncClipboard
 当前阶段: Phase 1 准备阶段
 进度: 0% (规划完成)
 ```

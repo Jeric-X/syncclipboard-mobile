@@ -38,7 +38,7 @@ syncclipboard-mobile/           # 移动端项目（当前）
 │   └── QUICK_REFERENCE.md     # 快速参考
 └── [项目文件，待创建]
 
-c:\Nextcloud\Code\SyncClipboard/  # 服务器项目（参考）
+../SyncClipboard/  # 服务器项目（参考）
 ├── src/
 │   └── SyncClipboard.Server.Core/
 │       └── Controllers/        # 📍 API 控制器（重要）

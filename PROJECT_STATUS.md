@@ -227,8 +227,8 @@ src/
 - 无
 
 **参考资料**:
-- SyncClipboard 服务器 API: `c:\Nextcloud\Code\SyncClipboard\src\SyncClipboard.Server.Core\Controllers\`
-- Hash 计算文档: `c:\Nextcloud\Code\SyncClipboard\docs\Hash.md`
+- SyncClipboard 服务器 API: `../SyncClipboard/src/SyncClipboard.Server.Core/Controllers/`
+- Hash 计算文档: `../SyncClipboard/docs/Hash.md`
 
 ---
 
@@ -253,8 +253,8 @@ src/
 
 ### 项目关键路径
 ```
-c:\Users\ddjia\Desktop\code\syncclipboard-mobile    # 移动端项目
-c:\Nextcloud\Code\SyncClipboard                      # 服务器端参考
+.    # 移动端项目
+../SyncClipboard                      # 服务器端参考
 ```
 
 ### 重要文档位置
@@ -265,7 +265,7 @@ c:\Nextcloud\Code\SyncClipboard                      # 服务器端参考
 - 技术决策: `docs/DECISIONS.md` (待创建)
 
 ### 服务器 API 参考
-- API 控制器: `c:\Nextcloud\Code\SyncClipboard\src\SyncClipboard.Server.Core\Controllers\SyncClipboardController.cs`
+- API 控制器: `../SyncClipboard\src\SyncClipboard.Server.Core\Controllers\SyncClipboardController.cs`
 - ProfileDto 定义: 查看服务器代码
 - 认证方式: Basic Authentication
 
