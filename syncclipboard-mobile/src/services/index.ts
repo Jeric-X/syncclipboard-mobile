@@ -21,6 +21,12 @@ export { ClipboardMonitor, clipboardMonitor } from './ClipboardMonitor';
 // Sync Manager
 export { SyncManager } from './SyncManager';
 
+// Storage Services
+export { ConfigStorage, configStorage } from './ConfigStorage';
+export { HistoryStorage, historyStorage } from './HistoryStorage';
+export { CacheManager, cacheManager } from './CacheManager';
+export { SecureStorage, secureStorage } from './SecureStorage';
+
 // Factory function to create appropriate API client
 import { SyncClipboardAPI } from './SyncClipboardAPI';
 import { WebDAVClient } from './WebDAVClient';

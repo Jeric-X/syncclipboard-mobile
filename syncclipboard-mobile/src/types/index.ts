@@ -11,6 +11,9 @@ export * from './clipboard';
 // Export Sync types
 export * from './sync';
 
+// Export Storage types
+export * from './storage';
+
 // API Response Types
 export interface ApiResponse<T = any> {
   success: boolean;
