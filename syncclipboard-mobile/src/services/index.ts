@@ -14,6 +14,10 @@ export { APIClient, type APIClientConfig } from './APIClient';
 export { SyncClipboardAPI, type ISyncClipboardAPI } from './SyncClipboardAPI';
 export { WebDAVClient, type WebDAVConfig } from './WebDAVClient';
 
+// Clipboard Services
+export { ClipboardManager, clipboardManager } from './ClipboardManager';
+export { ClipboardMonitor, clipboardMonitor } from './ClipboardMonitor';
+
 // Factory function to create appropriate API client
 import { SyncClipboardAPI } from './SyncClipboardAPI';
 import { WebDAVClient } from './WebDAVClient';
