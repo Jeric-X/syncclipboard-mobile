@@ -10,7 +10,7 @@
 - [x] 配置 TypeScript、ESLint、Prettier ✅
 - [x] 创建基础目录结构 ✅
 - [x] 实现主题系统 ✅
-- [ ] 实现 API 客户端基础结构
+- [x] 实现 API 客户端基础结构 ✅
 
 ## 📌 中优先级 (近期完成)
 
@@ -49,13 +49,13 @@
 - [x] 创建 `constants/` 目录 ✅
 
 ### API 客户端
-- [ ] 实现 `APIClient` 基类
-- [ ] 实现 `AuthService`
-- [ ] 实现 `SyncClipboardAPI`
-- [ ] 实现 `WebDAVClient`
-- [ ] 实现请求拦截器
-- [ ] 实现响应拦截器
-- [ ] 实现错误处理
+- [x] 实现 `APIClient` 基类 ✅
+- [x] 实现 `AuthService` ✅
+- [x] 实现 `SyncClipboardAPI` ✅
+- [x] 实现 `WebDAVClient` ✅
+- [x] 实现请求拦截器 ✅
+- [x] 实现响应拦截器 ✅
+- [x] 实现错误处理 ✅
 - [ ] 编写单元测试
 
 ### 剪贴板服务

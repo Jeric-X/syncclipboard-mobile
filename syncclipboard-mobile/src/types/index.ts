@@ -2,6 +2,9 @@
  * Common Types & Interfaces
  */
 
+// Export API types
+export * from './api';
+
 // API Response Types
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -27,7 +30,7 @@ export interface ClipboardItem {
   deviceName?: string;
 }
 
-// Settings Types
+// Settings Types (keeping for backward compatibility)
 export interface ServerConfig {
   type: 'standalone' | 'builtin' | 'webdav';
   url: string;
