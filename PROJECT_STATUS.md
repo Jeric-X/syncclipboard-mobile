@@ -2,15 +2,16 @@
 
 > **最后更新**: 2026-02-12  
 > **当前阶段**: Phase 1 Week 3-4 - 核心功能开发  
-> **整体进度**: 50%
+> **整体进度**: 55%
 
 ---
 
 ## 🎯 当前状态
 
 ### 正在进行的任务
-- [ ] 实现 Zustand stores
 - [ ] 开发 UI 组件库
+- [ ] 开发首页界面
+- [ ] 编写单元测试
 
 ### 待办任务
 - [ ] 搭建 UI 组件库
@@ -19,6 +20,7 @@
 - [ ] 编写同步管理器单元测试
 
 ### 最近完成
+- [x] 2026-02-12 深夜: 实现完整 Zustand stores（clipboardStore、syncStore、historyStore、settingsStore）
 - [x] 2026-02-12 深夜: 实现完整本地存储模块（ConfigStorage、HistoryStorage、CacheManager、SecureStorage）
 - [x] 2026-02-12 深夜: 实现配置和服务器管理
 - [x] 2026-02-12 深夜: 实现历史记录搜索和过滤
@@ -49,7 +51,7 @@
 
 ## 📊 各阶段进度
 
-### Phase 1: MVP 开发 (45/100%)
+### Phase 1: MVP 开发 (55/100%)
 
 #### Week 1-2: 项目初始化与基础架构 (100%)
 - [x] 初始化 Expo 项目
@@ -59,7 +61,7 @@
 - [x] 实现主题系统（亮色/暗色/自动）
 - [x] 搭建 UI 组件库（暂缓）
 
-#### Week 3-4: 核心功能开发 (80%)
+#### Week 3-4: 核心功能开发 (90%)
 - [x] 实现 API 客户端（APIClient、AuthService）
 - [x] 实现 SyncClipboardAPI 和 WebDAVClient
 - [x] 实现请求/响应拦截器和错误处理
@@ -69,7 +71,7 @@
 - [x] 实现上传/下载和冲突处理
 - [x] 实现自动同步和离线队列
 - [x] 实现本地存储（ConfigStorage、HistoryStorage、CacheManager、SecureStorage）
-- [ ] 实现 Zustand stores
+- [x] 实现 Zustand stores（clipboardStore、syncStore、historyStore、settingsStore）
 
 #### Week 5-6: UI 开发与集成 (0%)
 - [ ] 开发首页界面

@@ -83,10 +83,10 @@
 - [ ] 编写单元测试
 
 ### 状态管理
-- [ ] 实现 `clipboardStore`
-- [ ] 实现 `syncStore`
-- [ ] 实现 `historyStore`
-- [ ] 实现 `settingsStore`
+- [x] 实现 `clipboardStore` ✅
+- [x] 实现 `syncStore` ✅
+- [x] 实现 `historyStore` ✅
+- [x] 实现 `settingsStore` ✅
 - [ ] 编写单元测试
 
 ### UI - 首页
