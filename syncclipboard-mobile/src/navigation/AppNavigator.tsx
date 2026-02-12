@@ -3,53 +3,99 @@
  */
 
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View, StyleSheet } from 'react-native';
+import { Text, View, StyleSheet, StatusBar } from 'react-native';
+import { useTheme } from '@/hooks/useTheme';
+import { SettingsScreen } from '@/screens/SettingsScreen';
 
 const Tab = createBottomTabNavigator();
 
 // Placeholder screens
-const HomeScreen = () => (
-  <View style={styles.screen}>
-    <Text style={styles.text}>首页</Text>
-    <Text style={styles.subtext}>剪贴板同步功能即将到来</Text>
-  </View>
-);
+const HomeScreen = () => {
+  const { theme } = useTheme();
 
-const HistoryScreen = () => (
-  <View style={styles.screen}>
-    <Text style={styles.text}>历史记录</Text>
-    <Text style={styles.subtext}>查看剪贴板历史</Text>
-  </View>
-);
+  return (
+    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
+      <Text style={[styles.text, { color: theme.colors.text }]}>首页</Text>
+      <Text style={[styles.subtext, { color: theme.colors.textSecondary }]}>
+        剪贴板同步功能即将到来
+      </Text>
+    </View>
+  );
+};
 
-const SettingsScreen = () => (
-  <View style={styles.screen}>
-    <Text style={styles.text}>设置</Text>
-    <Text style={styles.subtext}>配置服务器和同步选项</Text>
-  </View>
-);
+const HistoryScreen = () => {
+  const { theme } = useTheme();
+
+  return (
+    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
+      <Text style={[styles.text, { color: theme.colors.text }]}>历史记录</Text>
+      <Text style={[styles.subtext, { color: theme.colors.textSecondary }]}>
+        查看剪贴板历史
+      </Text>
+    </View>
+  );
+};
 
 export const AppNavigator = () => {
+  const { theme } = useTheme();
+
+  // 创建适应主题的导航主题
+  const navigationTheme = theme.isDark
+    ? {
+        ...DarkTheme,
+        colors: {
+          ...DarkTheme.colors,
+          primary: theme.colors.primary,
+          background: theme.colors.background,
+          card: theme.colors.surface,
+          text: theme.colors.text,
+          border: theme.colors.border,
+        },
+      }
+    : {
+        ...DefaultTheme,
+        colors: {
+          ...DefaultTheme.colors,
+          primary: theme.colors.primary,
+          background: theme.colors.background,
+          card: theme.colors.surface,
+          text: theme.colors.text,
+          border: theme.colors.border,
+        },
+      };
+
   return (
-    <NavigationContainer>
-      <Tab.Navigator
-        screenOptions={{
-          headerStyle: {
-            backgroundColor: '#007AFF',
-          },
-          headerTintColor: '#fff',
-          headerTitleStyle: {
-            fontWeight: 'bold',
-          },
-        }}
-      >
-        <Tab.Screen name="Home" component={HomeScreen} options={{ title: '首页' }} />
-        <Tab.Screen name="History" component={HistoryScreen} options={{ title: '历史' }} />
-        <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: '设置' }} />
-      </Tab.Navigator>
-    </NavigationContainer>
+    <>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.colors.surface}
+      />
+      <NavigationContainer theme={navigationTheme}>
+        <Tab.Navigator
+          screenOptions={{
+            headerStyle: {
+              backgroundColor: theme.colors.surface,
+            },
+            headerTintColor: theme.colors.text,
+            headerTitleStyle: {
+              fontWeight: 'bold',
+            },
+            tabBarStyle: {
+              backgroundColor: theme.colors.tabBarBackground,
+              borderTopColor: theme.colors.tabBarBorder,
+            },
+            tabBarActiveTintColor: theme.colors.tabBarActive,
+            tabBarInactiveTintColor: theme.colors.tabBarInactive,
+          }}
+        >
+          <Tab.Screen name="Home" component={HomeScreen} options={{ title: '首页' }} />
+          <Tab.Screen name="History" component={HistoryScreen} options={{ title: '历史' }} />
+          <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: '设置' }} />
+        </Tab.Navigator>
+      </NavigationContainer>
+    </>
   );
 };
 
@@ -58,7 +104,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
   },
   text: {
     fontSize: 24,
@@ -67,6 +112,6 @@ const styles = StyleSheet.create({
   },
   subtext: {
     fontSize: 16,
-    color: '#666',
   },
 });
+
