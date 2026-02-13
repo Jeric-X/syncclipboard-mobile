@@ -5,3 +5,6 @@
 
 export { ServerConfigModal } from './ServerConfigModal';
 export { ServerListItem } from './ServerListItem';
+export { CurrentClipboardCard } from './CurrentClipboardCard';
+export { SyncStatusIndicator } from './SyncStatusIndicator';
+export { QuickActionsBar } from './QuickActionsBar';

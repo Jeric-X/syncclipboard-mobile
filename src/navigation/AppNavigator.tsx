@@ -7,24 +7,12 @@ import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, View, StyleSheet, StatusBar } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { HomeScreen } from '@/screens/HomeScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
 
 const Tab = createBottomTabNavigator();
 
 // Placeholder screens
-const HomeScreen = () => {
-  const { theme } = useTheme();
-
-  return (
-    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
-      <Text style={[styles.text, { color: theme.colors.text }]}>首页</Text>
-      <Text style={[styles.subtext, { color: theme.colors.textSecondary }]}>
-        剪贴板同步功能即将到来
-      </Text>
-    </View>
-  );
-};
-
 const HistoryScreen = () => {
   const { theme } = useTheme();
 

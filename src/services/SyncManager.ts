@@ -4,8 +4,13 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createAPIClient } from './index';
-import { clipboardManager, clipboardMonitor } from './index';
+import { SyncClipboardAPI } from './SyncClipboardAPI';
+import { WebDAVClient } from './WebDAVClient';
+import { AuthService } from './AuthService';
+import { clipboardManager } from './ClipboardManager';
+import { clipboardMonitor } from './ClipboardMonitor';
+import { ConfigurationError } from './errors';
+import { ServerConfig } from '../types/api';
 import { compareHash } from '../utils/hash';
 import {
   SyncConfig,
@@ -87,13 +92,38 @@ export class SyncManager {
   }
 
   /**
+   * 创建 API 客户端
+   */
+  private createAPIClient(config: ServerConfig): SyncClipboardAPI | WebDAVClient {
+    const { type, url, username, password } = config;
+
+    if (!url) {
+      throw new ConfigurationError('Server URL is required');
+    }
+
+    if (type === 'webdav') {
+      if (!username || !password) {
+        throw new ConfigurationError('Username and password are required for WebDAV');
+      }
+      return new WebDAVClient({ baseURL: url, username, password });
+    }
+
+    if (type === 'standalone') {
+      const authService = username && password ? new AuthService(username, password) : undefined;
+      return new SyncClipboardAPI({ baseURL: url, authService });
+    }
+
+    throw new ConfigurationError(`Unsupported server type: ${type}`);
+  }
+
+  /**
    * 初始化同步管理器
    */
   public async initialize(config: SyncConfig): Promise<void> {
     this.config = { ...DEFAULT_CONFIG, ...config } as SyncConfig;
 
     // 创建 API 客户端
-    this.apiClient = createAPIClient(config.server);
+    this.apiClient = this.createAPIClient(config.server);
 
     // 加载持久化数据
     await this.loadPersistedData();
