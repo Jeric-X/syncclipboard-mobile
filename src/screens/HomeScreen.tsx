@@ -3,7 +3,7 @@
  * 首页 - 显示当前剪贴板和同步状态
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
   RefreshControl,
   TouchableOpacity,
   Animated,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useClipboardStore } from '@/stores/clipboardStore';
@@ -21,8 +23,8 @@ import { SyncStatus, SyncDirection } from '@/types/sync';
 import { ClipboardContent } from '@/types/clipboard';
 import { CurrentClipboardCard } from '@/components/CurrentClipboardCard';
 import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
-import { QuickActionsBar } from '@/components/QuickActionsBar';
-import { createAPIClient } from '@/services';
+import { createAPIClient, getSignalRClient } from '@/services';
+import type { RemoteClipboardChangedCallback } from '@/services';
 
 type MessageType = 'success' | 'error' | 'info';
 
@@ -33,18 +35,26 @@ export function HomeScreen() {
   const [loadingRemote, setLoadingRemote] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: MessageType } | null>(null);
   const [fadeAnim] = useState(new Animated.Value(0));
+  const appState = useRef(AppState.currentState);
+  const remotePollingInterval = useRef<NodeJS.Timeout | null>(null);
+  const lastRemoteHash = useRef<string | null>(null);
+  const signalRClient = useRef(getSignalRClient());
+  const signalRConnected = useRef(false);
 
-  const { currentContent, getContent } = useClipboardStore();
+  const { currentContent, getContent, startMonitoring, stopMonitoring } = useClipboardStore();
   const { status, stats, sync } = useSyncStore();
   const { getActiveServer, loadConfig, isLoaded } = useSettingsStore();
 
   const activeServer = getActiveServer();
   const lastSyncTime = stats?.lastSyncTime || null;
 
+  // 远程剪贴板轮询间隔（毫秒）
+  const REMOTE_POLLING_INTERVAL = 3000; // 3秒
+
   // 显示消息提示
   const showMessage = (text: string, type: MessageType = 'info') => {
     setMessage({ text, type });
-    
+
     // 淡入动画
     Animated.sequence([
       Animated.timing(fadeAnim, {
@@ -64,13 +74,17 @@ export function HomeScreen() {
   };
 
   // 获取远程剪贴板内容
-  const fetchRemoteClipboard = async () => {
+  const fetchRemoteClipboard = async (silent: boolean = false) => {
     if (!activeServer) {
       setRemoteContent(null);
+      lastRemoteHash.current = null;
       return;
     }
 
-    setLoadingRemote(true);
+    if (!silent) {
+      setLoadingRemote(true);
+    }
+
     try {
       const apiClient = createAPIClient(activeServer);
       const profile = await apiClient.getClipboard();
@@ -79,36 +93,214 @@ export function HomeScreen() {
         // 转换为 ClipboardContent
         const { profileDtoToContent } = await import('@/utils/clipboard');
         const content = profileDtoToContent(profile);
-        setRemoteContent(content);
+
+        // 检查是否有变化
+        const currentHash = content.hash || content.text || '';
+        const hasChanged = lastRemoteHash.current !== currentHash;
+
+        if (hasChanged) {
+          setRemoteContent(content);
+          lastRemoteHash.current = currentHash;
+
+          if (silent && lastRemoteHash.current !== null) {
+            console.log('[HomeScreen] Remote clipboard changed, updated display');
+          }
+        }
       } else {
         setRemoteContent(null);
+        lastRemoteHash.current = null;
       }
     } catch (error) {
       console.error('[HomeScreen] Failed to fetch remote clipboard:', error);
-      setRemoteContent(null);
+      if (!silent) {
+        setRemoteContent(null);
+        lastRemoteHash.current = null;
+      }
     } finally {
-      setLoadingRemote(false);
+      if (!silent) {
+        setLoadingRemote(false);
+      }
     }
   };
 
-  // 页面加载时加载配置和剪贴板内容
+  // 启动远程剪贴板轮询
+  const startRemotePolling = () => {
+    if (!activeServer || remotePollingInterval.current) {
+      if (remotePollingInterval.current) {
+        console.log('[HomeScreen] Polling already active, skipping');
+      }
+      return;
+    }
+
+    console.log(
+      '[HomeScreen] Starting remote clipboard polling for server type:',
+      activeServer.type
+    );
+
+    // 立即获取一次
+    fetchRemoteClipboard(true);
+
+    // 设置定时轮询
+    remotePollingInterval.current = setInterval(() => {
+      fetchRemoteClipboard(true);
+    }, REMOTE_POLLING_INTERVAL);
+  };
+
+  // 停止远程剪贴板轮询
+  const stopRemotePolling = () => {
+    if (remotePollingInterval.current) {
+      console.log('[HomeScreen] Stopping remote clipboard polling');
+      clearInterval(remotePollingInterval.current);
+      remotePollingInterval.current = null;
+    }
+  };
+
+  // 连接 SignalR
+  const connectSignalR = async () => {
+    if (!activeServer || activeServer.type !== 'syncclipboard') {
+      console.log('[HomeScreen] Cannot connect SignalR - server type:', activeServer?.type);
+      return;
+    }
+
+    try {
+      console.log('[HomeScreen] Connecting to SignalR for server:', activeServer.url);
+
+      // 注册远程剪贴板变化回调
+      const callback: RemoteClipboardChangedCallback = async (profile) => {
+        console.log('[HomeScreen] SignalR: Remote clipboard changed');
+
+        // 转换为 ClipboardContent
+        const { profileDtoToContent } = await import('@/utils/clipboard');
+        const content = profileDtoToContent(profile);
+
+        setRemoteContent(content);
+        lastRemoteHash.current = content.hash || content.text || '';
+      };
+
+      signalRClient.current.onRemoteClipboardChanged(callback);
+
+      // 开始连接
+      await signalRClient.current.connect(activeServer);
+      signalRConnected.current = true;
+
+      // 连接成功后立即获取一次远程剪贴板
+      await fetchRemoteClipboard(true);
+    } catch (error) {
+      console.error('[HomeScreen] Failed to connect SignalR:', error);
+      signalRConnected.current = false;
+    }
+  };
+
+  // 断开 SignalR
+  const disconnectSignalR = async () => {
+    if (signalRConnected.current) {
+      console.log('[HomeScreen] Disconnecting SignalR...');
+      signalRClient.current.clearCallbacks();
+      await signalRClient.current.disconnect();
+      signalRConnected.current = false;
+    }
+  };
+
+  // 页面加载时加载配置、启动剪贴板监听
   useEffect(() => {
     const initialize = async () => {
       if (!isLoaded) {
         await loadConfig();
       }
       await getContent();
+
+      // 启动剪贴板持续监听
+      startMonitoring();
     };
     initialize();
-  }, [isLoaded, loadConfig, getContent]);
 
-  // 当服务器配置改变时，获取远程剪贴板
+    // 组件卸载时停止监听
+    return () => {
+      stopMonitoring();
+    };
+  }, [isLoaded, loadConfig, getContent, startMonitoring, stopMonitoring]);
+
+  // 当服务器配置改变时，启动/停止远程轮询或 SignalR
   useEffect(() => {
-    if (activeServer) {
-      fetchRemoteClipboard();
-    } else {
-      setRemoteContent(null);
-    }
+    const initializeRemoteSync = async () => {
+      console.log('[HomeScreen] Initializing remote sync for server type:', activeServer?.type);
+
+      // 先停止现有的连接
+      stopRemotePolling();
+      await disconnectSignalR();
+      lastRemoteHash.current = null;
+
+      if (activeServer) {
+        // 立即获取一次（显示 loading）
+        await fetchRemoteClipboard(false);
+
+        // 根据服务器类型选择 SignalR 或轮询
+        console.log(
+          '[HomeScreen] Server type is:',
+          activeServer.type,
+          '| Will use:',
+          activeServer.type === 'syncclipboard' ? 'SignalR' : 'Polling'
+        );
+
+        if (activeServer.type === 'syncclipboard') {
+          // 使用 SignalR 实时通信
+          await connectSignalR();
+        } else {
+          // 使用轮询模式
+          startRemotePolling();
+        }
+      } else {
+        console.log('[HomeScreen] No active server configured');
+        setRemoteContent(null);
+      }
+    };
+
+    initializeRemoteSync();
+
+    return () => {
+      stopRemotePolling();
+      disconnectSignalR();
+    };
+  }, [activeServer]);
+
+  // 监听应用状态变化，控制远程剪贴板轮询或 SignalR
+  // 本地剪贴板已由 ClipboardMonitor 持续监听，无需在此处处理
+  useEffect(() => {
+    const subscription = AppState.addEventListener(
+      'change',
+      async (nextAppState: AppStateStatus) => {
+        // 当从后台切换到前台时
+        if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+          console.log('[HomeScreen] App has come to the foreground');
+
+          // 如果有配置服务器
+          if (activeServer) {
+            if (activeServer.type === 'syncclipboard') {
+              // SignalR 会自动重连，但我们手动刷新一次
+              if (signalRClient.current.isConnected()) {
+                await fetchRemoteClipboard(true);
+              } else {
+                await connectSignalR();
+              }
+            } else {
+              // 轮询模式：启动轮询
+              startRemotePolling();
+            }
+          }
+        } else if (nextAppState === 'background' || nextAppState === 'inactive') {
+          console.log('[HomeScreen] App has gone to the background');
+
+          // 应用进入后台，停止轮询（SignalR 保持连接）
+          stopRemotePolling();
+        }
+
+        appState.current = nextAppState;
+      }
+    );
+
+    return () => {
+      subscription.remove();
+    };
   }, [activeServer]);
 
   // 下拉刷新
@@ -117,7 +309,7 @@ export function HomeScreen() {
     try {
       await getContent();
       if (activeServer) {
-        await Promise.all([fetchRemoteClipboard(), sync(SyncDirection.Download)]);
+        await Promise.all([fetchRemoteClipboard(false), sync(SyncDirection.Download)]);
       }
     } catch (error) {
       console.error('[HomeScreen] Refresh failed:', error);
@@ -135,25 +327,10 @@ export function HomeScreen() {
 
     try {
       await sync(SyncDirection.Upload);
-      await fetchRemoteClipboard(); // 刷新远程剪贴板显示
+      await fetchRemoteClipboard(false); // 刷新远程剪贴板显示
       showMessage('剪贴板已上传到服务器', 'success');
     } catch (error: any) {
       showMessage(error.message || '无法上传到服务器', 'error');
-    }
-  };
-
-  const handleDownload = async () => {
-    if (!activeServer) {
-      showMessage('请先在设置中配置服务器', 'info');
-      return;
-    }
-
-    try {
-      await sync(SyncDirection.Download);
-      await getContent(); // 刷新本地剪贴板显示
-      showMessage('已从服务器下载剪贴板', 'success');
-    } catch (error: any) {
-      showMessage(error.message || '无法从服务器下载', 'error');
     }
   };
 
@@ -164,7 +341,7 @@ export function HomeScreen() {
     }
 
     // 检查是否需要下载文件
-    const needsDownload = 
+    const needsDownload =
       (remoteContent.type === 'Image' && remoteContent.fileName && !remoteContent.fileData) ||
       (remoteContent.type === 'File' && remoteContent.fileName && !remoteContent.fileData);
 
@@ -175,17 +352,17 @@ export function HomeScreen() {
     setLoadingRemote(true);
     try {
       const apiClient = createAPIClient(activeServer);
-      
+
       // 下载文件数据
       if (remoteContent.fileName) {
         const fileData = await apiClient.getFile(remoteContent.fileName);
-        
+
         // 更新远程内容，添加文件数据
         setRemoteContent({
           ...remoteContent,
           fileData: await fileData.arrayBuffer(),
         });
-        
+
         showMessage('文件已下载', 'success');
       }
     } catch (error) {
@@ -193,22 +370,6 @@ export function HomeScreen() {
       showMessage('文件下载失败', 'error');
     } finally {
       setLoadingRemote(false);
-    }
-  };
-
-  const handleSync = async () => {
-    if (!activeServer) {
-      showMessage('请先在设置中配置服务器', 'info');
-      return;
-    }
-
-    try {
-      await sync(SyncDirection.Both);
-      // 刷新本地和远程显示
-      await Promise.all([getContent(), fetchRemoteClipboard()]);
-      showMessage('剪贴板已同步', 'success');
-    } catch (error: any) {
-      showMessage(error.message || '同步过程中出现错误', 'error');
     }
   };
 
@@ -241,19 +402,14 @@ export function HomeScreen() {
                 远程剪贴板
               </Text>
               {loadingRemote ? (
-                <View
-                  style={[
-                    styles.loadingCard,
-                    { backgroundColor: theme.colors.surface },
-                  ]}
-                >
+                <View style={[styles.loadingCard, { backgroundColor: theme.colors.surface }]}>
                   <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
                     加载中...
                   </Text>
                 </View>
               ) : (
-                <CurrentClipboardCard 
-                  clipboard={remoteContent} 
+                <CurrentClipboardCard
+                  clipboard={remoteContent}
                   isRemote={true}
                   onDownload={handleDownloadRemoteFile}
                 />
@@ -265,8 +421,8 @@ export function HomeScreen() {
               <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
                 本地剪贴板
               </Text>
-              <CurrentClipboardCard 
-                clipboard={currentContent} 
+              <CurrentClipboardCard
+                clipboard={currentContent}
                 isRemote={false}
                 onUpload={handleUpload}
               />
@@ -275,19 +431,14 @@ export function HomeScreen() {
         ) : (
           <>
             {/* 未配置服务器时只显示本地剪贴板 */}
-            <CurrentClipboardCard 
-              clipboard={currentContent} 
-              isRemote={false}
-            />
+            <CurrentClipboardCard clipboard={currentContent} isRemote={false} />
           </>
         )}
 
         {/* 空状态提示 */}
         {!activeServer && (
           <View style={[styles.emptyState, { backgroundColor: theme.colors.surface }]}>
-            <Text style={[styles.emptyStateTitle, { color: theme.colors.text }]}>
-              未配置服务器
-            </Text>
+            <Text style={[styles.emptyStateTitle, { color: theme.colors.text }]}>未配置服务器</Text>
             <Text style={[styles.emptyStateText, { color: theme.colors.textSecondary }]}>
               请在"设置"页面添加服务器配置以启用同步功能
             </Text>
@@ -300,15 +451,8 @@ export function HomeScreen() {
             <Text style={[styles.infoLabel, { color: theme.colors.textSecondary }]}>
               当前服务器
             </Text>
-            <Text style={[styles.infoValue, { color: theme.colors.text }]}>
-              {activeServer.url}
-            </Text>
-            <Text
-              style={[
-                styles.infoLabel,
-                { color: theme.colors.textSecondary, marginTop: 8 },
-              ]}
-            >
+            <Text style={[styles.infoValue, { color: theme.colors.text }]}>{activeServer.url}</Text>
+            <Text style={[styles.infoLabel, { color: theme.colors.textSecondary, marginTop: 8 }]}>
               最近同步
             </Text>
             <Text style={[styles.infoValue, { color: theme.colors.text }]}>
@@ -330,8 +474,8 @@ export function HomeScreen() {
                 message.type === 'success'
                   ? '#4CAF50'
                   : message.type === 'error'
-                  ? '#F44336'
-                  : theme.colors.primary,
+                    ? '#F44336'
+                    : theme.colors.primary,
               opacity: fadeAnim,
             },
           ]}
@@ -339,15 +483,6 @@ export function HomeScreen() {
           <Text style={styles.messageText}>{message.text}</Text>
         </Animated.View>
       )}
-
-      {/* 快速操作栏 */}
-      <QuickActionsBar
-        onUpload={handleUpload}
-        onDownload={handleDownload}
-        onSync={handleSync}
-        disabled={!activeServer || status === SyncStatus.Syncing}
-        syncInProgress={status === SyncStatus.Syncing}
-      />
     </View>
   );
 }

@@ -42,7 +42,7 @@ export const ServerListItem: React.FC<ServerListItemProps> = ({
   };
 
   const getServerTypeLabel = (type: string): string => {
-    return type === 'standalone' ? 'SyncClipboard' : 'WebDAV';
+    return type === 'syncclipboard' ? 'SyncClipboard' : 'WebDAV';
   };
 
   return (

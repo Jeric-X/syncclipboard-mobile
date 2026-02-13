@@ -41,7 +41,7 @@ export interface ClipboardItem {
 
 // Settings Types (keeping for backward compatibility)
 export interface ServerConfig {
-  type: 'standalone' | 'builtin' | 'webdav';
+  type: 'syncclipboard' | 'builtin' | 'webdav';
   url: string;
   username?: string;
   password?: string;

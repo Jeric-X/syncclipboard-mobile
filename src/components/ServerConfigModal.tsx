@@ -41,7 +41,9 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
   const [isTesting, setIsTesting] = useState(false);
 
   // 表单状态
-  const [type, setType] = useState<'standalone' | 'webdav'>(initialConfig?.type || 'standalone');
+  const [type, setType] = useState<'syncclipboard' | 'webdav'>(
+    initialConfig?.type || 'syncclipboard'
+  );
   const [url, setUrl] = useState(initialConfig?.url || '');
   const [username, setUsername] = useState(initialConfig?.username || '');
   const [password, setPassword] = useState(initialConfig?.password || '');
@@ -63,7 +65,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
       setNotificationEnabled(initialConfig.notificationEnabled ?? true);
     } else if (visible && !initialConfig) {
       // 新建时重置为空
-      setType('standalone');
+      setType('syncclipboard');
       setUrl('');
       setUsername('');
       setPassword('');
@@ -197,11 +199,11 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                 style={[
                   styles.typeOption,
                   { borderBottomColor: theme.colors.divider },
-                  type === 'standalone' && {
+                  type === 'syncclipboard' && {
                     backgroundColor: theme.colors.primary + '10',
                   },
                 ]}
-                onPress={() => setType('standalone')}
+                onPress={() => setType('syncclipboard')}
               >
                 <View style={styles.typeContent}>
                   <Text style={[styles.typeLabel, { color: theme.colors.text }]}>
@@ -211,7 +213,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                     官方独立服务器或客户端内置服务器
                   </Text>
                 </View>
-                {type === 'standalone' && (
+                {type === 'syncclipboard' && (
                   <View style={[styles.checkmark, { backgroundColor: theme.colors.primary }]}>
                     <Text style={styles.checkmarkIcon}>✓</Text>
                   </View>
@@ -260,7 +262,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                     },
                   ]}
                   placeholder={
-                    type === 'standalone'
+                    type === 'syncclipboard'
                       ? 'http://192.168.1.100:5033'
                       : 'https://dav.jianguoyun.com/dav'
                   }

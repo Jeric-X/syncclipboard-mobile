@@ -27,7 +27,8 @@ type FilterType = 'all' | 'Text' | 'Image' | 'File';
 
 export function HistoryScreen() {
   const { theme } = useTheme();
-  const { items, loadItems, searchItems, deleteItem, clearHistory, isLoading, currentPage } = useHistoryStore();
+  const { items, loadItems, searchItems, deleteItem, clearHistory, isLoading, currentPage } =
+    useHistoryStore();
 
   const [searchText, setSearchText] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('all');
@@ -61,31 +62,28 @@ export function HistoryScreen() {
   }, [items, filterType]);
 
   // 点击列表项 - 复制到剪贴板
-  const handleItemPress = useCallback(
-    async (item: ClipboardItem) => {
-      try {
-        if (item.type === 'Text' && item.text) {
-          await clipboardManager.setClipboardContent({
-            type: 'Text',
-            text: item.text,
-            hash: item.hash,
-          });
-          Alert.alert('成功', '已复制到剪贴板');
-        } else {
-          Alert.alert('提示', '暂不支持非文本类型的快速复制');
-        }
-      } catch (error) {
-        console.error('[HistoryScreen] Failed to copy:', error);
-        Alert.alert('错误', '复制失败');
+  const handleItemPress = useCallback(async (item: ClipboardItem) => {
+    try {
+      if (item.type === 'Text' && item.text) {
+        await clipboardManager.setClipboardContent({
+          type: 'Text',
+          text: item.text,
+          hash: item.hash,
+        });
+        Alert.alert('成功', '已复制到剪贴板');
+      } else {
+        Alert.alert('提示', '暂不支持非文本类型的快速复制');
       }
-    },
-    []
-  );
+    } catch (error) {
+      console.error('[HistoryScreen] Failed to copy:', error);
+      Alert.alert('错误', '复制失败');
+    }
+  }, []);
 
   // 长按列表项 - 显示操作菜单
   const handleItemLongPress = useCallback((item: ClipboardItem) => {
     setSelectedItem(item);
-    
+
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
@@ -187,9 +185,7 @@ export function HistoryScreen() {
         <Text style={styles.emptyIcon}>📋</Text>
         <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>暂无历史记录</Text>
         <Text style={[styles.emptyDescription, { color: theme.colors.textSecondary }]}>
-          {searchText
-            ? '未找到匹配的记录'
-            : '复制内容后将自动保存到历史记录'}
+          {searchText ? '未找到匹配的记录' : '复制内容后将自动保存到历史记录'}
         </Text>
       </View>
     );
@@ -230,8 +226,7 @@ export function HistoryScreen() {
             style={[
               styles.filterButton,
               {
-                backgroundColor:
-                  filterType === type ? theme.colors.primary : 'transparent',
+                backgroundColor: filterType === type ? theme.colors.primary : 'transparent',
               },
             ]}
           >
@@ -239,14 +234,17 @@ export function HistoryScreen() {
               style={[
                 styles.filterButtonText,
                 {
-                  color:
-                    filterType === type
-                      ? '#FFFFFF'
-                      : theme.colors.textSecondary,
+                  color: filterType === type ? '#FFFFFF' : theme.colors.textSecondary,
                 },
               ]}
             >
-              {type === 'all' ? '全部' : type === 'Text' ? '文本' : type === 'Image' ? '图片' : '文件'}
+              {type === 'all'
+                ? '全部'
+                : type === 'Text'
+                  ? '文本'
+                  : type === 'Image'
+                    ? '图片'
+                    : '文件'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -286,7 +284,9 @@ export function HistoryScreen() {
                 style={styles.actionSheetButton}
                 onPress={() => selectedItem && handleDeleteItem(selectedItem)}
               >
-                <Text style={[styles.actionSheetButtonText, { color: theme.colors.error || '#F44336' }]}>
+                <Text
+                  style={[styles.actionSheetButtonText, { color: theme.colors.error || '#F44336' }]}
+                >
                   删除
                 </Text>
               </TouchableOpacity>

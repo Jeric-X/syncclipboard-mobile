@@ -14,11 +14,7 @@ interface HistoryListItemProps {
   onLongPress: (item: ClipboardItem) => void;
 }
 
-export const HistoryListItem: React.FC<HistoryListItemProps> = ({
-  item,
-  onPress,
-  onLongPress,
-}) => {
+export const HistoryListItem: React.FC<HistoryListItemProps> = ({ item, onPress, onLongPress }) => {
   const { theme } = useTheme();
 
   const getTypeIcon = (type: string): string => {

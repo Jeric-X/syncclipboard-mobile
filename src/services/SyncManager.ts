@@ -108,7 +108,7 @@ export class SyncManager {
       return new WebDAVClient({ baseURL: url, username, password });
     }
 
-    if (type === 'standalone') {
+    if (type === 'syncclipboard') {
       const authService = username && password ? new AuthService(username, password) : undefined;
       return new SyncClipboardAPI({ baseURL: url, authService });
     }

@@ -4,7 +4,14 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  Platform,
+} from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 
 interface QuickActionsBarProps {
@@ -69,9 +76,7 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
         ) : (
           <Text style={styles.syncButtonIcon}>🔄</Text>
         )}
-        <Text style={styles.syncButtonText}>
-          {syncInProgress ? '同步中...' : '同步'}
-        </Text>
+        <Text style={styles.syncButtonText}>{syncInProgress ? '同步中...' : '同步'}</Text>
       </TouchableOpacity>
 
       {/* 下载按钮 */}

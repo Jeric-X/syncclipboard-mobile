@@ -4,7 +4,16 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Clipboard, Share, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Platform,
+  Clipboard,
+  Share,
+  Alert,
+} from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardContent } from '@/types/clipboard';
 
@@ -26,7 +35,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   // 复制到剪贴板
   const handleCopy = async () => {
     if (!clipboard || clipboard.type !== 'Text' || !clipboard.text) return;
-    
+
     try {
       await Clipboard.setString(clipboard.text);
       // Toast提示已移除，可以通过父组件处理
@@ -57,9 +66,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
       <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
         <View style={styles.emptyContent}>
           <Text style={[styles.emptyIcon, { color: theme.colors.textTertiary }]}>📋</Text>
-          <Text style={[styles.emptyTitle, { color: theme.colors.textSecondary }]}>
-            剪贴板为空
-          </Text>
+          <Text style={[styles.emptyTitle, { color: theme.colors.textSecondary }]}>剪贴板为空</Text>
           <Text style={[styles.emptyDescription, { color: theme.colors.textTertiary }]}>
             复制内容后将在此显示
           </Text>
@@ -137,20 +144,20 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   // 判断是否需要下载额外文件
   const needsFileDownload = (): boolean => {
     if (!isRemote || !clipboard) return false;
-    
+
     // 文本类型不需要额外文件
     if (clipboard.type === 'Text') return false;
-    
+
     // 图片类型：有 fileName 但没有 imageUri 或 fileData
     if (clipboard.type === 'Image') {
       return !!(clipboard.fileName && !clipboard.imageUri && !clipboard.fileData);
     }
-    
+
     // 文件类型：有 fileName 但没有 fileUri 或 fileData
     if (clipboard.type === 'File') {
       return !!(clipboard.fileName && !clipboard.fileUri && !clipboard.fileData);
     }
-    
+
     return false;
   };
 
@@ -166,9 +173,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             <Text style={[styles.typeLabel, { color: theme.colors.text }]}>
               {getTypeLabel(clipboard.type)}
             </Text>
-            <Text style={[styles.timestamp, { color: theme.colors.textSecondary }]}>
-              刚刚
-            </Text>
+            <Text style={[styles.timestamp, { color: theme.colors.textSecondary }]}>刚刚</Text>
           </View>
         </View>
 
@@ -223,9 +228,9 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         {clipboard.type === 'Text' ? (
           <TouchableOpacity
             style={[
-              styles.actionButton, 
+              styles.actionButton,
               { backgroundColor: theme.colors.primary },
-              (!onUpload && !showDownloadButton) && styles.actionButtonLast
+              !onUpload && !showDownloadButton && styles.actionButtonLast,
             ]}
             onPress={handleCopy}
           >
@@ -234,9 +239,9 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         ) : (
           <TouchableOpacity
             style={[
-              styles.actionButton, 
+              styles.actionButton,
               { backgroundColor: theme.colors.primary },
-              (!onUpload && !showDownloadButton) && styles.actionButtonLast
+              !onUpload && !showDownloadButton && styles.actionButtonLast,
             ]}
             onPress={handleShare}
           >
@@ -248,28 +253,44 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         {!isRemote && onUpload && (
           <TouchableOpacity
             style={[
-              styles.actionButton, 
-              styles.secondaryButton, 
+              styles.actionButton,
+              styles.secondaryButton,
               styles.actionButtonLast,
-              { borderColor: theme.colors.primary }
+              { borderColor: theme.colors.primary },
             ]}
             onPress={onUpload}
           >
-            <Text style={[styles.actionButtonText, styles.secondaryButtonText, { color: theme.colors.primary }]}>上传</Text>
+            <Text
+              style={[
+                styles.actionButtonText,
+                styles.secondaryButtonText,
+                { color: theme.colors.primary },
+              ]}
+            >
+              上传
+            </Text>
           </TouchableOpacity>
         )}
 
         {showDownloadButton && (
           <TouchableOpacity
             style={[
-              styles.actionButton, 
-              styles.secondaryButton, 
+              styles.actionButton,
+              styles.secondaryButton,
               styles.actionButtonLast,
-              { borderColor: theme.colors.primary }
+              { borderColor: theme.colors.primary },
             ]}
             onPress={onDownload}
           >
-            <Text style={[styles.actionButtonText, styles.secondaryButtonText, { color: theme.colors.primary }]}>下载</Text>
+            <Text
+              style={[
+                styles.actionButtonText,
+                styles.secondaryButtonText,
+                { color: theme.colors.primary },
+              ]}
+            >
+              下载
+            </Text>
           </TouchableOpacity>
         )}
       </View>

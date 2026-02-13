@@ -56,6 +56,7 @@ syncclipboard-mobile/
 - **状态管理**: Zustand
 - **导航**: React Navigation
 - **HTTP 客户端**: Axios
+- **实时通信**: SignalR (@microsoft/signalr)
 - **本地存储**: AsyncStorage
 - **代码质量**: ESLint + Prettier
 
@@ -87,6 +88,23 @@ Phase 1 - Week 1: 项目初始化与基础架构 ✅
 - [x] 搭建基础目录结构
 - [x] 配置导航结构
 - [x] 安装核心依赖
+
+## ✨ 核心功能
+
+### 剪贴板监听
+- ✅ 本地剪贴板自动监听（1秒轮询）
+- ✅ App 前后台切换时自动刷新
+
+### 服务器支持
+- ✅ **SyncClipboard 服务器**：基于 SignalR 的实时推送（零延迟）
+- ✅ **WebDAV 服务器**：轮询模式（3秒间隔）
+
+### 同步策略
+- ✅ 智能通信模式选择
+  - SyncClipboard：SignalR 实时通信 + 自动重连
+  - WebDAV：定时轮询
+- ✅ 后台节能：App 在后台时自动暂停轮询
+- ✅ 前台恢复：切回前台时自动恢复同步
 
 ## 📚 相关文档
 

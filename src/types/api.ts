@@ -36,7 +36,7 @@ export interface ProfileDto {
  */
 export interface ServerConfig {
   /** 服务器类型 */
-  type: 'standalone' | 'webdav';
+  type: 'syncclipboard' | 'webdav';
 
   /** 服务器 URL */
   url: string;

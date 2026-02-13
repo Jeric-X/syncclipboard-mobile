@@ -18,6 +18,10 @@ export { WebDAVClient, type WebDAVConfig } from './WebDAVClient';
 export { ClipboardManager, clipboardManager } from './ClipboardManager';
 export { ClipboardMonitor, clipboardMonitor } from './ClipboardMonitor';
 
+// SignalR Client
+export { SignalRClient, getSignalRClient, resetSignalRClient } from './SignalRClient';
+export type { RemoteClipboardChangedCallback, RemoteHistoryChangedCallback } from './SignalRClient';
+
 // Sync Manager
 export { SyncManager } from './SyncManager';
 
@@ -51,7 +55,7 @@ export function createAPIClient(config: ServerConfig): SyncClipboardAPI | WebDAV
     return new WebDAVClient({ baseURL: url, username, password });
   }
 
-  if (type === 'standalone') {
+  if (type === 'syncclipboard') {
     const authService = username && password ? new AuthService(username, password) : undefined;
 
     return new SyncClipboardAPI({ baseURL: url, authService });
