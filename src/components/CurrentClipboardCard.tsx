@@ -13,7 +13,9 @@ import {
   Clipboard,
   Share,
   Alert,
+  Image,
 } from 'react-native';
+import * as Sharing from 'expo-sharing';
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardContent } from '@/types/clipboard';
 
@@ -60,11 +62,25 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
 
     try {
       if (clipboard.type === 'Text' && clipboard.text) {
+        // 文本内容使用 React Native Share
         await Share.share({ message: clipboard.text });
       } else if (clipboard.type === 'Image' && clipboard.imageUri) {
-        await Share.share({ url: clipboard.imageUri });
+        // 图片文件使用 expo-sharing 避免 file:// URI 问题
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable) {
+          await Sharing.shareAsync(clipboard.imageUri, {
+            mimeType: 'image/*',
+            dialogTitle: clipboard.fileName || '分享图片',
+          });
+        }
       } else if (clipboard.type === 'File' && clipboard.fileUri) {
-        await Share.share({ url: clipboard.fileUri });
+        // 其他文件使用 expo-sharing 避免 file:// URI 问题
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable) {
+          await Sharing.shareAsync(clipboard.fileUri, {
+            dialogTitle: clipboard.fileName || '分享文件',
+          });
+        }
       }
     } catch (error) {
       console.error('[CurrentClipboardCard] Failed to share:', error);
@@ -173,6 +189,18 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
 
   const showDownloadButton = isRemote && onDownload && needsFileDownload();
 
+  // 判断是否显示分享按钮（非Text类型且有文件URI）
+  const canShowShareButton = (() => {
+    if (!clipboard || clipboard.type === 'Text') return false;
+
+    // 图片类型：需要有 imageUri
+    if (clipboard.type === 'Image') return !!clipboard.imageUri;
+    // 文件类型：需要有 fileUri
+    if (clipboard.type === 'File') return !!clipboard.fileUri;
+
+    return false;
+  })();
+
   return (
     <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
       {/* 标题栏 */}
@@ -209,13 +237,21 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
 
         {clipboard.type === 'Image' && (
           <View style={styles.mediaPreview}>
-            <Text style={[styles.mediaLabel, { color: theme.colors.textSecondary }]}>
-              {clipboard.fileName || '图片文件'}
-            </Text>
-            {clipboard.imageUri && (
-              <Text style={[styles.mediaHint, { color: theme.colors.textTertiary }]}>
-                包含图片数据
-              </Text>
+            {clipboard.imageUri ? (
+              <Image
+                source={{ uri: clipboard.imageUri }}
+                style={styles.imagePreview}
+                resizeMode="contain"
+              />
+            ) : (
+              <View>
+                <Text style={[styles.mediaLabel, { color: theme.colors.textSecondary }]}>
+                  {clipboard.fileName || '图片文件'}
+                </Text>
+                <Text style={[styles.mediaHint, { color: theme.colors.textTertiary }]}>
+                  等待下载...
+                </Text>
+              </View>
             )}
           </View>
         )}
@@ -236,8 +272,8 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
 
       {/* 按钮区域 */}
       <View style={styles.actionButtons}>
-        {/* 内容操作按钮（复制或分享） */}
-        {clipboard.type === 'Text' ? (
+        {/* Text类型：复制按钮 */}
+        {clipboard.type === 'Text' && (
           <TouchableOpacity
             style={[
               styles.actionButton,
@@ -248,7 +284,10 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
           >
             <Text style={styles.actionButtonText}>复制</Text>
           </TouchableOpacity>
-        ) : (
+        )}
+
+        {/* 非Text类型且已下载：分享按钮 */}
+        {canShowShareButton && (
           <TouchableOpacity
             style={[
               styles.actionButton,
@@ -411,6 +450,12 @@ const styles = StyleSheet.create({
   },
   mediaPreview: {
     paddingVertical: 8,
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
   },
   mediaLabel: {
     fontSize: 15,

@@ -17,8 +17,11 @@ export interface ISyncClipboardAPI {
   /** 上传剪贴板配置 */
   putClipboard(profile: ProfileDto): Promise<void>;
 
-  /** 获取文件数据 */
-  getFile(fileName: string): Promise<Blob>;
+  /** 获取文件数据（加载到内存） */
+  getFile(fileName: string): Promise<ArrayBuffer>;
+
+  /** 直接下载文件到指定路径（优化内存占用） */
+  downloadFile(fileName: string, destinationUri: string): Promise<string>;
 
   /** 上传文件数据 */
   putFile(fileName: string, data: Blob): Promise<void>;
@@ -38,7 +41,7 @@ export interface ISyncClipboardAPI {
  */
 export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
   private static readonly PROFILE_ENDPOINT = '/SyncClipboard.json';
-  private static readonly FILE_ENDPOINT = '/SyncClipboard/';
+  private static readonly FILE_ENDPOINT = '/file/';
 
   constructor(config: APIClientConfig) {
     super(config);
@@ -79,20 +82,51 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
   /**
    * 获取文件数据
    */
-  async getFile(fileName: string): Promise<Blob> {
+  async getFile(fileName: string): Promise<ArrayBuffer> {
     if (!fileName) {
       throw new ValidationError('File name is required');
     }
 
     try {
       const url = `${SyncClipboardAPI.FILE_ENDPOINT}${encodeURIComponent(fileName)}`;
-      const blob = await this.get<Blob>(url, {
-        responseType: 'blob',
+      const arrayBuffer = await this.get<ArrayBuffer>(url, {
+        responseType: 'arraybuffer',
       });
 
-      return blob;
+      return arrayBuffer;
     } catch (error) {
       console.error(`[SyncClipboardAPI] Failed to get file ${fileName}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 直接下载文件到指定路径（优化内存占用）
+   */
+  async downloadFile(fileName: string, destinationUri: string): Promise<string> {
+    if (!fileName) {
+      throw new ValidationError('File name is required');
+    }
+    if (!destinationUri) {
+      throw new ValidationError('Destination URI is required');
+    }
+
+    try {
+      const { File } = await import('expo-file-system');
+      const url = `${this.baseURL}${SyncClipboardAPI.FILE_ENDPOINT}${encodeURIComponent(fileName)}`;
+
+      // 准备请求头
+      const headers = await this.getHeaders();
+
+      console.log(`[SyncClipboardAPI] Downloading file ${fileName} to ${destinationUri}`);
+
+      // 使用新的 File API 静态方法下载
+      const file = new File(destinationUri);
+      await File.downloadFileAsync(url, file, { headers });
+
+      return destinationUri;
+    } catch (error) {
+      console.error(`[SyncClipboardAPI] Failed to download file ${fileName}:`, error);
       throw error;
     }
   }

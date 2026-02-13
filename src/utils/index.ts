@@ -61,3 +61,6 @@ export * from './hash';
 
 // Export clipboard utilities
 export * from './clipboard';
+
+// Export file storage utilities
+export * from './fileStorage';

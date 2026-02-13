@@ -294,7 +294,7 @@ export class SyncManager {
       // 如果有文件数据，上传文件
       if (localContent.fileData && profile.dataName) {
         const blob = new Blob([localContent.fileData]);
-        await this.apiClient.put(`/SyncClipboard/${encodeURIComponent(profile.dataName)}`, blob, {
+        await this.apiClient.put(`/file/${encodeURIComponent(profile.dataName)}`, blob, {
           headers: {
             'Content-Type': 'application/octet-stream',
           },
@@ -411,7 +411,7 @@ export class SyncManager {
       if (profile.hasData && profile.dataName) {
         try {
           const fileData = await this.apiClient.get(
-            `/SyncClipboard/${encodeURIComponent(profile.dataName)}`,
+            `/file/${encodeURIComponent(profile.dataName)}`,
             {
               responseType: 'arraybuffer',
             }

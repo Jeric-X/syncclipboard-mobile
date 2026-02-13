@@ -14,6 +14,8 @@ import {
   Animated,
   AppState,
   AppStateStatus,
+  Alert,
+  Platform,
 } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useClipboardStore } from '@/stores/clipboardStore';
@@ -24,6 +26,7 @@ import { ClipboardContent } from '@/types/clipboard';
 import { CurrentClipboardCard } from '@/components/CurrentClipboardCard';
 import { createAPIClient, getSignalRClient } from '@/services';
 import type { RemoteClipboardChangedCallback } from '@/services';
+import { getFileExtension, getFileUri, initFileStorage } from '@/utils/fileStorage';
 
 type MessageType = 'success' | 'error' | 'info';
 
@@ -424,8 +427,8 @@ export function HomeScreen() {
 
     // 检查是否需要下载文件
     const needsDownload =
-      (remoteContent.type === 'Image' && remoteContent.fileName && !remoteContent.fileData) ||
-      (remoteContent.type === 'File' && remoteContent.fileName && !remoteContent.fileData);
+      (remoteContent.type === 'Image' && remoteContent.fileName && !remoteContent.imageUri) ||
+      (remoteContent.type === 'File' && remoteContent.fileName && !remoteContent.fileUri);
 
     if (!needsDownload) {
       return;
@@ -435,15 +438,46 @@ export function HomeScreen() {
     try {
       const apiClient = createAPIClient(activeServer);
 
-      // 下载文件数据
-      if (remoteContent.fileName) {
-        const fileData = await apiClient.getFile(remoteContent.fileName);
+      // 直接下载文件到文件系统（不经过内存，优化性能）
+      if (remoteContent.fileName && remoteContent.hash) {
+        // 初始化文件存储
+        await initFileStorage();
 
-        // 更新远程内容，添加文件数据
-        setRemoteContent({
+        // 提取文件扩展名
+        const extension = getFileExtension(remoteContent.fileName);
+
+        // 检查文件是否已存在（仅针对 Image 和 File 类型）
+        let fileUri: string | null = null;
+        if (remoteContent.type === 'Image' || remoteContent.type === 'File') {
+          fileUri = await getFileUri(remoteContent.type, remoteContent.hash, extension);
+        }
+
+        // 如果文件不存在，直接下载到文件系统
+        if (!fileUri && (remoteContent.type === 'Image' || remoteContent.type === 'File')) {
+          const { Paths, Directory, File } = await import('expo-file-system');
+          const baseDir = new Directory(Paths.document, 'clipboards');
+          const dir =
+            remoteContent.type === 'Image'
+              ? new Directory(baseDir, 'images')
+              : new Directory(baseDir, 'files');
+          const fileName = extension ? `${remoteContent.hash}${extension}` : remoteContent.hash;
+          const destinationFile = new File(dir, fileName);
+
+          fileUri = await apiClient.downloadFile(remoteContent.fileName, destinationFile.uri);
+        }
+
+        // 更新远程内容，添加文件URI（不保存 fileData 到内存）
+        const updatedContent: ClipboardContent = {
           ...remoteContent,
-          fileData: await fileData.arrayBuffer(),
-        });
+        };
+
+        if (remoteContent.type === 'Image' && fileUri) {
+          updatedContent.imageUri = fileUri;
+        } else if (remoteContent.type === 'File' && fileUri) {
+          updatedContent.fileUri = fileUri;
+        }
+
+        setRemoteContent(updatedContent);
 
         showMessage('文件已下载', 'success');
       }

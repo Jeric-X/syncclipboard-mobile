@@ -84,20 +84,51 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
   /**
    * 获取文件数据
    */
-  async getFile(fileName: string): Promise<Blob> {
+  async getFile(fileName: string): Promise<ArrayBuffer> {
     if (!fileName) {
       throw new ValidationError('File name is required');
     }
 
     try {
       const url = `/${WebDAVClient.DATA_FOLDER}/${encodeURIComponent(fileName)}`;
-      const blob = await this.get<Blob>(url, {
-        responseType: 'blob',
+      const arrayBuffer = await this.get<ArrayBuffer>(url, {
+        responseType: 'arraybuffer',
       });
 
-      return blob;
+      return arrayBuffer;
     } catch (error) {
       console.error(`[WebDAVClient] Failed to get file ${fileName}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 直接下载文件到指定路径（优化内存占用）
+   */
+  async downloadFile(fileName: string, destinationUri: string): Promise<string> {
+    if (!fileName) {
+      throw new ValidationError('File name is required');
+    }
+    if (!destinationUri) {
+      throw new ValidationError('Destination URI is required');
+    }
+
+    try {
+      const { File } = await import('expo-file-system');
+      const url = `${this.baseURL}/${WebDAVClient.DATA_FOLDER}/${encodeURIComponent(fileName)}`;
+
+      // 准备请求头
+      const headers = await this.getHeaders();
+
+      console.log(`[WebDAVClient] Downloading file ${fileName} to ${destinationUri}`);
+
+      // 使用新的 File API 静态方法下载
+      const file = new File(destinationUri);
+      await File.downloadFileAsync(url, file, { headers });
+
+      return destinationUri;
+    } catch (error) {
+      console.error(`[WebDAVClient] Failed to download file ${fileName}:`, error);
       throw error;
     }
   }

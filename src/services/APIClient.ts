@@ -173,6 +173,26 @@ export class APIClient {
   }
 
   /**
+   * 获取包含认证信息的请求头
+   */
+  protected async getHeaders(): Promise<Record<string, string>> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    // 添加认证头
+    if (this.authService?.isConfigured()) {
+      try {
+        headers.Authorization = this.authService.getAuthHeader();
+      } catch (error) {
+        console.warn('Failed to add auth header:', error);
+      }
+    }
+
+    return headers;
+  }
+
+  /**
    * 更新基础 URL
    */
   setBaseURL(baseURL: string): void {
