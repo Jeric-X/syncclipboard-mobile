@@ -5,24 +5,13 @@
 import React from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View, StyleSheet, StatusBar } from 'react-native';
+import { StatusBar } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { HomeScreen } from '@/screens/HomeScreen';
+import { HistoryScreen } from '@/screens/HistoryScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
 
 const Tab = createBottomTabNavigator();
-
-// Placeholder screens
-const HistoryScreen = () => {
-  const { theme } = useTheme();
-
-  return (
-    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
-      <Text style={[styles.text, { color: theme.colors.text }]}>历史记录</Text>
-      <Text style={[styles.subtext, { color: theme.colors.textSecondary }]}>查看剪贴板历史</Text>
-    </View>
-  );
-};
 
 export const AppNavigator = () => {
   const { theme } = useTheme();
@@ -84,19 +73,3 @@ export const AppNavigator = () => {
     </>
   );
 };
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  text: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  subtext: {
-    fontSize: 16,
-  },
-});
