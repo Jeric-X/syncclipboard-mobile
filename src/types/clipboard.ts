@@ -38,6 +38,12 @@ export interface ClipboardItem {
 
   /** 是否已同步 */
   synced?: boolean;
+
+  /** 是否标记（收藏） */
+  starred?: boolean;
+
+  /** 使用次数 */
+  useCount?: number;
 }
 
 /**

@@ -124,7 +124,7 @@ export const SyncStatusIndicator: React.FC<SyncStatusIndicatorProps> = ({
             style={[
               styles.dot,
               {
-                backgroundColor: serverConnected ? '#4CAF50' : theme.colors.textTertiary,
+                backgroundColor: serverConnected ? theme.colors.success : theme.colors.textTertiary,
               },
             ]}
           />
@@ -139,7 +139,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
   },
   content: {
     flexDirection: 'row',

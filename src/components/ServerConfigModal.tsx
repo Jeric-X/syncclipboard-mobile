@@ -131,9 +131,9 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
       console.log('[ServerConfigModal] Test succeeded');
 
       Alert.alert('成功', '服务器连接测试成功！');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[ServerConfigModal] Test failed:', error);
-      Alert.alert('连接失败', error.message || '无法连接到服务器');
+      Alert.alert('连接失败', error instanceof Error ? error.message : '无法连接到服务器');
     } finally {
       setIsTesting(false);
     }
@@ -180,7 +180,11 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
           </Text>
           <TouchableOpacity onPress={handleSave} style={styles.headerButton}>
             <Text
-              style={[styles.headerButtonText, { color: theme.colors.primary, fontWeight: '600' }]}
+              style={[
+                styles.headerButtonText,
+                styles.headerButtonBold,
+                { color: theme.colors.primary },
+              ]}
             >
               保存
             </Text>
@@ -215,7 +219,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                 </View>
                 {type === 'syncclipboard' && (
                   <View style={[styles.checkmark, { backgroundColor: theme.colors.primary }]}>
-                    <Text style={styles.checkmarkIcon}>✓</Text>
+                    <Text style={[styles.checkmarkIcon, { color: theme.colors.white }]}>✓</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -237,7 +241,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                 </View>
                 {type === 'webdav' && (
                   <View style={[styles.checkmark, { backgroundColor: theme.colors.primary }]}>
-                    <Text style={styles.checkmarkIcon}>✓</Text>
+                    <Text style={[styles.checkmarkIcon, { color: theme.colors.white }]}>✓</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -493,7 +497,6 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   checkmarkIcon: {
-    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -526,6 +529,9 @@ const styles = StyleSheet.create({
   },
   testButtonText: {
     fontSize: 16,
+    fontWeight: '600',
+  },
+  headerButtonBold: {
     fontWeight: '600',
   },
   switchRow: {

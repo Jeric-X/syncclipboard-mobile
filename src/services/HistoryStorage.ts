@@ -180,7 +180,7 @@ export class HistoryStorage {
       }
 
       if (filter.starredOnly) {
-        filtered = filtered.filter((item) => (item as any).starred === true);
+        filtered = filtered.filter((item) => item.starred === true);
       }
 
       if (filter.syncedOnly) {
@@ -198,7 +198,7 @@ export class HistoryStorage {
             compareResult = a.timestamp - b.timestamp;
             break;
           case 'useCount':
-            compareResult = ((a as any).useCount || 0) - ((b as any).useCount || 0);
+            compareResult = (a.useCount || 0) - (b.useCount || 0);
             break;
           case 'size':
             compareResult = (a.size || 0) - (b.size || 0);
@@ -276,7 +276,7 @@ export class HistoryStorage {
     const index = this.history.findIndex((item) => item.id === id);
 
     if (index >= 0) {
-      const item = this.history[index] as any;
+      const item = this.history[index];
       item.starred = !item.starred;
       await this.saveHistory();
       return item.starred;
@@ -296,7 +296,7 @@ export class HistoryStorage {
     const index = this.history.findIndex((item) => item.id === id);
 
     if (index >= 0) {
-      const item = this.history[index] as any;
+      const item = this.history[index];
       item.useCount = (item.useCount || 0) + 1;
       await this.saveHistory();
     }
@@ -345,7 +345,7 @@ export class HistoryStorage {
       }
 
       // 标记数
-      if ((item as any).starred) {
+      if (item.starred) {
         stats.starred++;
       }
 

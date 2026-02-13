@@ -9,7 +9,7 @@ export class APIError extends Error {
   constructor(
     message: string,
     public statusCode?: number,
-    public response?: any
+    public response?: unknown
   ) {
     super(message);
     this.name = 'APIError';
@@ -34,7 +34,7 @@ export class AuthenticationError extends APIError {
 export class NetworkError extends APIError {
   constructor(
     message: string = 'Network request failed',
-    public originalError?: any
+    public originalError?: unknown
   ) {
     super(message);
     this.name = 'NetworkError';
@@ -46,7 +46,7 @@ export class NetworkError extends APIError {
  * 服务器错误
  */
 export class ServerError extends APIError {
-  constructor(message: string, statusCode: number, response?: any) {
+  constructor(message: string, statusCode: number, response?: unknown) {
     super(message, statusCode, response);
     this.name = 'ServerError';
     Object.setPrototypeOf(this, ServerError.prototype);

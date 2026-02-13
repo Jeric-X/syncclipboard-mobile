@@ -265,8 +265,8 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       set((state) => ({
         items: state.items.map((item) => {
           if (item.id === id) {
-            const useCount = ((item as any).useCount || 0) + 1;
-            return { ...item, useCount } as ClipboardItem;
+            const useCount = (item.useCount || 0) + 1;
+            return { ...item, useCount };
           }
           return item;
         }),

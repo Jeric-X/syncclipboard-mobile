@@ -125,8 +125,8 @@ export const SettingsScreen = () => {
         await addServer(serverConfig);
         showMessage('服务器已添加', 'success');
       }
-    } catch (error: any) {
-      showMessage(error.message || '操作失败', 'error');
+    } catch (error: unknown) {
+      showMessage(error instanceof Error ? error.message : '操作失败', 'error');
     }
   };
 
@@ -135,8 +135,8 @@ export const SettingsScreen = () => {
     try {
       await deleteServer(index);
       showMessage('服务器已删除', 'success');
-    } catch (error: any) {
-      showMessage(error.message || '删除失败', 'error');
+    } catch (error: unknown) {
+      showMessage(error instanceof Error ? error.message : '删除失败', 'error');
     }
   };
 
@@ -149,8 +149,8 @@ export const SettingsScreen = () => {
     try {
       await setActiveServer(index);
       showMessage('已切换服务器', 'success');
-    } catch (error: any) {
-      showMessage(error.message || '切换失败', 'error');
+    } catch (error: unknown) {
+      showMessage(error instanceof Error ? error.message : '切换失败', 'error');
     }
   };
 
@@ -159,8 +159,8 @@ export const SettingsScreen = () => {
     try {
       await setAutoSync(enabled);
       showMessage(enabled ? '已启用自动复制' : '已禁用自动复制', 'success');
-    } catch (error: any) {
-      showMessage(error.message || '设置失败', 'error');
+    } catch (error: unknown) {
+      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
     }
   };
 
@@ -176,9 +176,9 @@ export const SettingsScreen = () => {
       const sizeInBytes = sizeMB * 1024 * 1024;
       await setAutoDownloadMaxSize(sizeInBytes);
       showMessage(`已设置最大文件大小为 ${sizeMB}MB`, 'success');
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMaxSizeInput(autoDownloadMaxSizeMB.toString());
-      showMessage(error.message || '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
     }
   };
 
@@ -196,7 +196,7 @@ export const SettingsScreen = () => {
               style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
               onPress={handleAddServer}
             >
-              <Text style={styles.addButtonText}>+ 添加</Text>
+              <Text style={[styles.addButtonText, { color: theme.colors.white }]}>＋ 添加</Text>
             </TouchableOpacity>
           </View>
 
@@ -345,18 +345,13 @@ export const SettingsScreen = () => {
         <Animated.View
           style={[
             styles.messageContainer,
-            {
-              backgroundColor:
-                message.type === 'success'
-                  ? '#4CAF50'
-                  : message.type === 'error'
-                    ? '#F44336'
-                    : theme.colors.primary,
-              opacity: fadeAnim,
-            },
+            message.type === 'success' && { backgroundColor: theme.colors.messageSuccess },
+            message.type === 'error' && { backgroundColor: theme.colors.messageError },
+            message.type === 'info' && { backgroundColor: theme.colors.primary },
+            { opacity: fadeAnim },
           ]}
         >
-          <Text style={styles.messageText}>{message.text}</Text>
+          <Text style={[styles.messageText, { color: theme.colors.white }]}>{message.text}</Text>
         </Animated.View>
       )}
 
@@ -392,7 +387,6 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   messageText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '500',
   },
@@ -423,7 +417,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   addButtonText: {
-    color: '#fff',
     fontSize: 14,
     fontWeight: '600',
   },

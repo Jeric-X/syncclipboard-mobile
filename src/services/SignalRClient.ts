@@ -11,7 +11,7 @@ export interface RemoteClipboardChangedCallback {
 }
 
 export interface RemoteHistoryChangedCallback {
-  (historyRecord: any): void;
+  (historyRecord: unknown): void;
 }
 
 /**
@@ -180,7 +180,7 @@ export class SignalRClient {
     });
 
     // 远程历史变化
-    this.connection.on('RemoteHistoryChanged', (historyRecord: any) => {
+    this.connection.on('RemoteHistoryChanged', (historyRecord: unknown) => {
       console.log('[SignalRClient] Remote history changed');
       this.remoteHistoryCallbacks.forEach((callback) => {
         try {

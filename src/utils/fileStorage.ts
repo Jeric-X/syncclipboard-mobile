@@ -44,18 +44,6 @@ export async function initFileStorage(): Promise<void> {
 }
 
 /**
- * ArrayBuffer 转 Base64
- */
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
-/**
  * 保存文件到本地存储
  * @param type 文件类型（Image 或 File）
  * @param hash 文件hash值
@@ -198,12 +186,12 @@ export async function getStorageStats(): Promise<{
               const info = imageFile.info();
               totalSize += info.size || 0;
             }
-          } catch (error) {
+          } catch {
             // 忽略单个文件错误
           }
         }
       }
-    } catch (error) {
+    } catch {
       // 目录不存在或其他错误
     }
 
@@ -220,12 +208,12 @@ export async function getStorageStats(): Promise<{
               const info = file.info();
               totalSize += info.size || 0;
             }
-          } catch (error) {
+          } catch {
             // 忽略单个文件错误
           }
         }
       }
-    } catch (error) {
+    } catch {
       // 目录不存在或其他错误
     }
 

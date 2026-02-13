@@ -5,7 +5,6 @@
 
 import { ServerConfig } from './api';
 import { SyncMode, ConflictResolution } from './sync';
-import { ClipboardItem } from './clipboard';
 
 /**
  * 应用配置

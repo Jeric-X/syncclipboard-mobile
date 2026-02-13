@@ -42,10 +42,20 @@ export const lightColors = {
   overlay: 'rgba(0, 0, 0, 0.3)',
   backdrop: 'rgba(0, 0, 0, 0.5)',
 
-  // 状态色
+  // 犹态色
   active: '#007AFF',
   inactive: '#C7C7CC',
   disabled: '#E5E5EA',
+
+  // 消息提示色（Material Design 风格）
+  messageSuccess: '#4CAF50',
+  messageError: '#F44336',
+
+  // 特殊色
+  white: '#FFFFFF',
+  transparent: 'transparent',
+  imagePlaceholder: '#F0F0F0',
+  borderSubtle: 'rgba(0, 0, 0, 0.1)',
 
   // Tab Bar
   tabBarBackground: '#F9F9F9',
@@ -97,6 +107,16 @@ export const darkColors = {
   active: '#0A84FF',
   inactive: '#48484A',
   disabled: '#3A3A3C',
+
+  // 消息提示色（Material Design 风格）
+  messageSuccess: '#4CAF50',
+  messageError: '#F44336',
+
+  // 特殊色
+  white: '#FFFFFF',
+  transparent: 'transparent',
+  imagePlaceholder: '#2C2C2E',
+  borderSubtle: 'rgba(255, 255, 255, 0.1)',
 
   // Tab Bar
   tabBarBackground: '#1C1C1E',

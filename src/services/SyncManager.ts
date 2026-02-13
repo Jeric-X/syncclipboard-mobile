@@ -10,7 +10,7 @@ import { AuthService } from './AuthService';
 import { clipboardManager } from './ClipboardManager';
 import { clipboardMonitor } from './ClipboardMonitor';
 import { ConfigurationError } from './errors';
-import { ServerConfig } from '../types/api';
+import { ServerConfig, ProfileDto } from '../types/api';
 import { compareHash } from '../utils/hash';
 import {
   SyncConfig,
@@ -55,7 +55,7 @@ export class SyncManager {
   private static instance: SyncManager | null = null;
 
   private config: SyncConfig | null = null;
-  private apiClient: any | null = null;
+  private apiClient: SyncClipboardAPI | null = null;
   private clipboardManager = clipboardManager;
   private clipboardMonitor = clipboardMonitor;
 
@@ -528,7 +528,7 @@ export class SyncManager {
    */
   private async resolveConflict(
     localContent: ClipboardContent,
-    remoteProfile: any
+    remoteProfile: ProfileDto
   ): Promise<'local' | 'remote' | 'skip'> {
     if (!this.config) {
       return 'remote';

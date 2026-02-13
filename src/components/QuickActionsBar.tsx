@@ -72,11 +72,13 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
         activeOpacity={0.7}
       >
         {syncInProgress ? (
-          <ActivityIndicator size="small" color="#fff" />
+          <ActivityIndicator size="small" color={theme.colors.white} />
         ) : (
           <Text style={styles.syncButtonIcon}>🔄</Text>
         )}
-        <Text style={styles.syncButtonText}>{syncInProgress ? '同步中...' : '同步'}</Text>
+        <Text style={[styles.syncButtonText, { color: theme.colors.white }]}>
+          {syncInProgress ? '同步中...' : '同步'}
+        </Text>
       </TouchableOpacity>
 
       {/* 下载按钮 */}
@@ -156,6 +158,5 @@ const styles = StyleSheet.create({
   syncButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fff',
   },
 });

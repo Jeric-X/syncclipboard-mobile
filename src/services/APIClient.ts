@@ -203,7 +203,7 @@ export class APIClient {
   /**
    * GET 请求
    */
-  protected async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  protected async get<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
     const response = await this.client.get<T>(url, config);
     return response.data;
   }
@@ -211,7 +211,11 @@ export class APIClient {
   /**
    * POST 请求
    */
-  protected async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  protected async post<T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig
+  ): Promise<T> {
     const response = await this.client.post<T>(url, data, config);
     return response.data;
   }
@@ -219,7 +223,11 @@ export class APIClient {
   /**
    * PUT 请求
    */
-  protected async put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  protected async put<T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig
+  ): Promise<T> {
     const response = await this.client.put<T>(url, data, config);
     return response.data;
   }
@@ -227,7 +235,7 @@ export class APIClient {
   /**
    * DELETE 请求
    */
-  protected async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  protected async delete<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
     const response = await this.client.delete<T>(url, config);
     return response.data;
   }
@@ -235,7 +243,11 @@ export class APIClient {
   /**
    * PATCH 请求
    */
-  protected async patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  protected async patch<T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig
+  ): Promise<T> {
     const response = await this.client.patch<T>(url, data, config);
     return response.data;
   }

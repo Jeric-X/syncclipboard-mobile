@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import { AppConfig } from '../types/storage';
 import { ServerConfig } from '../types/api';
+import { SyncMode, ConflictResolution } from '../types/sync';
 import { configStorage } from '../services';
 
 /**
@@ -231,7 +232,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setSyncMode: async (mode: string) => {
-    await get().updateConfig({ syncMode: mode as any });
+    await get().updateConfig({ syncMode: mode as SyncMode });
   },
 
   setSyncInterval: async (interval: number) => {
@@ -239,7 +240,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setConflictResolution: async (strategy: string) => {
-    await get().updateConfig({ conflictResolution: strategy as any });
+    await get().updateConfig({ conflictResolution: strategy as ConflictResolution });
   },
 
   setOfflineQueue: async (enabled: boolean) => {

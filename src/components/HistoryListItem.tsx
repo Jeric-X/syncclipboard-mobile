@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TouchableHighlight } from 'react-native';
+import { View, Text, StyleSheet, TouchableHighlight } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardItem } from '@/types/clipboard';
 
@@ -89,7 +89,6 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({ item, onPress,
   };
 
   const previewText = getPreviewText();
-  const isLongText = previewText.length > 100;
 
   return (
     <TouchableHighlight

@@ -27,7 +27,7 @@ type FilterType = 'all' | 'Text' | 'Image' | 'File';
 
 export function HistoryScreen() {
   const { theme } = useTheme();
-  const { items, loadItems, searchItems, deleteItem, clearHistory, isLoading, currentPage } =
+  const { items, loadItems, searchItems, deleteItem, clearHistory, currentPage } =
     useHistoryStore();
 
   const [searchText, setSearchText] = useState('');
@@ -225,17 +225,15 @@ export function HistoryScreen() {
             onPress={() => handleFilterChange(type)}
             style={[
               styles.filterButton,
-              {
-                backgroundColor: filterType === type ? theme.colors.primary : 'transparent',
-              },
+              filterType === type
+                ? { backgroundColor: theme.colors.primary }
+                : styles.filterButtonInactive,
             ]}
           >
             <Text
               style={[
                 styles.filterButtonText,
-                {
-                  color: filterType === type ? '#FFFFFF' : theme.colors.textSecondary,
-                },
+                { color: filterType === type ? theme.colors.white : theme.colors.textSecondary },
               ]}
             >
               {type === 'all'
@@ -269,7 +267,10 @@ export function HistoryScreen() {
           animationType="fade"
           onRequestClose={() => setShowActionSheet(false)}
         >
-          <Pressable style={styles.modalOverlay} onPress={() => setShowActionSheet(false)}>
+          <Pressable
+            style={[styles.modalOverlay, { backgroundColor: theme.colors.backdrop }]}
+            onPress={() => setShowActionSheet(false)}
+          >
             <View style={[styles.actionSheet, { backgroundColor: theme.colors.surface }]}>
               <TouchableOpacity
                 style={styles.actionSheetButton}
@@ -345,9 +346,18 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 16,
   },
+  filterButtonActive: {
+    // backgroundColor will be set by theme dynamically
+  },
+  filterButtonInactive: {
+    // backgroundColor: transparent by default
+  },
   filterButtonText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  filterButtonTextActive: {
+    // color will be set by theme dynamically
   },
   listContent: {
     paddingVertical: 8,
@@ -374,7 +384,6 @@ const styles = StyleSheet.create({
   // Android Modal 样式
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
   actionSheet: {

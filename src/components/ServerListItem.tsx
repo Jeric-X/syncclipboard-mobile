@@ -64,7 +64,7 @@ export const ServerListItem: React.FC<ServerListItemProps> = ({
       style={[
         styles.container,
         { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
-        isActive && { borderColor: theme.colors.primary, borderWidth: 2 },
+        isActive && styles.containerActive,
       ]}
       onPress={onPress}
       activeOpacity={0.7}
@@ -190,5 +190,8 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  containerActive: {
+    borderWidth: 2,
   },
 });

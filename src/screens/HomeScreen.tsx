@@ -10,18 +10,15 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
-  TouchableOpacity,
   Animated,
   AppState,
   AppStateStatus,
-  Alert,
-  Platform,
 } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useClipboardStore } from '@/stores/clipboardStore';
 import { useSyncStore } from '@/stores/syncStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { SyncStatus, SyncDirection } from '@/types/sync';
+import { SyncDirection } from '@/types/sync';
 import { ClipboardContent } from '@/types/clipboard';
 import { CurrentClipboardCard } from '@/components/CurrentClipboardCard';
 import { createAPIClient, getSignalRClient } from '@/services';
@@ -47,7 +44,7 @@ export function HomeScreen() {
   const signalRConnected = useRef(false);
 
   const { currentContent, getContent, startMonitoring, stopMonitoring } = useClipboardStore();
-  const { status, stats, sync, initialize: initializeSync } = useSyncStore();
+  const { stats, sync, initialize: initializeSync } = useSyncStore();
   const { getActiveServer, loadConfig, isLoaded, config } = useSettingsStore();
 
   const activeServer = getActiveServer();
@@ -555,8 +552,8 @@ export function HomeScreen() {
       await sync(SyncDirection.Upload);
       await fetchRemoteClipboard(false); // 刷新远程剪贴板显示
       showMessage('剪贴板已上传到服务器', 'success');
-    } catch (error: any) {
-      showMessage(error.message || '无法上传到服务器', 'error');
+    } catch (error: unknown) {
+      showMessage(error instanceof Error ? error.message : '无法上传到服务器', 'error');
     }
   };
 
@@ -662,7 +659,13 @@ export function HomeScreen() {
               当前服务器
             </Text>
             <Text style={[styles.infoValue, { color: theme.colors.text }]}>{activeServer.url}</Text>
-            <Text style={[styles.infoLabel, { color: theme.colors.textSecondary, marginTop: 8 }]}>
+            <Text
+              style={[
+                styles.infoLabel,
+                styles.infoLabelSpaced,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
               最近同步
             </Text>
             <Text style={[styles.infoValue, { color: theme.colors.text }]}>
@@ -679,18 +682,13 @@ export function HomeScreen() {
         <Animated.View
           style={[
             styles.messageContainer,
-            {
-              backgroundColor:
-                message.type === 'success'
-                  ? '#4CAF50'
-                  : message.type === 'error'
-                    ? '#F44336'
-                    : theme.colors.primary,
-              opacity: fadeAnim,
-            },
+            message.type === 'success' && { backgroundColor: theme.colors.messageSuccess },
+            message.type === 'error' && { backgroundColor: theme.colors.messageError },
+            message.type === 'info' && { backgroundColor: theme.colors.primary },
+            { opacity: fadeAnim },
           ]}
         >
-          <Text style={styles.messageText}>{message.text}</Text>
+          <Text style={[styles.messageText, { color: theme.colors.white }]}>{message.text}</Text>
         </Animated.View>
       )}
     </View>
@@ -715,9 +713,11 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   messageText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '500',
+  },
+  infoLabelSpaced: {
+    marginTop: 8,
   },
   scrollView: {
     flex: 1,

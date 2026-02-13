@@ -12,7 +12,6 @@ import {
   Platform,
   Clipboard,
   Share,
-  Alert,
   Image,
 } from 'react-native';
 import * as Sharing from 'expo-sharing';
@@ -311,7 +310,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             ]}
             onPress={handleCopyImage}
           >
-            <Text style={styles.actionButtonText}>复制</Text>
+            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>复制</Text>
           </TouchableOpacity>
         )}
 
@@ -325,7 +324,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             ]}
             onPress={handleShare}
           >
-            <Text style={styles.actionButtonText}>分享</Text>
+            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>分享</Text>
           </TouchableOpacity>
         )}
 
@@ -359,7 +358,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
               styles.secondaryButton,
               styles.actionButtonLast,
               { borderColor: theme.colors.primary },
-              downloading && { opacity: 0.5 },
+              downloading && styles.buttonDisabled,
             ]}
             onPress={onDownload}
             disabled={downloading}
@@ -464,11 +463,12 @@ const styles = StyleSheet.create({
     marginRight: 0,
   },
   secondaryButton: {
-    backgroundColor: 'transparent',
     borderWidth: 1,
   },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
   actionButtonText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '600',
   },
@@ -486,7 +486,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 200,
     borderRadius: 8,
-    backgroundColor: '#f0f0f0',
   },
   mediaLabel: {
     fontSize: 15,

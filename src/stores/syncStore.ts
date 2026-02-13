@@ -127,8 +127,6 @@ export const useSyncStore = create<SyncState>((set, get) => ({
 
       // 添加事件监听器
       manager.addListener('store', (event: SyncEvent) => {
-        const state = get();
-
         switch (event.type) {
           case SyncEventType.StatusChanged:
             if (event.status) {
@@ -221,7 +219,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
 
     try {
       // 更新配置存储
-      await configStorage.updateConfig({ syncMode: mode as any });
+      await configStorage.updateConfig({ syncMode: mode as SyncMode });
 
       // 更新同步管理器配置
       if (manager) {

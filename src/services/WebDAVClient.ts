@@ -236,10 +236,13 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
         method: 'MKCOL',
         url: path,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 405 或 409 表示目录已存在，忽略这个错误
-      if (error.response?.status === 405 || error.response?.status === 409) {
-        return;
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { status?: number } };
+        if (axiosError.response?.status === 405 || axiosError.response?.status === 409) {
+          return;
+        }
       }
       // 其他错误抛出
       throw error;
