@@ -5,6 +5,7 @@
 
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { ClipboardContent } from '@/types';
 import { calculateTextHash } from '@/utils/hash';
 
@@ -94,7 +95,14 @@ export class ClipboardManager {
    */
   async setImageContent(imageUri: string): Promise<void> {
     try {
-      await Clipboard.setImageAsync(imageUri);
+      // expo-clipboard 需要纯 base64 格式的图片数据（不带 MIME 类型前缀）
+      // 使用新的 File API 读取图片文件并转换为 base64
+      const { File } = FileSystem;
+      const file = new File(imageUri);
+      const base64 = await file.base64();
+
+      // 直接传递纯 base64 字符串（Clipboard.setImageAsync 不需要 data URI 前缀）
+      await Clipboard.setImageAsync(base64);
       this.lastHash = await calculateTextHash(imageUri);
     } catch (error) {
       console.error('[ClipboardManager] Failed to set image content:', error);

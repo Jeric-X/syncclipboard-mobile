@@ -90,6 +90,9 @@ interface SettingsState {
   /** 设置自动同步 */
   setAutoSync: (enabled: boolean) => Promise<void>;
 
+  /** 设置自动下载最大文件大小（字节） */
+  setAutoDownloadMaxSize: (sizeInBytes: number) => Promise<void>;
+
   // 导入/导出
   /** 导出配置 */
   exportConfig: () => Promise<string>;
@@ -265,6 +268,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setAutoSync: async (enabled: boolean) => {
     await get().updateConfig({ autoSync: enabled });
+  },
+
+  setAutoDownloadMaxSize: async (sizeInBytes: number) => {
+    await get().updateConfig({ autoDownloadMaxSize: sizeInBytes });
   },
 
   exportConfig: async () => {

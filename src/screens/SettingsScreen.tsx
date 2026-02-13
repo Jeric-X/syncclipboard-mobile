@@ -12,6 +12,7 @@ import {
   ScrollView,
   Animated,
   Switch,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
@@ -33,6 +34,7 @@ export const SettingsScreen = () => {
     deleteServer,
     setActiveServer,
     setAutoSync,
+    setAutoDownloadMaxSize,
   } = useSettingsStore();
 
   const [showServerModal, setShowServerModal] = useState(false);
@@ -94,6 +96,12 @@ export const SettingsScreen = () => {
   const servers = config?.servers || [];
   const activeServerIndex = config?.activeServerIndex ?? -1;
   const autoSyncEnabled = config?.autoSync ?? false;
+  const autoDownloadMaxSizeMB = Math.round(
+    (config?.autoDownloadMaxSize ?? 5 * 1024 * 1024) / (1024 * 1024)
+  );
+
+  // 本地 state 用于输入框
+  const [maxSizeInput, setMaxSizeInput] = useState(autoDownloadMaxSizeMB.toString());
 
   // 处理添加服务器
   const handleAddServer = () => {
@@ -146,12 +154,30 @@ export const SettingsScreen = () => {
     }
   };
 
-  // 处理切换自动同步
+  // 处理切换自动复制
   const handleToggleAutoSync = async (enabled: boolean) => {
     try {
       await setAutoSync(enabled);
-      showMessage(enabled ? '已启用自动同步' : '已禁用自动同步', 'success');
+      showMessage(enabled ? '已启用自动复制' : '已禁用自动复制', 'success');
     } catch (error: any) {
+      showMessage(error.message || '设置失败', 'error');
+    }
+  };
+
+  // 处理最大文件大小输入
+  const handleMaxSizeBlur = async () => {
+    try {
+      const sizeMB = parseInt(maxSizeInput, 10);
+      if (isNaN(sizeMB) || sizeMB < 0) {
+        setMaxSizeInput(autoDownloadMaxSizeMB.toString());
+        showMessage('请输入有效的数字', 'error');
+        return;
+      }
+      const sizeInBytes = sizeMB * 1024 * 1024;
+      await setAutoDownloadMaxSize(sizeInBytes);
+      showMessage(`已设置最大文件大小为 ${sizeMB}MB`, 'success');
+    } catch (error: any) {
+      setMaxSizeInput(autoDownloadMaxSizeMB.toString());
       showMessage(error.message || '设置失败', 'error');
     }
   };
@@ -206,7 +232,7 @@ export const SettingsScreen = () => {
           <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
             <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>自动同步</Text>
+                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>自动复制</Text>
                 <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
                   本地变化时自动上传，远程变化时自动复制
                 </Text>
@@ -217,6 +243,36 @@ export const SettingsScreen = () => {
                 trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
                 thumbColor={autoSyncEnabled ? theme.colors.surface : theme.colors.textTertiary}
               />
+            </View>
+
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                  允许自动同步的数据大小
+                </Text>
+                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
+                  小于此大小的文件将自动下载
+                </Text>
+              </View>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={[
+                    styles.sizeInput,
+                    {
+                      color: theme.colors.text,
+                      borderColor: theme.colors.divider,
+                      backgroundColor: theme.colors.background,
+                    },
+                  ]}
+                  value={maxSizeInput}
+                  onChangeText={setMaxSizeInput}
+                  onBlur={handleMaxSizeBlur}
+                  keyboardType="number-pad"
+                  placeholder="5"
+                  placeholderTextColor={theme.colors.textTertiary}
+                />
+                <Text style={[styles.unitLabel, { color: theme.colors.textSecondary }]}>MB</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -463,6 +519,24 @@ const styles = StyleSheet.create({
   settingDescription: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sizeInput: {
+    width: 80,
+    height: 40,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    textAlign: 'right',
+  },
+  unitLabel: {
+    fontSize: 16,
+    marginLeft: 8,
+    fontWeight: '500',
   },
   bottomPadding: {
     height: 40,

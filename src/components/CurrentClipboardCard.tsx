@@ -18,12 +18,14 @@ import {
 import * as Sharing from 'expo-sharing';
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardContent } from '@/types/clipboard';
+import { clipboardManager } from '@/services';
 
 interface CurrentClipboardCardProps {
   clipboard: ClipboardContent | null;
   isRemote?: boolean;
   onUpload?: () => void;
   onDownload?: () => void;
+  downloading?: boolean;
 }
 
 export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
@@ -31,6 +33,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   isRemote = false,
   onUpload,
   onDownload,
+  downloading = false,
 }) => {
   const { theme } = useTheme();
   const [, setUpdateTrigger] = useState(0);
@@ -53,6 +56,18 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
       // Toast提示已移除，可以通过父组件处理
     } catch (error) {
       console.error('[CurrentClipboardCard] Failed to copy:', error);
+    }
+  };
+
+  // 复制图片到剪贴板
+  const handleCopyImage = async () => {
+    if (!clipboard || clipboard.type !== 'Image' || !clipboard.imageUri) return;
+
+    try {
+      await clipboardManager.setImageContent(clipboard.imageUri);
+      // Toast提示已移除，可以通过父组件处理
+    } catch (error) {
+      console.error('[CurrentClipboardCard] Failed to copy image:', error);
     }
   };
 
@@ -286,6 +301,20 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
           </TouchableOpacity>
         )}
 
+        {/* Image类型：复制按钮 */}
+        {clipboard.type === 'Image' && clipboard.imageUri && (
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              { backgroundColor: theme.colors.primary },
+              !canShowShareButton && !onUpload && !showDownloadButton && styles.actionButtonLast,
+            ]}
+            onPress={handleCopyImage}
+          >
+            <Text style={styles.actionButtonText}>复制</Text>
+          </TouchableOpacity>
+        )}
+
         {/* 非Text类型且已下载：分享按钮 */}
         {canShowShareButton && (
           <TouchableOpacity
@@ -330,8 +359,10 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
               styles.secondaryButton,
               styles.actionButtonLast,
               { borderColor: theme.colors.primary },
+              downloading && { opacity: 0.5 },
             ]}
             onPress={onDownload}
+            disabled={downloading}
           >
             <Text
               style={[
@@ -340,7 +371,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
                 { color: theme.colors.primary },
               ]}
             >
-              下载
+              {downloading ? '下载中...' : '下载'}
             </Text>
           </TouchableOpacity>
         )}

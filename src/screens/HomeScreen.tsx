@@ -35,6 +35,7 @@ export function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [remoteContent, setRemoteContent] = useState<ClipboardContent | null>(null);
   const [loadingRemote, setLoadingRemote] = useState(false);
+  const [downloadingRemote, setDownloadingRemote] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: MessageType } | null>(null);
   const [fadeAnim] = useState(new Animated.Value(0));
   const appState = useRef(AppState.currentState);
@@ -55,6 +56,60 @@ export function HomeScreen() {
 
   // 远程剪贴板轮询间隔（毫秒）
   const REMOTE_POLLING_INTERVAL = 3000; // 3秒
+
+  // 下载远程文件的公共逻辑
+  const downloadRemoteFileInternal = async (
+    content: ClipboardContent,
+    apiClient: ReturnType<typeof createAPIClient>
+  ): Promise<ClipboardContent> => {
+    // 检查是否需要下载文件
+    const needsDownload =
+      (content.type === 'Image' && content.fileName && !content.imageUri) ||
+      (content.type === 'File' && content.fileName && !content.fileUri);
+
+    if (!needsDownload || !content.fileName || !content.hash) {
+      return content;
+    }
+
+    // 初始化文件存储
+    await initFileStorage();
+
+    // 提取文件扩展名
+    const extension = getFileExtension(content.fileName);
+
+    // 检查文件是否已存在
+    let fileUri: string | null = null;
+    if (content.type === 'Image' || content.type === 'File') {
+      fileUri = await getFileUri(content.type, content.hash, extension);
+    }
+
+    // 如果文件不存在，直接下载到文件系统
+    if (!fileUri && (content.type === 'Image' || content.type === 'File')) {
+      const { Paths, Directory, File } = await import('expo-file-system');
+      const baseDir = new Directory(Paths.document, 'clipboards');
+      const dir =
+        content.type === 'Image'
+          ? new Directory(baseDir, 'images')
+          : new Directory(baseDir, 'files');
+      const fileName = extension ? `${content.hash}${extension}` : content.hash;
+      const destinationFile = new File(dir, fileName);
+
+      fileUri = await apiClient.downloadFile(content.fileName, destinationFile.uri);
+    }
+
+    // 返回更新后的内容
+    const updatedContent: ClipboardContent = {
+      ...content,
+    };
+
+    if (content.type === 'Image' && fileUri) {
+      updatedContent.imageUri = fileUri;
+    } else if (content.type === 'File' && fileUri) {
+      updatedContent.fileUri = fileUri;
+    }
+
+    return updatedContent;
+  };
 
   // 显示消息提示
   const showMessage = (text: string, type: MessageType = 'info') => {
@@ -78,6 +133,126 @@ export function HomeScreen() {
     });
   };
 
+  // 处理远程剪贴板内容更新的公共逻辑
+  const processRemoteClipboardContent = async (
+    content: ClipboardContent,
+    currentHash: string,
+    hasData: boolean,
+    apiClient: ReturnType<typeof createAPIClient>,
+    logPrefix: string = ''
+  ) => {
+    const previousHash = lastRemoteHash.current;
+
+    // 检查是否有变化
+    if (previousHash === currentHash) {
+      return; // 没有变化，不处理
+    }
+
+    lastRemoteHash.current = currentHash;
+
+    // 1. 先处理自动下载
+    const autoDownloadMaxSize = config?.autoDownloadMaxSize ?? 5 * 1024 * 1024;
+    const hasFileData =
+      content.type !== 'Text' &&
+      content.fileName &&
+      content.fileSize !== undefined &&
+      !content.imageUri &&
+      !content.fileUri;
+
+    console.log(`[HomeScreen] ${logPrefix}hasFileData判断变量:`, {
+      'content.type': content.type,
+      'content.fileName': content.fileName,
+      'content.fileSize': content.fileSize,
+      'content.imageUri': content.imageUri,
+      'content.fileUri': content.fileUri,
+      hasFileData,
+    });
+
+    // 标记是否因为文件过大而跳过自动复制
+    let skipAutoCopyDueToLargeFile = false;
+    let finalContent = content; // 最终要显示的内容
+
+    if (hasFileData) {
+      const fileTooLarge = content.fileSize! > autoDownloadMaxSize;
+
+      console.log(`[HomeScreen] ${logPrefix}Auto-download check:`, {
+        type: content.type,
+        fileName: content.fileName,
+        fileSize: content.fileSize,
+        autoDownloadMaxSize,
+        hasData: hasData,
+        fileTooLarge,
+        hasImageUri: !!content.imageUri,
+        hasFileUri: !!content.fileUri,
+      });
+
+      if (fileTooLarge) {
+        // 文件过大，跳过自动下载，同时标记需要跳过自动复制
+        if (hasData) {
+          skipAutoCopyDueToLargeFile = true;
+          console.log(
+            `[HomeScreen] ${logPrefix}File too large (${content.fileSize} bytes > ${autoDownloadMaxSize} bytes), skipping auto-download and auto-copy`
+          );
+        }
+      } else {
+        // 文件大小在限制内，执行自动下载
+        console.log(
+          `[HomeScreen] ${logPrefix}Auto-downloading file (${content.fileSize} bytes, limit: ${autoDownloadMaxSize} bytes)`
+        );
+        try {
+          finalContent = await downloadRemoteFileInternal(content, apiClient);
+          console.log(
+            `[HomeScreen] ${logPrefix}Auto-download completed:`,
+            finalContent.imageUri || finalContent.fileUri
+          );
+        } catch (downloadError) {
+          console.error(`[HomeScreen] ${logPrefix}Auto-download failed:`, downloadError);
+          // 下载失败也跳过自动复制
+          if (hasData) {
+            skipAutoCopyDueToLargeFile = true;
+          }
+        }
+      }
+    }
+
+    // 更新界面显示（只调用一次，确保界面正确更新）
+    setRemoteContent(finalContent);
+
+    // 2. 处理自动复制
+    // 只要检测到远程变化（不是首次加载），且启用了自动复制，就自动复制到本地剪贴板
+    const isFirstLoad = previousHash === null;
+
+    if (!isFirstLoad) {
+      console.log(`[HomeScreen] ${logPrefix}Remote clipboard changed, updated display`);
+
+      // 如果启用了自动同步，自动复制远程内容到本地剪贴板
+      if (
+        autoSyncEnabled &&
+        activeServer &&
+        !isAutoSyncing.current &&
+        !skipAutoCopyDueToLargeFile
+      ) {
+        console.log(`[HomeScreen] ${logPrefix}Auto-copying remote changes to local clipboard`);
+        isAutoSyncing.current = true;
+        try {
+          const { setContent } = useClipboardStore.getState();
+          await setContent(finalContent);
+          // 更新本地哈希，避免触发自动上传
+          lastLocalHash.current = currentHash;
+          console.log(`[HomeScreen] ${logPrefix}Auto-copy to local clipboard completed`);
+        } catch (error) {
+          console.error(`[HomeScreen] ${logPrefix}Auto-copy to local clipboard failed:`, error);
+        } finally {
+          isAutoSyncing.current = false;
+        }
+      } else if (skipAutoCopyDueToLargeFile) {
+        console.log(
+          `[HomeScreen] ${logPrefix}Skipped auto-copy due to large file without auto-download`
+        );
+      }
+    }
+  };
+
   // 获取远程剪贴板内容
   const fetchRemoteClipboard = async (silent: boolean = false) => {
     if (!activeServer) {
@@ -98,40 +273,16 @@ export function HomeScreen() {
         // 转换为 ClipboardContent
         const { profileDtoToContent } = await import('@/utils/clipboard');
         const content = profileDtoToContent(profile);
-
-        // 检查是否有变化
         const currentHash = content.hash || content.text || '';
-        const previousHash = lastRemoteHash.current;
-        const hasChanged = previousHash !== currentHash;
 
-        if (hasChanged) {
-          setRemoteContent(content);
-          lastRemoteHash.current = currentHash;
-
-          // 如果是静默模式且之前已有记录（不是第一次初始化），说明是真正的远程变化
-          const isRealRemoteChange = silent && previousHash !== null;
-
-          if (isRealRemoteChange) {
-            console.log('[HomeScreen] Remote clipboard changed, updated display');
-
-            // 如果启用了自动同步，自动复制远程内容到本地剪贴板
-            if (autoSyncEnabled && activeServer && !isAutoSyncing.current) {
-              console.log('[HomeScreen] Auto-copying remote changes to local clipboard');
-              isAutoSyncing.current = true;
-              try {
-                const { setContent } = useClipboardStore.getState();
-                await setContent(content);
-                // 更新本地哈希，避免触发自动上传
-                lastLocalHash.current = currentHash;
-                console.log('[HomeScreen] Auto-copy to local clipboard completed');
-              } catch (error) {
-                console.error('[HomeScreen] Auto-copy to local clipboard failed:', error);
-              } finally {
-                isAutoSyncing.current = false;
-              }
-            }
-          }
-        }
+        // 使用公共处理函数
+        await processRemoteClipboardContent(
+          content,
+          currentHash,
+          profile.hasData,
+          apiClient,
+          silent ? '' : 'Polling: ' // 日志前缀
+        );
       } else {
         setRemoteContent(null);
         lastRemoteHash.current = null;
@@ -200,25 +351,15 @@ export function HomeScreen() {
         const content = profileDtoToContent(profile);
         const currentHash = content.hash || content.text || '';
 
-        setRemoteContent(content);
-        lastRemoteHash.current = currentHash;
-
-        // 如果启用了自动同步，自动复制远程内容到本地剪贴板
-        if (autoSyncEnabled && !isAutoSyncing.current) {
-          console.log('[HomeScreen] SignalR: Auto-copying remote changes to local clipboard');
-          isAutoSyncing.current = true;
-          try {
-            const { setContent } = useClipboardStore.getState();
-            await setContent(content);
-            // 更新本地哈希，避免触发自动上传
-            lastLocalHash.current = currentHash;
-            console.log('[HomeScreen] SignalR: Auto-copy to local clipboard completed');
-          } catch (error) {
-            console.error('[HomeScreen] SignalR: Auto-copy to local clipboard failed:', error);
-          } finally {
-            isAutoSyncing.current = false;
-          }
-        }
+        // 使用公共处理函数
+        const apiClient = createAPIClient(activeServer);
+        await processRemoteClipboardContent(
+          content,
+          currentHash,
+          profile.hasData,
+          apiClient,
+          'SignalR: ' // 日志前缀
+        );
       };
 
       signalRClient.current.onRemoteClipboardChanged(callback);
@@ -434,58 +575,17 @@ export function HomeScreen() {
       return;
     }
 
-    setLoadingRemote(true);
+    setDownloadingRemote(true);
     try {
       const apiClient = createAPIClient(activeServer);
-
-      // 直接下载文件到文件系统（不经过内存，优化性能）
-      if (remoteContent.fileName && remoteContent.hash) {
-        // 初始化文件存储
-        await initFileStorage();
-
-        // 提取文件扩展名
-        const extension = getFileExtension(remoteContent.fileName);
-
-        // 检查文件是否已存在（仅针对 Image 和 File 类型）
-        let fileUri: string | null = null;
-        if (remoteContent.type === 'Image' || remoteContent.type === 'File') {
-          fileUri = await getFileUri(remoteContent.type, remoteContent.hash, extension);
-        }
-
-        // 如果文件不存在，直接下载到文件系统
-        if (!fileUri && (remoteContent.type === 'Image' || remoteContent.type === 'File')) {
-          const { Paths, Directory, File } = await import('expo-file-system');
-          const baseDir = new Directory(Paths.document, 'clipboards');
-          const dir =
-            remoteContent.type === 'Image'
-              ? new Directory(baseDir, 'images')
-              : new Directory(baseDir, 'files');
-          const fileName = extension ? `${remoteContent.hash}${extension}` : remoteContent.hash;
-          const destinationFile = new File(dir, fileName);
-
-          fileUri = await apiClient.downloadFile(remoteContent.fileName, destinationFile.uri);
-        }
-
-        // 更新远程内容，添加文件URI（不保存 fileData 到内存）
-        const updatedContent: ClipboardContent = {
-          ...remoteContent,
-        };
-
-        if (remoteContent.type === 'Image' && fileUri) {
-          updatedContent.imageUri = fileUri;
-        } else if (remoteContent.type === 'File' && fileUri) {
-          updatedContent.fileUri = fileUri;
-        }
-
-        setRemoteContent(updatedContent);
-
-        showMessage('文件已下载', 'success');
-      }
+      const updatedContent = await downloadRemoteFileInternal(remoteContent, apiClient);
+      setRemoteContent(updatedContent);
+      showMessage('文件已下载', 'success');
     } catch (error) {
       console.error('[HomeScreen] Failed to download remote file:', error);
       showMessage('文件下载失败', 'error');
     } finally {
-      setLoadingRemote(false);
+      setDownloadingRemote(false);
     }
   };
 
@@ -521,6 +621,7 @@ export function HomeScreen() {
                   clipboard={remoteContent}
                   isRemote={true}
                   onDownload={handleDownloadRemoteFile}
+                  downloading={downloadingRemote}
                 />
               )}
             </View>
