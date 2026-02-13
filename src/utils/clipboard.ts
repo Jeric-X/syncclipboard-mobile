@@ -69,6 +69,7 @@ export function profileDtoToContent(profile: ProfileDto): ClipboardContent {
     type: type as ClipboardContentType,
     text,
     hash,
+    timestamp: Date.now(), // 添加当前时间戳
   };
 
   if (hasData) {

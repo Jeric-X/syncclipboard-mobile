@@ -3,7 +3,7 @@
  * 当前剪贴板内容卡片
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,16 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   onDownload,
 }) => {
   const { theme } = useTheme();
+  const [, setUpdateTrigger] = useState(0);
+
+  // 每 30 秒更新一次时间显示
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setUpdateTrigger((prev) => prev + 1);
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // 复制到剪贴板
   const handleCopy = async () => {
@@ -173,7 +183,9 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             <Text style={[styles.typeLabel, { color: theme.colors.text }]}>
               {getTypeLabel(clipboard.type)}
             </Text>
-            <Text style={[styles.timestamp, { color: theme.colors.textSecondary }]}>刚刚</Text>
+            <Text style={[styles.timestamp, { color: theme.colors.textSecondary }]}>
+              {clipboard.timestamp ? formatTime(clipboard.timestamp) : '刚刚'}
+            </Text>
           </View>
         </View>
 

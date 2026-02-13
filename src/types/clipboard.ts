@@ -67,6 +67,9 @@ export interface ClipboardContent {
 
   /** 文件数据（二进制） */
   fileData?: ArrayBuffer;
+
+  /** 创建时间戳 */
+  timestamp?: number;
 }
 
 /**

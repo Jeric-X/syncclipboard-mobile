@@ -50,6 +50,7 @@ export class ClipboardManager {
       type: 'Text',
       text,
       hash,
+      timestamp: Date.now(),
     };
   }
 
@@ -67,6 +68,7 @@ export class ClipboardManager {
         type: 'Image',
         text: '[图片]',
         hash,
+        timestamp: Date.now(),
       };
     } catch (error) {
       console.error('[ClipboardManager] Failed to get image:', error);
