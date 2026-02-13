@@ -223,8 +223,7 @@ export class APIClient {
   /**
    * 测试连接
    */
-  async testConnection(): Promise<boolean> {
+  async testConnection(): Promise<void> {
     await this.get('/');
-    return true;
   }
 }

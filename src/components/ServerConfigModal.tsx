@@ -127,8 +127,8 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
 
       console.log('[ServerConfigModal] Testing connection:', testConfig.url);
       const client = createAPIClient(testConfig);
-      const result = await client.testConnection();
-      console.log('[ServerConfigModal] Test result:', result);
+      await client.testConnection();
+      console.log('[ServerConfigModal] Test succeeded');
 
       Alert.alert('成功', '服务器连接测试成功！');
     } catch (error: any) {

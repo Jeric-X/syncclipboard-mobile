@@ -207,9 +207,8 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
   /**
    * 测试 API 连接
    */
-  async testConnection(): Promise<boolean> {
+  async testConnection(): Promise<void> {
     // 直接调用 API 测试连接，不捕获错误
     await this.getServerTime();
-    return true;
   }
 }
