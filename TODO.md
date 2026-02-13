@@ -100,12 +100,16 @@
 
 ### UI - 首页
 
-- [ ] 创建首页布局
-- [ ] 实现 `CurrentClipboardCard`
-- [ ] 实现 `QuickActionsBar`
-- [ ] 实现 `SyncStatusIndicator`
-- [ ] 实现下拉刷新
-- [ ] 编写交互逻辑
+- [x] 创建首页布局 ✅
+- [x] 实现 `CurrentClipboardCard` ✅
+- [x] 实现 `QuickActionsBar` ✅
+- [x] 实现 `SyncStatusIndicator` ✅
+- [x] 实现下拉刷新 ✅
+- [x] 编写交互逻辑 ✅
+- [x] 实现远程/本地剪贴板双展示 ✅
+- [x] 实现快捷操作按钮（复制、分享、上传、下载）✅
+- [x] 实现轻量级消息提示横幅 ✅
+- [ ] 编写单元测试
 
 ### UI - 历史记录
 
