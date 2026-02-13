@@ -1015,56 +1015,1096 @@ useEffect(() => {
 
 ## 11. 测试策略
 
-### 11.1 单元测试
+### 11.1 测试金字塔
+
+```
+        ╱────────╲
+       ╱  E2E 测试 ╲        10%  - 关键用户场景
+      ╱ ──────────╲
+     ╱  集成测试    ╲       20%  - 模块间交互
+    ╱──────────────╲
+   ╱   单元测试     ╲      70%  - 业务逻辑
+  ╱─────────────────╲
+```
+
+### 11.2 单元测试
+
+#### 11.2.1 测试框架配置
+
+```bash
+# 安装测试依赖
+npm install --save-dev jest @testing-library/react-native @testing-library/jest-native
+npm install --save-dev @testing-library/react-hooks
+npm install --save-dev jest-expo
+```
+
+```javascript
+// jest.config.js
+module.exports = {
+  preset: 'jest-expo',
+  setupFilesAfterEnv: ['@testing-library/jest-native/extend-expect'],
+  transformIgnorePatterns: [
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg)',
+  ],
+  collectCoverageFrom: [
+    'src/**/*.{ts,tsx}',
+    '!src/**/*.d.ts',
+    '!src/**/*.stories.tsx',
+    '!src/**/index.ts',
+  ],
+  coverageThreshold: {
+    global: {
+      branches: 70,
+      functions: 70,
+      lines: 70,
+      statements: 70,
+    },
+  },
+};
+```
+
+#### 11.2.2 API 客户端测试
 
 ```typescript
-// 使用 Jest + React Native Testing Library
-import { renderHook, act } from '@testing-library/react-hooks';
-import { useSyncStore } from '@/stores/syncStore';
+// src/services/__tests__/APIClient.test.ts
+import { APIClient } from '../APIClient';
+import MockAdapter from 'axios-mock-adapter';
 
-describe('useSyncStore', () => {
-  it('should upload clipboard successfully', async () => {
-    const { result } = renderHook(() => useSyncStore());
+describe('APIClient', () => {
+  let client: APIClient;
+  let mock: MockAdapter;
 
-    await act(async () => {
-      await result.current.uploadClipboard('test content');
+  beforeEach(() => {
+    client = new APIClient({ baseUrl: 'https://test.com' });
+    mock = new MockAdapter(client.axiosInstance);
+  });
+
+  afterEach(() => {
+    mock.restore();
+  });
+
+  describe('请求拦截器', () => {
+    it('应该添加 Authorization header', async () => {
+      client.setToken('test-token');
+      mock.onGet('/test').reply((config) => {
+        expect(config.headers?.Authorization).toBe('Bearer test-token');
+        return [200, { data: 'ok' }];
+      });
+
+      await client.get('/test');
     });
 
-    expect(result.current.lastSyncTime).toBeDefined();
-    expect(result.current.syncStatus).toBe('success');
+    it('应该正确处理无 token 情况', async () => {
+      mock.onGet('/test').reply((config) => {
+        expect(config.headers?.Authorization).toBeUndefined();
+        return [200, { data: 'ok' }];
+      });
+
+      await client.get('/test');
+    });
+  });
+
+  describe('响应拦截器', () => {
+    it('应该正确解析成功响应', async () => {
+      mock.onGet('/test').reply(200, { message: 'success' });
+      const response = await client.get('/test');
+      expect(response.data.message).toBe('success');
+    });
+
+    it('应该正确处理 401 错误', async () => {
+      mock.onGet('/test').reply(401);
+      await expect(client.get('/test')).rejects.toThrow();
+    });
+
+    it('应该正确处理网络错误', async () => {
+      mock.onGet('/test').networkError();
+      await expect(client.get('/test')).rejects.toThrow();
+    });
+  });
+
+  describe('重试机制', () => {
+    it('应该在失败时重试', async () => {
+      let attempts = 0;
+      mock.onGet('/test').reply(() => {
+        attempts++;
+        return attempts < 3 ? [500] : [200, { data: 'ok' }];
+      });
+
+      await client.get('/test');
+      expect(attempts).toBe(3);
+    });
+  });
+});
+
+// src/services/__tests__/SyncClipboardAPI.test.ts
+describe('SyncClipboardAPI', () => {
+  it('应该成功上传文本剪贴板', async () => {
+    // 测试文本上传
+  });
+
+  it('应该成功下载剪贴板', async () => {
+    // 测试下载
+  });
+
+  it('应该正确处理冲突', async () => {
+    // 测试冲突处理
   });
 });
 ```
 
-### 11.2 集成测试
-
-- API 集成测试
-- 数据流测试
-- 存储测试
-
-### 11.3 E2E 测试
+#### 11.2.3 剪贴板服务测试
 
 ```typescript
-// 使用 Detox
-describe('Sync Flow', () => {
+// src/services/__tests__/ClipboardManager.test.ts
+import { ClipboardManager } from '../ClipboardManager';
+import Clipboard from '@react-native-clipboard/clipboard';
+
+jest.mock('@react-native-clipboard/clipboard');
+
+describe('ClipboardManager', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('getText', () => {
+    it('应该正确读取文本', async () => {
+      (Clipboard.getString as jest.Mock).mockResolvedValue('test text');
+      const text = await ClipboardManager.getText();
+      expect(text).toBe('test text');
+    });
+
+    it('应该处理读取失败', async () => {
+      (Clipboard.getString as jest.Mock).mockRejectedValue(new Error('fail'));
+      await expect(ClipboardManager.getText()).rejects.toThrow();
+    });
+  });
+
+  describe('setText', () => {
+    it('应该正确写入文本', async () => {
+      await ClipboardManager.setText('test');
+      expect(Clipboard.setString).toHaveBeenCalledWith('test');
+    });
+  });
+
+  describe('hashContent', () => {
+    it('应该生成正确的 hash', async () => {
+      const hash = await ClipboardManager.hashContent('test');
+      expect(hash).toHaveLength(64); // SHA256 长度
+      expect(hash).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it('相同内容应生成相同 hash', async () => {
+      const hash1 = await ClipboardManager.hashContent('test');
+      const hash2 = await ClipboardManager.hashContent('test');
+      expect(hash1).toBe(hash2);
+    });
+  });
+});
+
+// src/services/__tests__/ClipboardMonitor.test.ts
+describe('ClipboardMonitor', () => {
+  it('应该检测剪贴板变化', async () => {
+    // 测试监听
+  });
+
+  it('应该正确计算 hash', async () => {
+    // 测试 hash 比对
+  });
+});
+```
+
+#### 11.2.4 同步管理器测试
+
+```typescript
+// src/services/__tests__/SyncManager.test.ts
+describe('SyncManager', () => {
+  describe('上传同步', () => {
+    it('应该成功上传文本', async () => {
+      // 测试上传
+    });
+
+    it('应该处理上传失败', async () => {
+      // 测试错误处理
+    });
+
+    it('应该添加到离线队列', async () => {
+      // 测试离线队列
+    });
+  });
+
+  describe('下载同步', () => {
+    it('应该成功下载并更新本地', async () => {
+      // 测试下载
+    });
+
+    it('应该处理冲突', async () => {
+      // 测试冲突处理
+    });
+  });
+
+  describe('自动同步', () => {
+    it('应该按间隔自动同步', async () => {
+      // 测试自动同步
+    });
+
+    it('应该能启动和停止', async () => {
+      // 测试生命周期
+    });
+  });
+});
+```
+
+#### 11.2.5 状态管理测试
+
+```typescript
+// src/stores/__tests__/clipboardStore.test.ts
+import { renderHook, act } from '@testing-library/react-hooks';
+import { useClipboardStore } from '../clipboardStore';
+
+describe('clipboardStore', () => {
+  it('应该正确初始化状态', () => {
+    const { result } = renderHook(() => useClipboardStore());
+    expect(result.current.localClipboard).toBeNull();
+    expect(result.current.remoteClipboard).toBeNull();
+  });
+
+  it('应该正确设置本地剪贴板', () => {
+    const { result } = renderHook(() => useClipboardStore());
+    
+    act(() => {
+      result.current.setLocalClipboard({
+        type: 'text',
+        content: 'test',
+        hash: 'abc123',
+        timestamp: Date.now(),
+      });
+    });
+
+    expect(result.current.localClipboard?.content).toBe('test');
+  });
+
+  it('应该正确执行操作', async () => {
+    const { result } = renderHook(() => useClipboardStore());
+    
+    await act(async () => {
+      await result.current.copyToClipboard('test');
+    });
+
+    expect(result.current.localClipboard?.content).toBe('test');
+  });
+});
+
+// 类似的测试 syncStore, historyStore, settingsStore
+```
+
+#### 11.2.6 UI 组件测试
+
+```typescript
+// src/components/__tests__/CurrentClipboardCard.test.tsx
+import React from 'react';
+import { render, fireEvent } from '@testing-library/react-native';
+import { CurrentClipboardCard } from '../CurrentClipboardCard';
+
+describe('CurrentClipboardCard', () => {
+  it('应该渲染文本类型', () => {
+    const { getByText } = render(
+      <CurrentClipboardCard
+        clipboard={{
+          type: 'text',
+          content: 'Test content',
+          hash: 'abc',
+          timestamp: Date.now(),
+        }}
+        title="本地剪贴板"
+      />
+    );
+
+    expect(getByText('Test content')).toBeTruthy();
+  });
+
+  it('应该渲染空状态', () => {
+    const { getByText } = render(
+      <CurrentClipboardCard clipboard={null} title="本地剪贴板" />
+    );
+
+    expect(getByText('暂无内容')).toBeTruthy();
+  });
+
+  it('应该触发复制操作', () => {
+    const onCopy = jest.fn();
+    const { getByTestId } = render(
+      <CurrentClipboardCard
+        clipboard={{ type: 'text', content: 'test', hash: 'abc', timestamp: 0 }}
+        title="本地"
+        onCopy={onCopy}
+      />
+    );
+
+    fireEvent.press(getByTestId('copy-button'));
+    expect(onCopy).toHaveBeenCalled();
+  });
+});
+```
+
+### 11.3 集成测试
+
+#### 11.3.1 端到端流程测试
+
+```typescript
+// src/__tests__/integration/sync-flow.test.ts
+describe('剪贴板同步流程', () => {
+  it('应该完成完整的上传同步流程', async () => {
+    // 1. 设置剪贴板内容
+    await ClipboardManager.setText('test content');
+    
+    // 2. 触发上传
+    const result = await SyncManager.upload();
+    
+    // 3. 验证结果
+    expect(result.success).toBe(true);
+    expect(result.remoteHash).toBeDefined();
+    
+    // 4. 验证历史记录
+    const history = await HistoryStorage.getHistory();
+    expect(history[0].content).toBe('test content');
+  });
+
+  it('应该完成完整的下载同步流程', async () => {
+    // 1. 模拟远程有新内容
+    // 2. 触发下载
+    // 3. 验证本地剪贴板已更新
+    // 4. 验证历史记录已添加
+  });
+
+  it('应该正确处理冲突', async () => {
+    // 测试冲突场景
+  });
+});
+```
+
+#### 11.3.2 服务器连接测试
+
+```typescript
+describe('服务器连接集成测试', () => {
+  it('应该成功连接 SyncClipboard 服务器', async () => {
+    const config = {
+      serverType: 'syncclipboard',
+      url: 'http://localhost:5033',
+      username: 'test',
+      password: 'test123',
+    };
+
+    const result = await ConfigStorage.testConnection(config);
+    expect(result.success).toBe(true);
+  });
+
+  it('应该成功连接 WebDAV 服务器', async () => {
+    // 测试 WebDAV 连接
+  });
+});
+```
+
+### 11.4 E2E 测试
+
+#### 11.4.1 Detox 配置
+
+```javascript
+// .detoxrc.js
+module.exports = {
+  testRunner: 'jest',
+  runnerConfig: 'e2e/config.json',
+  apps: {
+    'ios.release': {
+      type: 'ios.app',
+      binaryPath: 'ios/build/Build/Products/Release-iphonesimulator/SyncClipboard.app',
+      build: 'xcodebuild -workspace ios/SyncClipboard.xcworkspace -scheme SyncClipboard -configuration Release -sdk iphonesimulator -derivedDataPath ios/build',
+    },
+    'android.release': {
+      type: 'android.apk',
+      binaryPath: 'android/app/build/outputs/apk/release/app-release.apk',
+      build: 'cd android && ./gradlew assembleRelease assembleAndroidTest -DtestBuildType=release',
+    },
+  },
+  devices: {
+    simulator: {
+      type: 'ios.simulator',
+      device: { type: 'iPhone 15' },
+    },
+    emulator: {
+      type: 'android.emulator',
+      device: { avdName: 'Pixel_5_API_31' },
+    },
+  },
+  configurations: {
+    'ios.sim.release': {
+      device: 'simulator',
+      app: 'ios.release',
+    },
+    'android.emu.release': {
+      device: 'emulator',
+      app: 'android.release',
+    },
+  },
+};
+```
+
+#### 11.4.2 用户场景测试
+
+```typescript
+// e2e/sync.e2e.ts
+describe('同步功能', () => {
   beforeAll(async () => {
     await device.launchApp();
   });
 
-  it('should sync clipboard content', async () => {
-    await element(by.id('sync-button')).tap();
-    await waitFor(element(by.text('Sync completed')))
+  beforeEach(async () => {
+    await device.reloadReactNative();
+  });
+
+  it('应该完成首次配置流程', async () => {
+    // 1. 打开设置
+    await element(by.id('settings-tab')).tap();
+    
+    // 2. 点击添加服务器
+    await element(by.id('add-server-button')).tap();
+    
+    // 3. 填写服务器信息
+    await element(by.id('server-url-input')).typeText('http://test.com');
+    await element(by.id('username-input')).typeText('test');
+    await element(by.id('password-input')).typeText('test123');
+    
+    // 4. 测试连接
+    await element(by.id('test-connection-button')).tap();
+    await waitFor(element(by.text('连接成功')))
       .toBeVisible()
       .withTimeout(5000);
+    
+    // 5. 保存配置
+    await element(by.id('save-button')).tap();
+  });
+
+  it('应该完成手动同步流程', async () => {
+    // 1. 进入首页
+    await element(by.id('home-tab')).tap();
+    
+    // 2. 点击同步按钮
+    await element(by.id('sync-button')).tap();
+    
+    // 3. 等待同步完成
+    await waitFor(element(by.id('sync-status-success')))
+      .toBeVisible()
+      .withTimeout(10000);
+    
+    // 4. 验证剪贴板内容已更新
+    await expect(element(by.id('local-clipboard-content'))).toBeVisible();
+  });
+
+  it('应该能查看历史记录', async () => {
+    // 1. 进入历史页面
+    await element(by.id('history-tab')).tap();
+    
+    // 2. 等待列表加载
+    await waitFor(element(by.id('history-list')))
+      .toBeVisible()
+      .withTimeout(3000);
+    
+    // 3. 点击第一条记录
+    await element(by.id('history-item-0')).tap();
+    
+    // 4. 验证已复制到剪贴板
+    await expect(element(by.text('已复制'))).toBeVisible();
+  });
+
+  it('应该能搜索历史记录', async () => {
+    await element(by.id('history-tab')).tap();
+    await element(by.id('search-input')).typeText('test');
+    await waitFor(element(by.id('history-item-0')))
+      .toBeVisible()
+      .withTimeout(2000);
   });
 });
 ```
 
-### 11.4 测试覆盖率目标
+### 11.5 性能测试
 
-- 单元测试: 80%+
-- 集成测试: 核心流程 100%
-- E2E 测试: 主要用户场景覆盖
+#### 11.5.1 启动性能
+
+```typescript
+// e2e/performance.e2e.ts
+describe('性能测试', () => {
+  it('冷启动时间应小于 3 秒', async () => {
+    const startTime = Date.now();
+    await device.launchApp({ newInstance: true });
+    await waitFor(element(by.id('home-screen')))
+      .toBeVisible()
+      .withTimeout(3000);
+    const launchTime = Date.now() - startTime;
+    
+    expect(launchTime).toBeLessThan(3000);
+  });
+
+  it('列表滚动应该流畅', async () => {
+    await element(by.id('history-tab')).tap();
+    await element(by.id('history-list')).scroll(500, 'down');
+    // 验证没有卡顿
+  });
+});
+```
+
+#### 11.5.2 内存测试
+
+```typescript
+// 使用 React Native Performance 监控
+import { PerformanceObserver } from 'react-native-performance';
+
+describe('内存测试', () => {
+  it('应该没有内存泄漏', async () => {
+    const memoryBefore = await getMemoryUsage();
+    
+    // 执行操作
+    for (let i = 0; i < 100; i++) {
+      await SyncManager.upload();
+    }
+    
+    const memoryAfter = await getMemoryUsage();
+    const increase = memoryAfter - memoryBefore;
+    
+    expect(increase).toBeLessThan(50 * 1024 * 1024); // 50MB
+  });
+});
+```
+
+### 11.6 兼容性测试矩阵
+
+| 平台    | 版本                  | 设备                    | 优先级 |
+| ------- | --------------------- | ----------------------- | ------ |
+| iOS     | 15.0+                 | iPhone SE (3rd)         | P0     |
+| iOS     | 16.0+                 | iPhone 14               | P0     |
+| iOS     | 17.0+                 | iPhone 15               | P0     |
+| iOS     | 18.0+                 | iPhone 16 Pro           | P1     |
+| Android | 10 (API 29)           | Pixel 4                 | P0     |
+| Android | 11 (API 30)           | Pixel 5                 | P0     |
+| Android | 12 (API 31)           | Pixel 6                 | P0     |
+| Android | 13 (API 33)           | Pixel 7                 | P1     |
+| Android | 14 (API 34)           | Pixel 8                 | P1     |
+| Android | 小米 MIUI 13/14       | Xiaomi 13               | P1     |
+| Android | 华为 HarmonyOS 3/4    | Mate 50 (如适用)        | P2     |
+| Android | 三星 One UI 5/6       | Galaxy S23              | P2     |
+
+### 11.7 测试报告
+
+#### 11.7.1 生成覆盖率报告
+
+```bash
+# 运行测试并生成覆盖率报告
+npm test -- --coverage --coverageReporters=html lcov text
+
+# 查看报告
+open coverage/index.html
+```
+
+#### 11.7.2 CI 集成
+
+```yaml
+# .github/workflows/test.yml
+name: Test
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run linter
+        run: npm run lint
+      
+      - name: Run unit tests
+        run: npm test -- --coverage
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/coverage-final.json
+      
+      - name: Run E2E tests (iOS)
+        run: |
+          npm run detox:build:ios
+          npm run detox:test:ios
+      
+      - name: Run E2E tests (Android)
+        run: |
+          npm run detox:build:android
+          npm run detox:test:android
+```
+
+### 11.8 测试覆盖率目标
+
+| 测试类型 | 覆盖率目标 | 说明                     |
+| -------- | ---------- | ------------------------ |
+| 单元测试 | 80%+       | 核心业务逻辑必须覆盖     |
+| 集成测试 | 100%       | 关键流程必须完全覆盖     |
+| E2E 测试 | 主要场景   | 用户核心使用路径必须覆盖 |
+| UI 测试  | 60%+       | 重要组件必须测试         |
+
+### 11.9 测试最佳实践
+
+1. **遵循 AAA 模式**: Arrange (准备) → Act (执行) → Assert (断言)
+2. **使用有意义的测试名称**: 描述测试的目的和预期结果
+3. **保持测试独立**: 每个测试应该能够独立运行
+4. **Mock 外部依赖**: 使用 Mock 隔离外部服务
+5. **测试边界条件**: 测试正常、异常和边界情况
+6. **定期运行测试**: 在 CI/CD 中自动运行测试
+7. **维护测试代码**: 测试代码也需要重构和维护
+
+### 11.10 手动功能测试清单
+
+> **重要提示**: 所有手动测试应在真实设备上进行，而非仅限于模拟器/模拟器。建议准备测试检查表并记录测试结果。
+
+#### 11.10.1 测试准备
+
+**测试环境准备**
+- [ ] 准备至少一台 iOS 真机（iOS 15+）
+- [ ] 准备至少一台 Android 真机（Android 10+）
+- [ ] 准备测试用服务器（SyncClipboard 服务器或 WebDAV）
+- [ ] 准备测试账号和密码
+- [ ] 清空应用数据（首次测试）
+- [ ] 检查网络连接正常
+
+**测试数据准备**
+- [ ] 准备多种类型的测试内容：
+  - 短文本（< 100 字符）
+  - 长文本（> 1000 字符）
+  - 包含特殊字符的文本（Emoji、中文、代码）
+  - 小图片（< 1MB）
+  - 大图片（> 5MB）
+  - 各种格式图片（JPG、PNG、GIF、WebP）
+  - 文件（PDF、DOC、ZIP 等）
+
+#### 11.10.2 首次启动与配置流程
+
+**场景 1: 首次启动**
+- [ ] 冷启动应用
+- [ ] 验证启动屏幕正常显示
+- [ ] 验证首页正确加载（显示空状态）
+- [ ] 验证底部导航栏显示正常（三个 Tab）
+- [ ] 记录启动时间（应 < 3 秒）
+- [ ] 检查是否有任何崩溃或错误
+
+**场景 2: 添加第一个服务器**
+- [ ] 点击设置 Tab
+- [ ] 点击"添加服务器"按钮
+- [ ] 验证配置模态框正确弹出
+- [ ] 测试服务器类型选择（SyncClipboard / WebDAV）
+- [ ] 测试表单验证：
+  - [ ] URL 必填，空值时显示错误
+  - [ ] 用户名必填（SyncClipboard）
+  - [ ] 密码必填（SyncClipboard）
+  - [ ] URL 格式验证（必须是有效 URL）
+- [ ] 填写正确的服务器信息
+- [ ] 点击"测试连接"按钮
+- [ ] 验证连接成功提示
+- [ ] 点击"保存"按钮
+- [ ] 验证服务器已添加到列表
+- [ ] 验证该服务器被标记为默认服务器（绿色勾选）
+
+**场景 3: 连接失败处理**
+- [ ] 添加服务器时填写错误的 URL
+- [ ] 点击"测试连接"
+- [ ] 验证显示连接失败错误信息
+- [ ] 验证错误信息清晰易懂
+- [ ] 修复 URL 后再次测试连接成功
+
+#### 11.10.3 剪贴板同步功能
+
+**场景 4: 文本上传同步**
+- [ ] 在设备上复制一段文本
+- [ ] 打开应用首页
+- [ ] 验证"本地剪贴板"卡片显示刚复制的内容
+- [ ] 点击"上传"按钮（向上箭头）
+- [ ] 验证显示上传中状态（加载指示器）
+- [ ] 验证上传成功后状态指示器显示"同步成功"
+- [ ] 验证显示最后同步时间
+- [ ] 验证"远程剪贴板"卡片内容已更新
+- [ ] 在桌面端检查剪贴板是否已同步
+
+**场景 5: 文本下载同步**
+- [ ] 在桌面端复制新的文本并上传
+- [ ] 在手机应用点击"下载"按钮（向下箭头）
+- [ ] 验证显示下载中状态
+- [ ] 验证下载成功后"远程剪贴板"卡片更新
+- [ ] 点击"复制"按钮
+- [ ] 验证显示"已复制"提示
+- [ ] 在其他应用粘贴，验证内容正确
+
+**场景 6: 全量同步**
+- [ ] 点击"同步"按钮（刷新图标）
+- [ ] 验证同时下载并比对远程内容
+- [ ] 如果本地和远程不同，验证冲突处理逻辑
+- [ ] 验证同步完成后两个卡片状态
+
+**场景 7: 图片同步**
+- [ ] 复制一张图片到剪贴板（从相册或浏览器）
+- [ ] 打开应用，验证"本地剪贴板"显示图片预览
+- [ ] 点击上传，验证图片上传成功
+- [ ] 下载图片，验证图片显示正确
+- [ ] 点击复制，验证图片已复制到系统剪贴板
+- [ ] 在其他应用粘贴，验证图片正确
+
+**场景 8: 大文件处理**
+- [ ] 复制一个大图片（> 5MB）
+- [ ] 上传，验证显示上传进度
+- [ ] 验证上传不会卡顿或崩溃
+- [ ] 验证上传时间合理
+- [ ] 下载大文件，验证下载进度
+- [ ] 验证下载后内存占用正常
+
+**场景 9: 网络异常处理**
+- [ ] 关闭 WiFi 和移动数据
+- [ ] 尝试上传剪贴板
+- [ ] 验证显示网络错误提示
+- [ ] 验证内容添加到离线队列
+- [ ] 打开网络
+- [ ] 验证离线队列自动重试
+- [ ] 验证重试成功后清除队列
+
+#### 11.10.4 历史记录功能
+
+**场景 10: 历史记录查看**
+- [ ] 切换到历史记录 Tab
+- [ ] 验证历史列表正确加载
+- [ ] 验证列表项显示正确信息：
+  - [ ] 类型图标（📝 文本 / 🖼️ 图片 / 📄 文件）
+  - [ ] 内容预览（文本前50字符）
+  - [ ] 时间显示（刚刚 / X分钟前 / X小时前 / X天前）
+  - [ ] 同步状态（已同步 / 未同步）
+- [ ] 滚动列表，验证性能流畅（使用 FlashList）
+
+**场景 11: 历史记录搜索**
+- [ ] 在搜索框输入关键词
+- [ ] 验证 300ms 防抖生效（不会每次输入都搜索）
+- [ ] 验证搜索结果正确过滤
+- [ ] 验证高亮显示搜索关键词（如果实现）
+- [ ] 清空搜索，验证显示完整列表
+- [ ] 搜索不存在的内容，验证显示空状态
+
+**场景 12: 类型筛选**
+- [ ] 点击"全部"筛选器
+- [ ] 点击"文本"筛选器，验证只显示文本类型
+- [ ] 点击"图片"筛选器，验证只显示图片类型
+- [ ] 点击"文件"筛选器，验证只显示文件类型
+- [ ] 验证筛选后的计数正确
+- [ ] 验证筛选和搜索可以同时使用
+
+**场景 13: 历史记录操作**
+- [ ] 点击一条历史记录
+- [ ] 验证快速复制到剪贴板
+- [ ] 验证显示"已复制"提示
+- [ ] 在其他应用粘贴，验证内容正确
+- [ ] 长按一条历史记录
+- [ ] iOS: 验证显示 ActionSheet
+- [ ] Android: 验证显示 Modal 菜单
+- [ ] 验证菜单包含选项：复制、分享、删除
+- [ ] 测试"分享"功能，验证系统分享面板打开
+- [ ] 测试"删除"功能，验证确认对话框
+- [ ] 确认删除，验证记录被删除
+
+**场景 14: 分页加载**
+- [ ] 确保有 50+ 条历史记录
+- [ ] 滚动到列表底部
+- [ ] 验证显示"加载更多"指示器
+- [ ] 验证自动加载下一页
+- [ ] 验证新数据追加到列表
+- [ ] 继续滚动，验证连续分页正常
+
+**场景 15: 清空历史**
+- [ ] 点击"清空历史"按钮
+- [ ] 验证显示确认对话框
+- [ ] 点击"取消"，验证不清空
+- [ ] 再次点击"清空历史"
+- [ ] 点击"确认"
+- [ ] 验证所有历史记录被清空
+- [ ] 验证显示空状态提示
+
+#### 11.10.5 多服务器管理
+
+**场景 16: 添加多个服务器**
+- [ ] 添加第二个服务器（不同 URL）
+- [ ] 验证服务器列表显示两个服务器
+- [ ] 验证第一个服务器仍为默认（绿色勾选）
+- [ ] 添加第三个服务器（WebDAV 类型）
+- [ ] 验证列表显示三个服务器
+
+**场景 17: 切换服务器**
+- [ ] 点击第二个服务器的切换按钮
+- [ ] 验证第二个服务器变为默认（绿色勾选）
+- [ ] 验证第一个服务器勾选消失
+- [ ] 返回首页
+- [ ] 验证同步状态指示器显示新服务器信息
+- [ ] 测试上传下载使用新服务器
+
+**场景 18: 编辑服务器**
+- [ ] 长按服务器列表项（或点击编辑按钮）
+- [ ] 验证配置模态框打开并预填信息
+- [ ] 修改服务器 URL
+- [ ] 保存修改
+- [ ] 验证列表更新
+- [ ] 测试连接验证修改成功
+
+**场景 19: 删除服务器**
+- [ ] 删除非默认服务器
+- [ ] 验证确认对话框
+- [ ] 确认删除
+- [ ] 验证服务器从列表移除
+- [ ] 尝试删除默认服务器
+- [ ] 验证提示"需要先切换到其他服务器"或自动切换到其他服务器
+- [ ] 删除所有服务器
+- [ ] 验证应用提示"请添加服务器"
+
+#### 11.10.6 设置功能
+
+**场景 20: 主题切换**
+- [ ] 打开设置页面
+- [ ] 验证当前主题选项被高亮
+- [ ] 切换到"亮色"主题
+- [ ] 验证整个应用立即切换到亮色
+- [ ] 验证所有页面（首页、历史、设置）都应用新主题
+- [ ] 切换到"暗色"主题
+- [ ] 验证整个应用切换到暗色
+- [ ] 切换到"自动"模式
+- [ ] 手动切换系统主题，验证应用跟随系统
+- [ ] 重启应用，验证主题设置被保存
+
+**场景 21: 自动同步设置**（待实现）
+- [ ] 开启自动同步
+- [ ] 设置同步间隔（如 5 分钟）
+- [ ] 验证在后台自动同步
+- [ ] 关闭自动同步
+- [ ] 验证不再自动同步
+
+**场景 22: 通知设置**（待实现）
+- [ ] 开启同步成功通知
+- [ ] 上传剪贴板，验证显示通知
+- [ ] 关闭通知
+- [ ] 验证不再显示通知
+
+#### 11.10.7 权限处理
+
+**场景 23: iOS 剪贴板权限**
+- [ ] 首次启动应用后复制内容
+- [ ] 打开应用首页
+- [ ] 验证 iOS 14+ 显示"已粘贴自..."横幅
+- [ ] 多次访问剪贴板，验证提示正常
+- [ ] 验证应用能正常读取剪贴板
+
+**场景 24: Android 权限处理**
+- [ ] 首次启动请求必要权限
+- [ ] 验证权限请求对话框
+- [ ] 拒绝权限，验证应用提示影响
+- [ ] 重新请求权限并授权
+- [ ] 验证应用正常工作
+
+#### 11.10.8 界面交互与用户体验
+
+**场景 25: 下拉刷新**
+- [ ] 在首页下拉
+- [ ] 验证显示刷新指示器
+- [ ] 验证触发同步操作
+- [ ] 验证刷新完成后指示器消失
+- [ ] 在历史页下拉
+- [ ] 验证刷新历史列表
+
+**场景 26: 按钮状态**
+- [ ] 验证上传按钮在无本地内容时禁用
+- [ ] 验证下载按钮在无远程内容时禁用
+- [ ] 验证同步时所有按钮显示加载状态
+- [ ] 验证同步完成后按钮恢复正常
+
+**场景 27: 消息提示**
+- [ ] 触发各种操作，验证提示信息：
+  - [ ] 复制成功："已复制"
+  - [ ] 上传成功："上传成功"
+  - [ ] 下载成功："下载成功"
+  - [ ] 同步成功："同步完成"
+  - [ ] 各种错误的友好提示
+- [ ] 验证提示显示位置合理（底部按钮上方）
+- [ ] 验证提示自动消失（3 秒后）
+- [ ] 验证提示有淡入淡出动画
+
+**场景 28: 加载状态**
+- [ ] 验证首次加载显示骨架屏或加载指示器
+- [ ] 验证网络请求时显示加载状态
+- [ ] 验证加载状态不会无限持续
+- [ ] 验证加载失败显示重试按钮
+
+#### 11.10.9 边界情况与异常处理
+
+**场景 29: 空内容处理**
+- [ ] 清空剪贴板
+- [ ] 打开应用
+- [ ] 验证"本地剪贴板"显示"暂无内容"
+- [ ] 验证操作按钮禁用或隐藏
+- [ ] 尝试上传空内容
+- [ ] 验证提示"剪贴板为空"
+
+**场景 30: 特殊字符处理**
+- [ ] 复制包含 Emoji 的文本 🎉🚀💯
+- [ ] 验证正确显示和同步
+- [ ] 复制包含换行的长文本
+- [ ] 验证预览显示正确（最多显示 50 字符）
+- [ ] 复制包含代码片段的文本
+- [ ] 验证格式保留
+
+**场景 31: 超长内容处理**
+- [ ] 复制非常长的文本（> 10000 字符）
+- [ ] 验证应用不崩溃
+- [ ] 验证上传成功
+- [ ] 验证预览截断显示
+- [ ] 验证完整内容可以复制
+
+**场景 32: 服务器错误处理**
+- [ ] 停止服务器
+- [ ] 尝试同步
+- [ ] 验证显示连接失败错误
+- [ ] 验证错误信息清晰
+- [ ] 启动服务器
+- [ ] 重试，验证恢复正常
+
+**场景 33: Token 过期处理**
+- [ ] 等待 Token 过期（或手动使 Token 失效）
+- [ ] 尝试操作
+- [ ] 验证自动重新认证
+- [ ] 或验证提示需要重新登录
+
+#### 11.10.10 性能与稳定性
+
+**场景 34: 应用稳定性**
+- [ ] 连续使用应用 30 分钟
+- [ ] 验证无崩溃
+- [ ] 验证无内存泄漏（通过系统监控）
+- [ ] 验证无明显卡顿
+
+**场景 35: 后台恢复**
+- [ ] 打开应用
+- [ ] 切换到后台（按 Home 键）
+- [ ] 等待 5 分钟
+- [ ] 切回应用
+- [ ] 验证应用状态保持
+- [ ] 验证数据未丢失
+
+**场景 36: 应用重启**
+- [ ] 强制关闭应用
+- [ ] 重新打开
+- [ ] 验证所有设置保持
+- [ ] 验证服务器配置保持
+- [ ] 验证历史记录保持
+- [ ] 验证主题设置保持
+
+**场景 37: 内存压力测试**
+- [ ] 添加 100+ 条历史记录
+- [ ] 滚动历史列表
+- [ ] 验证性能流畅
+- [ ] 验证内存占用合理
+- [ ] 上传下载 20 次连续操作
+- [ ] 验证无内存泄漏
+
+#### 11.10.11 多设备协作
+
+**场景 38: 多设备同步**
+- [ ] 准备两台手机和一台电脑
+- [ ] 配置相同的服务器账号
+- [ ] 在设备 A 复制并上传内容
+- [ ] 在设备 B 下载
+- [ ] 验证内容一致
+- [ ] 在设备 B 修改并上传
+- [ ] 在设备 A 和电脑下载
+- [ ] 验证所有设备内容一致
+
+**场景 39: 冲突解决**
+- [ ] 在两台设备离线状态下分别复制不同内容
+- [ ] 设备 A 先上线并上传
+- [ ] 设备 B 上线并尝试上传
+- [ ] 验证冲突检测
+- [ ] 验证冲突解决策略（远程优先/本地优先/提示用户）
+- [ ] 选择解决方案
+- [ ] 验证最终状态正确
+
+#### 11.10.12 平台特定测试
+
+**iOS 特定场景**
+- [ ] 测试深色模式切换
+- [ ] 测试动态字体大小调整
+- [ ] 测试 Safe Area 适配（刘海屏）
+- [ ] 测试横屏模式（如果支持）
+- [ ] 测试系统分享面板集成
+- [ ] 测试 3D Touch / Haptic Feedback
+- [ ] 测试 iPad 适配（如果支持）
+
+**Android 特定场景**
+- [ ] 测试返回键行为
+- [ ] 测试系统导航栏适配
+- [ ] 测试通知渠道设置
+- [ ] 测试前台服务通知
+- [ ] 测试电池优化白名单
+- [ ] 测试不同厂商 ROM（小米、华为、三星）
+- [ ] 测试分屏模式
+
+#### 11.10.13 测试报告模板
+
+每次测试后填写测试报告：
+
+**测试信息**
+- 测试日期：
+- 测试人员：
+- 应用版本：
+- 测试设备：
+- 系统版本：
+
+**测试结果统计**
+- 测试场景总数：
+- 通过数量：
+- 失败数量：
+- 阻塞问题数量：
+
+**发现的问题**
+| 编号 | 严重程度 | 场景 | 问题描述 | 复现步骤 | 截图 | 状态 |
+|------|---------|------|---------|---------|------|------|
+| 1    | 高      |      |         |         |      | 待修复 |
+
+**性能指标**
+- 冷启动时间：
+- 热启动时间：
+- 首屏渲染时间：
+- 平均内存占用：
+- 上传速度（1MB 文件）：
+- 下载速度（1MB 文件）：
+
+**测试结论**
+- [ ] 通过，可以发布
+- [ ] 有轻微问题，可以发布
+- [ ] 有严重问题，需要修复后重新测试
+
+#### 11.10.14 回归测试清单
+
+每次版本更新后的快速回归测试（核心功能）：
+
+- [ ] 应用正常启动
+- [ ] 服务器连接正常
+- [ ] 文本上传同步正常
+- [ ] 文本下载同步正常
+- [ ] 历史记录查看正常
+- [ ] 搜索功能正常
+- [ ] 多服务器切换正常
+- [ ] 主题切换正常
+- [ ] 无明显 UI 错位或样式问题
+- [ ] 无崩溃或闪退
 
 ---
 
@@ -1237,11 +2277,12 @@ async function checkForUpdates() {
 
 ## 版本历史
 
-| 版本  | 日期       | 变更内容 | 作者 |
-| ----- | ---------- | -------- | ---- |
-| 1.0.0 | 2026-02-12 | 初始版本 | -    |
+| 版本  | 日期       | 变更内容                                     | 作者 |
+| ----- | ---------- | -------------------------------------------- | ---- |
+| 1.0.0 | 2026-02-12 | 初始版本                                     | -    |
+| 1.1.0 | 2026-02-13 | 完善测试策略章节，添加详细的测试模块清单     | -    |
 
 ---
 
-**文档状态**: ✅ 初稿完成  
-**下一步行动**: 开始 Phase 1 开发
+**文档状态**: ✅ 已完善测试策略  
+**下一步行动**: 开始 Phase 1 测试工作
