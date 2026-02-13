@@ -22,7 +22,6 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { SyncStatus, SyncDirection } from '@/types/sync';
 import { ClipboardContent } from '@/types/clipboard';
 import { CurrentClipboardCard } from '@/components/CurrentClipboardCard';
-import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { createAPIClient, getSignalRClient } from '@/services';
 import type { RemoteClipboardChangedCallback } from '@/services';
 
@@ -38,15 +37,18 @@ export function HomeScreen() {
   const appState = useRef(AppState.currentState);
   const remotePollingInterval = useRef<NodeJS.Timeout | null>(null);
   const lastRemoteHash = useRef<string | null>(null);
+  const lastLocalHash = useRef<string | null>(null);
+  const isAutoSyncing = useRef(false);
   const signalRClient = useRef(getSignalRClient());
   const signalRConnected = useRef(false);
 
   const { currentContent, getContent, startMonitoring, stopMonitoring } = useClipboardStore();
-  const { status, stats, sync } = useSyncStore();
-  const { getActiveServer, loadConfig, isLoaded } = useSettingsStore();
+  const { status, stats, sync, initialize: initializeSync } = useSyncStore();
+  const { getActiveServer, loadConfig, isLoaded, config } = useSettingsStore();
 
   const activeServer = getActiveServer();
   const lastSyncTime = stats?.lastSyncTime || null;
+  const autoSyncEnabled = config?.autoSync ?? false;
 
   // 远程剪贴板轮询间隔（毫秒）
   const REMOTE_POLLING_INTERVAL = 3000; // 3秒
@@ -96,14 +98,35 @@ export function HomeScreen() {
 
         // 检查是否有变化
         const currentHash = content.hash || content.text || '';
-        const hasChanged = lastRemoteHash.current !== currentHash;
+        const previousHash = lastRemoteHash.current;
+        const hasChanged = previousHash !== currentHash;
 
         if (hasChanged) {
           setRemoteContent(content);
           lastRemoteHash.current = currentHash;
 
-          if (silent && lastRemoteHash.current !== null) {
+          // 如果是静默模式且之前已有记录（不是第一次初始化），说明是真正的远程变化
+          const isRealRemoteChange = silent && previousHash !== null;
+
+          if (isRealRemoteChange) {
             console.log('[HomeScreen] Remote clipboard changed, updated display');
+
+            // 如果启用了自动同步，自动复制远程内容到本地剪贴板
+            if (autoSyncEnabled && activeServer && !isAutoSyncing.current) {
+              console.log('[HomeScreen] Auto-copying remote changes to local clipboard');
+              isAutoSyncing.current = true;
+              try {
+                const { setContent } = useClipboardStore.getState();
+                await setContent(content);
+                // 更新本地哈希，避免触发自动上传
+                lastLocalHash.current = currentHash;
+                console.log('[HomeScreen] Auto-copy to local clipboard completed');
+              } catch (error) {
+                console.error('[HomeScreen] Auto-copy to local clipboard failed:', error);
+              } finally {
+                isAutoSyncing.current = false;
+              }
+            }
           }
         }
       } else {
@@ -172,9 +195,27 @@ export function HomeScreen() {
         // 转换为 ClipboardContent
         const { profileDtoToContent } = await import('@/utils/clipboard');
         const content = profileDtoToContent(profile);
+        const currentHash = content.hash || content.text || '';
 
         setRemoteContent(content);
-        lastRemoteHash.current = content.hash || content.text || '';
+        lastRemoteHash.current = currentHash;
+
+        // 如果启用了自动同步，自动复制远程内容到本地剪贴板
+        if (autoSyncEnabled && !isAutoSyncing.current) {
+          console.log('[HomeScreen] SignalR: Auto-copying remote changes to local clipboard');
+          isAutoSyncing.current = true;
+          try {
+            const { setContent } = useClipboardStore.getState();
+            await setContent(content);
+            // 更新本地哈希，避免触发自动上传
+            lastLocalHash.current = currentHash;
+            console.log('[HomeScreen] SignalR: Auto-copy to local clipboard completed');
+          } catch (error) {
+            console.error('[HomeScreen] SignalR: Auto-copy to local clipboard failed:', error);
+          } finally {
+            isAutoSyncing.current = false;
+          }
+        }
       };
 
       signalRClient.current.onRemoteClipboardChanged(callback);
@@ -220,6 +261,44 @@ export function HomeScreen() {
     };
   }, [isLoaded, loadConfig, getContent, startMonitoring, stopMonitoring]);
 
+  // 监听本地剪贴板变化，自动上传
+  useEffect(() => {
+    if (!activeServer || !autoSyncEnabled || !currentContent) {
+      return;
+    }
+
+    const currentHash = currentContent.hash || currentContent.text || '';
+
+    // 初始化时记录当前哈希，不触发同步
+    if (lastLocalHash.current === null) {
+      lastLocalHash.current = currentHash;
+      return;
+    }
+
+    // 检查是否有变化
+    if (currentHash !== lastLocalHash.current) {
+      console.log('[HomeScreen] Local clipboard changed, auto-syncing to remote');
+      lastLocalHash.current = currentHash;
+
+      // 自动上传到远程
+      if (!isAutoSyncing.current) {
+        isAutoSyncing.current = true;
+        sync(SyncDirection.Upload)
+          .then(() => {
+            console.log('[HomeScreen] Auto-sync upload completed');
+            // 刷新远程显示
+            fetchRemoteClipboard(true);
+          })
+          .catch((error) => {
+            console.error('[HomeScreen] Auto-sync upload failed:', error);
+          })
+          .finally(() => {
+            isAutoSyncing.current = false;
+          });
+      }
+    }
+  }, [currentContent, activeServer, autoSyncEnabled, sync]);
+
   // 当服务器配置改变时，启动/停止远程轮询或 SignalR
   useEffect(() => {
     const initializeRemoteSync = async () => {
@@ -231,6 +310,9 @@ export function HomeScreen() {
       lastRemoteHash.current = null;
 
       if (activeServer) {
+        // 初始化同步管理器（用于上传功能）
+        await initializeSync();
+
         // 立即获取一次（显示 loading）
         await fetchRemoteClipboard(false);
 
@@ -261,7 +343,7 @@ export function HomeScreen() {
       stopRemotePolling();
       disconnectSignalR();
     };
-  }, [activeServer]);
+  }, [activeServer, initializeSync]);
 
   // 监听应用状态变化，控制远程剪贴板轮询或 SignalR
   // 本地剪贴板已由 ClipboardMonitor 持续监听，无需在此处处理
@@ -375,13 +457,6 @@ export function HomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* 状态指示器 */}
-      <SyncStatusIndicator
-        status={status}
-        lastSyncTime={lastSyncTime}
-        serverConnected={!!activeServer}
-      />
-
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}

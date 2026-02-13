@@ -52,6 +52,9 @@ export interface AppConfig {
 
   /** 启动时自动同步 */
   syncOnStartup: boolean;
+
+  /** 自动同步（检测到变化时自动上传/下载） */
+  autoSync: boolean;
 }
 
 /**
@@ -195,6 +198,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   enableNotifications: true,
   syncInBackground: false,
   syncOnStartup: true,
+  autoSync: false,
 };
 
 /**

@@ -87,6 +87,9 @@ interface SettingsState {
   /** 设置启动时同步 */
   setSyncOnStartup: (enabled: boolean) => Promise<void>;
 
+  /** 设置自动同步 */
+  setAutoSync: (enabled: boolean) => Promise<void>;
+
   // 导入/导出
   /** 导出配置 */
   exportConfig: () => Promise<string>;
@@ -258,6 +261,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setSyncOnStartup: async (enabled: boolean) => {
     await get().updateConfig({ syncOnStartup: enabled });
+  },
+
+  setAutoSync: async (enabled: boolean) => {
+    await get().updateConfig({ autoSync: enabled });
   },
 
   exportConfig: async () => {

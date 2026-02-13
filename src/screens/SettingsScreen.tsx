@@ -4,7 +4,15 @@
  */
 
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  Animated,
+  Switch,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import type { ThemeMode } from '@/theme';
@@ -16,8 +24,16 @@ type MessageType = 'success' | 'error' | 'info';
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
-  const { config, isLoaded, loadConfig, addServer, updateServer, deleteServer, setActiveServer } =
-    useSettingsStore();
+  const {
+    config,
+    isLoaded,
+    loadConfig,
+    addServer,
+    updateServer,
+    deleteServer,
+    setActiveServer,
+    setAutoSync,
+  } = useSettingsStore();
 
   const [showServerModal, setShowServerModal] = useState(false);
   const [editingServerIndex, setEditingServerIndex] = useState<number | null>(null);
@@ -77,6 +93,7 @@ export const SettingsScreen = () => {
   // 获取服务器列表
   const servers = config?.servers || [];
   const activeServerIndex = config?.activeServerIndex ?? -1;
+  const autoSyncEnabled = config?.autoSync ?? false;
 
   // 处理添加服务器
   const handleAddServer = () => {
@@ -129,8 +146,21 @@ export const SettingsScreen = () => {
     }
   };
 
+  // 处理切换自动同步
+  const handleToggleAutoSync = async (enabled: boolean) => {
+    try {
+      await setAutoSync(enabled);
+      showMessage(enabled ? '已启用自动同步' : '已禁用自动同步', 'success');
+    } catch (error: any) {
+      showMessage(error.message || '设置失败', 'error');
+    }
+  };
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      edges={['bottom']}
+    >
       <ScrollView style={styles.scrollView}>
         {/* 服务器配置部分 */}
         <View style={styles.section}>
@@ -165,6 +195,30 @@ export const SettingsScreen = () => {
               />
             ))
           )}
+        </View>
+
+        {/* 同步设置部分 */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderBase}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>同步设置</Text>
+          </View>
+
+          <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>自动同步</Text>
+                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
+                  本地变化时自动上传，远程变化时自动复制
+                </Text>
+              </View>
+              <Switch
+                value={autoSyncEnabled}
+                onValueChange={handleToggleAutoSync}
+                trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
+                thumbColor={autoSyncEnabled ? theme.colors.surface : theme.colors.textTertiary}
+              />
+            </View>
+          </View>
         </View>
 
         {/* 主题设置部分 */}
@@ -388,6 +442,27 @@ const styles = StyleSheet.create({
   infoValue: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  settingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  settingInfo: {
+    flex: 1,
+    marginRight: 16,
+  },
+  settingLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  settingDescription: {
+    fontSize: 13,
+    lineHeight: 18,
   },
   bottomPadding: {
     height: 40,
