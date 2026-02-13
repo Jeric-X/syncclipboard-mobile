@@ -290,13 +290,8 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
    * 测试 WebDAV 连接
    */
   async testConnection(): Promise<boolean> {
-    try {
-      // 使用 OPTIONS 请求测试连接
-      await this.client.options('/');
-      return true;
-    } catch (error) {
-      console.error('[WebDAVClient] Connection test failed:', error);
-      return false;
-    }
+    // 使用 OPTIONS 请求测试连接
+    await this.client.options('/');
+    return true;
   }
 }

@@ -126,22 +126,16 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
    * 获取服务器时间
    */
   async getServerTime(): Promise<Date> {
-    try {
-      // 尝试从响应头获取服务器时间
-      const response = await this.client.head('/');
-      const dateHeader = response.headers['date'];
+    // 尝试从响应头获取服务器时间
+    const response = await this.client.head('/');
+    const dateHeader = response.headers['date'];
 
-      if (dateHeader) {
-        return new Date(dateHeader);
-      }
-
-      // 如果没有 date 头，返回当前时间
-      return new Date();
-    } catch (error) {
-      console.error('[SyncClipboardAPI] Failed to get server time:', error);
-      // 失败时返回本地时间
-      return new Date();
+    if (dateHeader) {
+      return new Date(dateHeader);
     }
+
+    // 如果没有 date 头，返回当前时间
+    return new Date();
   }
 
   /**
@@ -214,12 +208,8 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
    * 测试 API 连接
    */
   async testConnection(): Promise<boolean> {
-    try {
-      await this.getServerInfo();
-      return true;
-    } catch (error) {
-      console.error('[SyncClipboardAPI] Connection test failed:', error);
-      return false;
-    }
+    // 直接调用 API 测试连接，不捕获错误
+    await this.getServerTime();
+    return true;
   }
 }
