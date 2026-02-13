@@ -261,11 +261,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                       borderColor: theme.colors.divider,
                     },
                   ]}
-                  placeholder={
-                    type === 'syncclipboard'
-                      ? 'http://192.168.1.100:5033'
-                      : 'https://dav.jianguoyun.com/dav'
-                  }
+                  placeholder=""
                   placeholderTextColor={theme.colors.textTertiary}
                   value={url}
                   onChangeText={setUrl}
@@ -286,7 +282,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                       borderColor: theme.colors.divider,
                     },
                   ]}
-                  placeholder="输入用户名"
+                  placeholder=""
                   placeholderTextColor={theme.colors.textTertiary}
                   value={username}
                   onChangeText={setUsername}
@@ -306,7 +302,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                       borderColor: theme.colors.divider,
                     },
                   ]}
-                  placeholder="输入密码"
+                  placeholder=""
                   placeholderTextColor={theme.colors.textTertiary}
                   value={password}
                   onChangeText={setPassword}

@@ -1270,7 +1270,7 @@ describe('clipboardStore', () => {
 
   it('应该正确设置本地剪贴板', () => {
     const { result } = renderHook(() => useClipboardStore());
-    
+
     act(() => {
       result.current.setLocalClipboard({
         type: 'text',
@@ -1285,7 +1285,7 @@ describe('clipboardStore', () => {
 
   it('应该正确执行操作', async () => {
     const { result } = renderHook(() => useClipboardStore());
-    
+
     await act(async () => {
       await result.current.copyToClipboard('test');
     });
@@ -1356,14 +1356,14 @@ describe('剪贴板同步流程', () => {
   it('应该完成完整的上传同步流程', async () => {
     // 1. 设置剪贴板内容
     await ClipboardManager.setText('test content');
-    
+
     // 2. 触发上传
     const result = await SyncManager.upload();
-    
+
     // 3. 验证结果
     expect(result.success).toBe(true);
     expect(result.remoteHash).toBeDefined();
-    
+
     // 4. 验证历史记录
     const history = await HistoryStorage.getHistory();
     expect(history[0].content).toBe('test content');
@@ -1417,7 +1417,8 @@ module.exports = {
     'ios.release': {
       type: 'ios.app',
       binaryPath: 'ios/build/Build/Products/Release-iphonesimulator/SyncClipboard.app',
-      build: 'xcodebuild -workspace ios/SyncClipboard.xcworkspace -scheme SyncClipboard -configuration Release -sdk iphonesimulator -derivedDataPath ios/build',
+      build:
+        'xcodebuild -workspace ios/SyncClipboard.xcworkspace -scheme SyncClipboard -configuration Release -sdk iphonesimulator -derivedDataPath ios/build',
     },
     'android.release': {
       type: 'android.apk',
@@ -1464,21 +1465,21 @@ describe('同步功能', () => {
   it('应该完成首次配置流程', async () => {
     // 1. 打开设置
     await element(by.id('settings-tab')).tap();
-    
+
     // 2. 点击添加服务器
     await element(by.id('add-server-button')).tap();
-    
+
     // 3. 填写服务器信息
     await element(by.id('server-url-input')).typeText('http://test.com');
     await element(by.id('username-input')).typeText('test');
     await element(by.id('password-input')).typeText('test123');
-    
+
     // 4. 测试连接
     await element(by.id('test-connection-button')).tap();
     await waitFor(element(by.text('连接成功')))
       .toBeVisible()
       .withTimeout(5000);
-    
+
     // 5. 保存配置
     await element(by.id('save-button')).tap();
   });
@@ -1486,15 +1487,15 @@ describe('同步功能', () => {
   it('应该完成手动同步流程', async () => {
     // 1. 进入首页
     await element(by.id('home-tab')).tap();
-    
+
     // 2. 点击同步按钮
     await element(by.id('sync-button')).tap();
-    
+
     // 3. 等待同步完成
     await waitFor(element(by.id('sync-status-success')))
       .toBeVisible()
       .withTimeout(10000);
-    
+
     // 4. 验证剪贴板内容已更新
     await expect(element(by.id('local-clipboard-content'))).toBeVisible();
   });
@@ -1502,15 +1503,15 @@ describe('同步功能', () => {
   it('应该能查看历史记录', async () => {
     // 1. 进入历史页面
     await element(by.id('history-tab')).tap();
-    
+
     // 2. 等待列表加载
     await waitFor(element(by.id('history-list')))
       .toBeVisible()
       .withTimeout(3000);
-    
+
     // 3. 点击第一条记录
     await element(by.id('history-item-0')).tap();
-    
+
     // 4. 验证已复制到剪贴板
     await expect(element(by.text('已复制'))).toBeVisible();
   });
@@ -1539,7 +1540,7 @@ describe('性能测试', () => {
       .toBeVisible()
       .withTimeout(3000);
     const launchTime = Date.now() - startTime;
-    
+
     expect(launchTime).toBeLessThan(3000);
   });
 
@@ -1560,15 +1561,15 @@ import { PerformanceObserver } from 'react-native-performance';
 describe('内存测试', () => {
   it('应该没有内存泄漏', async () => {
     const memoryBefore = await getMemoryUsage();
-    
+
     // 执行操作
     for (let i = 0; i < 100; i++) {
       await SyncManager.upload();
     }
-    
+
     const memoryAfter = await getMemoryUsage();
     const increase = memoryAfter - memoryBefore;
-    
+
     expect(increase).toBeLessThan(50 * 1024 * 1024); // 50MB
   });
 });
@@ -1576,20 +1577,20 @@ describe('内存测试', () => {
 
 ### 11.6 兼容性测试矩阵
 
-| 平台    | 版本                  | 设备                    | 优先级 |
-| ------- | --------------------- | ----------------------- | ------ |
-| iOS     | 15.0+                 | iPhone SE (3rd)         | P0     |
-| iOS     | 16.0+                 | iPhone 14               | P0     |
-| iOS     | 17.0+                 | iPhone 15               | P0     |
-| iOS     | 18.0+                 | iPhone 16 Pro           | P1     |
-| Android | 10 (API 29)           | Pixel 4                 | P0     |
-| Android | 11 (API 30)           | Pixel 5                 | P0     |
-| Android | 12 (API 31)           | Pixel 6                 | P0     |
-| Android | 13 (API 33)           | Pixel 7                 | P1     |
-| Android | 14 (API 34)           | Pixel 8                 | P1     |
-| Android | 小米 MIUI 13/14       | Xiaomi 13               | P1     |
-| Android | 华为 HarmonyOS 3/4    | Mate 50 (如适用)        | P2     |
-| Android | 三星 One UI 5/6       | Galaxy S23              | P2     |
+| 平台    | 版本               | 设备             | 优先级 |
+| ------- | ------------------ | ---------------- | ------ |
+| iOS     | 15.0+              | iPhone SE (3rd)  | P0     |
+| iOS     | 16.0+              | iPhone 14        | P0     |
+| iOS     | 17.0+              | iPhone 15        | P0     |
+| iOS     | 18.0+              | iPhone 16 Pro    | P1     |
+| Android | 10 (API 29)        | Pixel 4          | P0     |
+| Android | 11 (API 30)        | Pixel 5          | P0     |
+| Android | 12 (API 31)        | Pixel 6          | P0     |
+| Android | 13 (API 33)        | Pixel 7          | P1     |
+| Android | 14 (API 34)        | Pixel 8          | P1     |
+| Android | 小米 MIUI 13/14    | Xiaomi 13        | P1     |
+| Android | 华为 HarmonyOS 3/4 | Mate 50 (如适用) | P2     |
+| Android | 三星 One UI 5/6    | Galaxy S23       | P2     |
 
 ### 11.7 测试报告
 
@@ -1619,26 +1620,26 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: '18'
-      
+
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Run linter
         run: npm run lint
-      
+
       - name: Run unit tests
         run: npm test -- --coverage
-      
+
       - name: Upload coverage
         uses: codecov/codecov-action@v3
         with:
           file: ./coverage/coverage-final.json
-      
+
       - name: Run E2E tests (iOS)
         run: |
           npm run detox:build:ios
           npm run detox:test:ios
-      
+
       - name: Run E2E tests (Android)
         run: |
           npm run detox:build:android
@@ -1671,6 +1672,7 @@ jobs:
 #### 11.10.1 测试准备
 
 **测试环境准备**
+
 - [ ] 准备至少一台 iOS 真机（iOS 15+）
 - [ ] 准备至少一台 Android 真机（Android 10+）
 - [ ] 准备测试用服务器（SyncClipboard 服务器或 WebDAV）
@@ -1679,6 +1681,7 @@ jobs:
 - [ ] 检查网络连接正常
 
 **测试数据准备**
+
 - [ ] 准备多种类型的测试内容：
   - 短文本（< 100 字符）
   - 长文本（> 1000 字符）
@@ -1691,6 +1694,7 @@ jobs:
 #### 11.10.2 首次启动与配置流程
 
 **场景 1: 首次启动**
+
 - [ ] 冷启动应用
 - [ ] 验证启动屏幕正常显示
 - [ ] 验证首页正确加载（显示空状态）
@@ -1699,6 +1703,7 @@ jobs:
 - [ ] 检查是否有任何崩溃或错误
 
 **场景 2: 添加第一个服务器**
+
 - [ ] 点击设置 Tab
 - [ ] 点击"添加服务器"按钮
 - [ ] 验证配置模态框正确弹出
@@ -1716,6 +1721,7 @@ jobs:
 - [ ] 验证该服务器被标记为默认服务器（绿色勾选）
 
 **场景 3: 连接失败处理**
+
 - [ ] 添加服务器时填写错误的 URL
 - [ ] 点击"测试连接"
 - [ ] 验证显示连接失败错误信息
@@ -1725,6 +1731,7 @@ jobs:
 #### 11.10.3 剪贴板同步功能
 
 **场景 4: 文本上传同步**
+
 - [ ] 在设备上复制一段文本
 - [ ] 打开应用首页
 - [ ] 验证"本地剪贴板"卡片显示刚复制的内容
@@ -1736,6 +1743,7 @@ jobs:
 - [ ] 在桌面端检查剪贴板是否已同步
 
 **场景 5: 文本下载同步**
+
 - [ ] 在桌面端复制新的文本并上传
 - [ ] 在手机应用点击"下载"按钮（向下箭头）
 - [ ] 验证显示下载中状态
@@ -1745,12 +1753,14 @@ jobs:
 - [ ] 在其他应用粘贴，验证内容正确
 
 **场景 6: 全量同步**
+
 - [ ] 点击"同步"按钮（刷新图标）
 - [ ] 验证同时下载并比对远程内容
 - [ ] 如果本地和远程不同，验证冲突处理逻辑
 - [ ] 验证同步完成后两个卡片状态
 
 **场景 7: 图片同步**
+
 - [ ] 复制一张图片到剪贴板（从相册或浏览器）
 - [ ] 打开应用，验证"本地剪贴板"显示图片预览
 - [ ] 点击上传，验证图片上传成功
@@ -1759,6 +1769,7 @@ jobs:
 - [ ] 在其他应用粘贴，验证图片正确
 
 **场景 8: 大文件处理**
+
 - [ ] 复制一个大图片（> 5MB）
 - [ ] 上传，验证显示上传进度
 - [ ] 验证上传不会卡顿或崩溃
@@ -1767,6 +1778,7 @@ jobs:
 - [ ] 验证下载后内存占用正常
 
 **场景 9: 网络异常处理**
+
 - [ ] 关闭 WiFi 和移动数据
 - [ ] 尝试上传剪贴板
 - [ ] 验证显示网络错误提示
@@ -1778,6 +1790,7 @@ jobs:
 #### 11.10.4 历史记录功能
 
 **场景 10: 历史记录查看**
+
 - [ ] 切换到历史记录 Tab
 - [ ] 验证历史列表正确加载
 - [ ] 验证列表项显示正确信息：
@@ -1788,6 +1801,7 @@ jobs:
 - [ ] 滚动列表，验证性能流畅（使用 FlashList）
 
 **场景 11: 历史记录搜索**
+
 - [ ] 在搜索框输入关键词
 - [ ] 验证 300ms 防抖生效（不会每次输入都搜索）
 - [ ] 验证搜索结果正确过滤
@@ -1796,6 +1810,7 @@ jobs:
 - [ ] 搜索不存在的内容，验证显示空状态
 
 **场景 12: 类型筛选**
+
 - [ ] 点击"全部"筛选器
 - [ ] 点击"文本"筛选器，验证只显示文本类型
 - [ ] 点击"图片"筛选器，验证只显示图片类型
@@ -1804,6 +1819,7 @@ jobs:
 - [ ] 验证筛选和搜索可以同时使用
 
 **场景 13: 历史记录操作**
+
 - [ ] 点击一条历史记录
 - [ ] 验证快速复制到剪贴板
 - [ ] 验证显示"已复制"提示
@@ -1817,6 +1833,7 @@ jobs:
 - [ ] 确认删除，验证记录被删除
 
 **场景 14: 分页加载**
+
 - [ ] 确保有 50+ 条历史记录
 - [ ] 滚动到列表底部
 - [ ] 验证显示"加载更多"指示器
@@ -1825,6 +1842,7 @@ jobs:
 - [ ] 继续滚动，验证连续分页正常
 
 **场景 15: 清空历史**
+
 - [ ] 点击"清空历史"按钮
 - [ ] 验证显示确认对话框
 - [ ] 点击"取消"，验证不清空
@@ -1836,6 +1854,7 @@ jobs:
 #### 11.10.5 多服务器管理
 
 **场景 16: 添加多个服务器**
+
 - [ ] 添加第二个服务器（不同 URL）
 - [ ] 验证服务器列表显示两个服务器
 - [ ] 验证第一个服务器仍为默认（绿色勾选）
@@ -1843,6 +1862,7 @@ jobs:
 - [ ] 验证列表显示三个服务器
 
 **场景 17: 切换服务器**
+
 - [ ] 点击第二个服务器的切换按钮
 - [ ] 验证第二个服务器变为默认（绿色勾选）
 - [ ] 验证第一个服务器勾选消失
@@ -1851,6 +1871,7 @@ jobs:
 - [ ] 测试上传下载使用新服务器
 
 **场景 18: 编辑服务器**
+
 - [ ] 长按服务器列表项（或点击编辑按钮）
 - [ ] 验证配置模态框打开并预填信息
 - [ ] 修改服务器 URL
@@ -1859,6 +1880,7 @@ jobs:
 - [ ] 测试连接验证修改成功
 
 **场景 19: 删除服务器**
+
 - [ ] 删除非默认服务器
 - [ ] 验证确认对话框
 - [ ] 确认删除
@@ -1871,6 +1893,7 @@ jobs:
 #### 11.10.6 设置功能
 
 **场景 20: 主题切换**
+
 - [ ] 打开设置页面
 - [ ] 验证当前主题选项被高亮
 - [ ] 切换到"亮色"主题
@@ -1883,6 +1906,7 @@ jobs:
 - [ ] 重启应用，验证主题设置被保存
 
 **场景 21: 自动同步设置**（待实现）
+
 - [ ] 开启自动同步
 - [ ] 设置同步间隔（如 5 分钟）
 - [ ] 验证在后台自动同步
@@ -1890,6 +1914,7 @@ jobs:
 - [ ] 验证不再自动同步
 
 **场景 22: 通知设置**（待实现）
+
 - [ ] 开启同步成功通知
 - [ ] 上传剪贴板，验证显示通知
 - [ ] 关闭通知
@@ -1898,6 +1923,7 @@ jobs:
 #### 11.10.7 权限处理
 
 **场景 23: iOS 剪贴板权限**
+
 - [ ] 首次启动应用后复制内容
 - [ ] 打开应用首页
 - [ ] 验证 iOS 14+ 显示"已粘贴自..."横幅
@@ -1905,6 +1931,7 @@ jobs:
 - [ ] 验证应用能正常读取剪贴板
 
 **场景 24: Android 权限处理**
+
 - [ ] 首次启动请求必要权限
 - [ ] 验证权限请求对话框
 - [ ] 拒绝权限，验证应用提示影响
@@ -1914,6 +1941,7 @@ jobs:
 #### 11.10.8 界面交互与用户体验
 
 **场景 25: 下拉刷新**
+
 - [ ] 在首页下拉
 - [ ] 验证显示刷新指示器
 - [ ] 验证触发同步操作
@@ -1922,12 +1950,14 @@ jobs:
 - [ ] 验证刷新历史列表
 
 **场景 26: 按钮状态**
+
 - [ ] 验证上传按钮在无本地内容时禁用
 - [ ] 验证下载按钮在无远程内容时禁用
 - [ ] 验证同步时所有按钮显示加载状态
 - [ ] 验证同步完成后按钮恢复正常
 
 **场景 27: 消息提示**
+
 - [ ] 触发各种操作，验证提示信息：
   - [ ] 复制成功："已复制"
   - [ ] 上传成功："上传成功"
@@ -1939,6 +1969,7 @@ jobs:
 - [ ] 验证提示有淡入淡出动画
 
 **场景 28: 加载状态**
+
 - [ ] 验证首次加载显示骨架屏或加载指示器
 - [ ] 验证网络请求时显示加载状态
 - [ ] 验证加载状态不会无限持续
@@ -1947,6 +1978,7 @@ jobs:
 #### 11.10.9 边界情况与异常处理
 
 **场景 29: 空内容处理**
+
 - [ ] 清空剪贴板
 - [ ] 打开应用
 - [ ] 验证"本地剪贴板"显示"暂无内容"
@@ -1955,6 +1987,7 @@ jobs:
 - [ ] 验证提示"剪贴板为空"
 
 **场景 30: 特殊字符处理**
+
 - [ ] 复制包含 Emoji 的文本 🎉🚀💯
 - [ ] 验证正确显示和同步
 - [ ] 复制包含换行的长文本
@@ -1963,6 +1996,7 @@ jobs:
 - [ ] 验证格式保留
 
 **场景 31: 超长内容处理**
+
 - [ ] 复制非常长的文本（> 10000 字符）
 - [ ] 验证应用不崩溃
 - [ ] 验证上传成功
@@ -1970,6 +2004,7 @@ jobs:
 - [ ] 验证完整内容可以复制
 
 **场景 32: 服务器错误处理**
+
 - [ ] 停止服务器
 - [ ] 尝试同步
 - [ ] 验证显示连接失败错误
@@ -1978,6 +2013,7 @@ jobs:
 - [ ] 重试，验证恢复正常
 
 **场景 33: Token 过期处理**
+
 - [ ] 等待 Token 过期（或手动使 Token 失效）
 - [ ] 尝试操作
 - [ ] 验证自动重新认证
@@ -1986,12 +2022,14 @@ jobs:
 #### 11.10.10 性能与稳定性
 
 **场景 34: 应用稳定性**
+
 - [ ] 连续使用应用 30 分钟
 - [ ] 验证无崩溃
 - [ ] 验证无内存泄漏（通过系统监控）
 - [ ] 验证无明显卡顿
 
 **场景 35: 后台恢复**
+
 - [ ] 打开应用
 - [ ] 切换到后台（按 Home 键）
 - [ ] 等待 5 分钟
@@ -2000,6 +2038,7 @@ jobs:
 - [ ] 验证数据未丢失
 
 **场景 36: 应用重启**
+
 - [ ] 强制关闭应用
 - [ ] 重新打开
 - [ ] 验证所有设置保持
@@ -2008,6 +2047,7 @@ jobs:
 - [ ] 验证主题设置保持
 
 **场景 37: 内存压力测试**
+
 - [ ] 添加 100+ 条历史记录
 - [ ] 滚动历史列表
 - [ ] 验证性能流畅
@@ -2018,6 +2058,7 @@ jobs:
 #### 11.10.11 多设备协作
 
 **场景 38: 多设备同步**
+
 - [ ] 准备两台手机和一台电脑
 - [ ] 配置相同的服务器账号
 - [ ] 在设备 A 复制并上传内容
@@ -2028,6 +2069,7 @@ jobs:
 - [ ] 验证所有设备内容一致
 
 **场景 39: 冲突解决**
+
 - [ ] 在两台设备离线状态下分别复制不同内容
 - [ ] 设备 A 先上线并上传
 - [ ] 设备 B 上线并尝试上传
@@ -2039,6 +2081,7 @@ jobs:
 #### 11.10.12 平台特定测试
 
 **iOS 特定场景**
+
 - [ ] 测试深色模式切换
 - [ ] 测试动态字体大小调整
 - [ ] 测试 Safe Area 适配（刘海屏）
@@ -2048,6 +2091,7 @@ jobs:
 - [ ] 测试 iPad 适配（如果支持）
 
 **Android 特定场景**
+
 - [ ] 测试返回键行为
 - [ ] 测试系统导航栏适配
 - [ ] 测试通知渠道设置
@@ -2061,6 +2105,7 @@ jobs:
 每次测试后填写测试报告：
 
 **测试信息**
+
 - 测试日期：
 - 测试人员：
 - 应用版本：
@@ -2068,6 +2113,7 @@ jobs:
 - 系统版本：
 
 **测试结果统计**
+
 - 测试场景总数：
 - 通过数量：
 - 失败数量：
@@ -2076,9 +2122,10 @@ jobs:
 **发现的问题**
 | 编号 | 严重程度 | 场景 | 问题描述 | 复现步骤 | 截图 | 状态 |
 |------|---------|------|---------|---------|------|------|
-| 1    | 高      |      |         |         |      | 待修复 |
+| 1 | 高 | | | | | 待修复 |
 
 **性能指标**
+
 - 冷启动时间：
 - 热启动时间：
 - 首屏渲染时间：
@@ -2087,6 +2134,7 @@ jobs:
 - 下载速度（1MB 文件）：
 
 **测试结论**
+
 - [ ] 通过，可以发布
 - [ ] 有轻微问题，可以发布
 - [ ] 有严重问题，需要修复后重新测试
@@ -2277,10 +2325,10 @@ async function checkForUpdates() {
 
 ## 版本历史
 
-| 版本  | 日期       | 变更内容                                     | 作者 |
-| ----- | ---------- | -------------------------------------------- | ---- |
-| 1.0.0 | 2026-02-12 | 初始版本                                     | -    |
-| 1.1.0 | 2026-02-13 | 完善测试策略章节，添加详细的测试模块清单     | -    |
+| 版本  | 日期       | 变更内容                                 | 作者 |
+| ----- | ---------- | ---------------------------------------- | ---- |
+| 1.0.0 | 2026-02-12 | 初始版本                                 | -    |
+| 1.1.0 | 2026-02-13 | 完善测试策略章节，添加详细的测试模块清单 | -    |
 
 ---
 

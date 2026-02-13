@@ -33,8 +33,8 @@
    - 类型筛选器（全部/文本/图片/文件）
    - 点击复制功能（快速复制到剪贴板）
    - 长按操作菜单：
-     * iOS: ActionSheetIOS（系统原生）
-     * Android: 自定义 Modal + 操作表
+     - iOS: ActionSheetIOS（系统原生）
+     - Android: 自定义 Modal + 操作表
    - 清空所有历史记录（二次确认）
    - 分页加载（onEndReached）
    - 空状态提示（未找到记录 / 暂无历史）

@@ -3,14 +3,16 @@
  * 提供主题切换功能、服务器配置、多用户切换
  */
 
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import type { ThemeMode } from '@/theme';
 import { useSettingsStore } from '@/stores';
 import { ServerConfigModal, ServerListItem } from '@/components';
 import { ServerConfig } from '@/types/api';
+
+type MessageType = 'success' | 'error' | 'info';
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
@@ -19,6 +21,9 @@ export const SettingsScreen = () => {
 
   const [showServerModal, setShowServerModal] = useState(false);
   const [editingServerIndex, setEditingServerIndex] = useState<number | null>(null);
+  const [message, setMessage] = useState<{ text: string; type: MessageType } | null>(null);
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const messageTimer = useRef<NodeJS.Timeout | null>(null);
 
   // 加载配置
   useEffect(() => {
@@ -26,6 +31,42 @@ export const SettingsScreen = () => {
       loadConfig();
     }
   }, [isLoaded, loadConfig]);
+
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (messageTimer.current) {
+        clearTimeout(messageTimer.current);
+      }
+    };
+  }, []);
+
+  // 显示消息提示
+  const showMessage = (text: string, type: MessageType = 'info') => {
+    // 清除之前的定时器
+    if (messageTimer.current) {
+      clearTimeout(messageTimer.current);
+    }
+
+    setMessage({ text, type });
+
+    // 淡入动画
+    Animated.sequence([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.delay(2500),
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setMessage(null);
+    });
+  };
 
   const themeOptions: { label: string; value: ThemeMode }[] = [
     { label: '跟随系统', value: 'auto' },
@@ -54,13 +95,13 @@ export const SettingsScreen = () => {
     try {
       if (editingServerIndex !== null) {
         await updateServer(editingServerIndex, serverConfig);
-        Alert.alert('成功', '服务器配置已更新');
+        showMessage('服务器配置已更新', 'success');
       } else {
         await addServer(serverConfig);
-        Alert.alert('成功', '服务器已添加');
+        showMessage('服务器已添加', 'success');
       }
     } catch (error: any) {
-      Alert.alert('错误', error.message || '操作失败');
+      showMessage(error.message || '操作失败', 'error');
     }
   };
 
@@ -68,9 +109,9 @@ export const SettingsScreen = () => {
   const handleDeleteServer = async (index: number) => {
     try {
       await deleteServer(index);
-      Alert.alert('成功', '服务器已删除');
+      showMessage('服务器已删除', 'success');
     } catch (error: any) {
-      Alert.alert('错误', error.message || '删除失败');
+      showMessage(error.message || '删除失败', 'error');
     }
   };
 
@@ -82,9 +123,9 @@ export const SettingsScreen = () => {
 
     try {
       await setActiveServer(index);
-      Alert.alert('成功', '已切换服务器');
+      showMessage('已切换服务器', 'success');
     } catch (error: any) {
-      Alert.alert('错误', error.message || '切换失败');
+      showMessage(error.message || '切换失败', 'error');
     }
   };
 
@@ -189,6 +230,26 @@ export const SettingsScreen = () => {
         <View style={styles.bottomPadding} />
       </ScrollView>
 
+      {/* 消息提示 */}
+      {message && (
+        <Animated.View
+          style={[
+            styles.messageContainer,
+            {
+              backgroundColor:
+                message.type === 'success'
+                  ? '#4CAF50'
+                  : message.type === 'error'
+                    ? '#F44336'
+                    : theme.colors.primary,
+              opacity: fadeAnim,
+            },
+          ]}
+        >
+          <Text style={styles.messageText}>{message.text}</Text>
+        </Animated.View>
+      )}
+
       {/* 服务器配置模态框 */}
       <ServerConfigModal
         visible={showServerModal}
@@ -204,6 +265,26 @@ export const SettingsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  messageContainer: {
+    position: 'absolute',
+    bottom: 20,
+    left: 16,
+    right: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  messageText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '500',
   },
   scrollView: {
     flex: 1,

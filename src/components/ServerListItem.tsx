@@ -45,6 +45,20 @@ export const ServerListItem: React.FC<ServerListItemProps> = ({
     return type === 'syncclipboard' ? 'SyncClipboard' : 'WebDAV';
   };
 
+  const getTypeBadgeColors = (type: string) => {
+    if (type === 'syncclipboard') {
+      return {
+        backgroundColor: '#4CAF50' + '20',
+        color: '#4CAF50',
+      };
+    } else {
+      return {
+        backgroundColor: '#FF9800' + '20',
+        color: '#FF9800',
+      };
+    }
+  };
+
   return (
     <TouchableOpacity
       style={[
@@ -55,21 +69,19 @@ export const ServerListItem: React.FC<ServerListItemProps> = ({
       onPress={onPress}
       activeOpacity={0.7}
     >
-      {/* 激活指示器 */}
-      {isActive && (
-        <View style={[styles.activeIndicator, { backgroundColor: theme.colors.primary }]}>
-          <Text style={styles.activeText}>当前</Text>
-        </View>
-      )}
-
       {/* 服务器信息 */}
       <View style={styles.content}>
         <View style={styles.mainInfo}>
           <Text style={[styles.serverName, { color: theme.colors.text }]} numberOfLines={1}>
             {getServerDisplayName(config)}
           </Text>
-          <View style={[styles.typeBadge, { backgroundColor: theme.colors.primary + '20' }]}>
-            <Text style={[styles.typeText, { color: theme.colors.primary }]}>
+          <View
+            style={[
+              styles.typeBadge,
+              { backgroundColor: getTypeBadgeColors(config.type).backgroundColor },
+            ]}
+          >
+            <Text style={[styles.typeText, { color: getTypeBadgeColors(config.type).color }]}>
               {getServerTypeLabel(config.type)}
             </Text>
           </View>
@@ -128,19 +140,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-  },
-  activeIndicator: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  activeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '600',
   },
   content: {
     marginBottom: 12,
