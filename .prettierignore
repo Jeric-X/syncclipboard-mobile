@@ -6,3 +6,7 @@ build/
 *.log
 .DS_Store
 coverage/
+
+# Documentation folders (external skills)
+.claude/
+.ai/

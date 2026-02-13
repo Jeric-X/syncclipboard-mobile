@@ -88,6 +88,7 @@ SyncClipboard 是一个跨平台的剪贴板同步工具，目前已支持 Windo
 ### 2.2 移动端适配需求
 
 #### 2.2.1 iOS 平台限制
+
 - **后台限制**: iOS 不允许应用在后台持续访问剪贴板
 - **剪贴板权限**: iOS 14+ 访问剪贴板时会显示提示
 - **解决方案**:
@@ -96,6 +97,7 @@ SyncClipboard 是一个跨平台的剪贴板同步工具，目前已支持 Windo
   - 使用共享扩展 (Share Extension)
 
 #### 2.2.2 Android 平台限制
+
 - **后台限制**: Android 10+ 限制后台应用访问剪贴板
 - **前台服务**: 需要前台服务才能持续监听
 - **解决方案**:
@@ -106,24 +108,28 @@ SyncClipboard 是一个跨平台的剪贴板同步工具，目前已支持 Windo
 #### 2.2.3 功能优先级调整
 
 **P0 (必须有)**
+
 - 文本剪贴板同步 (上传/下载)
 - 手动触发同步
 - 服务器配置管理
 - 基础身份认证
 
 **P1 (高优先级)**
+
 - 剪贴板历史记录查看
 - 自动同步 (在权限允许的情况下)
 - 图片剪贴板支持
 - 通知提醒
 
 **P2 (中优先级)**
+
 - 文件剪贴板支持
 - 剪贴板历史搜索
 - Widget 支持
 - 多服务器配置
 
 **P3 (低优先级)**
+
 - 文件夹/多文件支持
 - OCR 文字识别
 - 剪贴板编辑
@@ -138,6 +144,7 @@ SyncClipboard 是一个跨平台的剪贴板同步工具，目前已支持 Windo
 **React Native + Expo**
 
 选择理由：
+
 - ✅ 跨平台开发，代码复用率高
 - ✅ Expo 提供完善的开发工具链
 - ✅ 丰富的社区生态和第三方库
@@ -146,21 +153,21 @@ SyncClipboard 是一个跨平台的剪贴板同步工具，目前已支持 Windo
 
 ### 3.2 主要技术栈
 
-| 类别 | 技术选型 | 说明 |
-|-----|---------|------|
-| **框架** | React Native 0.75+ / Expo SDK 52+ | 最新稳定版本 |
-| **语言** | TypeScript | 类型安全 |
-| **状态管理** | Zustand | 轻量级，易于使用 |
-| **导航** | React Navigation 7 | 官方推荐 |
-| **UI 组件** | React Native Paper / NativeBase | Material Design / 跨平台组件 |
-| **网络请求** | Axios | HTTP 客户端 |
-| **本地存储** | AsyncStorage / MMKV | 配置和缓存 |
-| **后台任务** | react-native-background-actions | Android 后台服务 |
-| **剪贴板** | @react-native-clipboard/clipboard | 原生剪贴板访问 |
-| **文件系统** | expo-file-system | 文件操作 |
-| **图片处理** | expo-image-picker / expo-image-manipulator | 图片选择和处理 |
-| **加密** | expo-crypto / react-native-aes-crypto | 数据加密 |
-| **推送通知** | expo-notifications | 本地通知 |
+| 类别         | 技术选型                                   | 说明                         |
+| ------------ | ------------------------------------------ | ---------------------------- |
+| **框架**     | React Native 0.75+ / Expo SDK 52+          | 最新稳定版本                 |
+| **语言**     | TypeScript                                 | 类型安全                     |
+| **状态管理** | Zustand                                    | 轻量级，易于使用             |
+| **导航**     | React Navigation 7                         | 官方推荐                     |
+| **UI 组件**  | React Native Paper / NativeBase            | Material Design / 跨平台组件 |
+| **网络请求** | Axios                                      | HTTP 客户端                  |
+| **本地存储** | AsyncStorage / MMKV                        | 配置和缓存                   |
+| **后台任务** | react-native-background-actions            | Android 后台服务             |
+| **剪贴板**   | @react-native-clipboard/clipboard          | 原生剪贴板访问               |
+| **文件系统** | expo-file-system                           | 文件操作                     |
+| **图片处理** | expo-image-picker / expo-image-manipulator | 图片选择和处理               |
+| **加密**     | expo-crypto / react-native-aes-crypto      | 数据加密                     |
+| **推送通知** | expo-notifications                         | 本地通知                     |
 
 ### 3.3 开发工具
 
@@ -304,21 +311,24 @@ syncclipboard-mobile/
 ### 5.1 首页 (Home Screen)
 
 #### 5.1.1 功能需求
+
 - 显示当前剪贴板内容预览
 - 显示最近同步状态
 - 快速同步操作按钮（上传/下载/双向）
 - 同步历史简要显示
 
 #### 5.1.2 UI 组件
+
 ```typescript
 // 主要组件
-- CurrentClipboardCard       // 当前剪贴板卡片
-- QuickActionsBar           // 快速操作栏
-- SyncStatusIndicator       // 同步状态指示器
-- RecentHistoryList         // 最近历史列表
+-CurrentClipboardCard - // 当前剪贴板卡片
+  QuickActionsBar - // 快速操作栏
+  SyncStatusIndicator - // 同步状态指示器
+  RecentHistoryList; // 最近历史列表
 ```
 
 #### 5.1.3 交互逻辑
+
 1. 页面加载时获取本地剪贴板内容
 2. 检查服务器连接状态
 3. 用户点击同步按钮触发相应操作
@@ -327,6 +337,7 @@ syncclipboard-mobile/
 ### 5.2 历史记录 (History Screen)
 
 #### 5.2.1 功能需求
+
 - 分页加载历史记录
 - 按类型筛选（文本/图片/文件）
 - 搜索历史记录
@@ -335,11 +346,12 @@ syncclipboard-mobile/
 - 删除历史记录
 
 #### 5.2.2 数据结构
+
 ```typescript
 interface HistoryItem {
   id: string;
   type: 'Text' | 'Image' | 'File' | 'Group';
-  text: string;               // 预览文本
+  text: string; // 预览文本
   hash: string;
   hasData: boolean;
   dataName?: string;
@@ -350,6 +362,7 @@ interface HistoryItem {
 ```
 
 #### 5.2.3 性能优化
+
 - 使用 FlashList 进行列表虚拟化
 - 实现懒加载和无限滚动
 - 图片缩略图缓存
@@ -358,19 +371,21 @@ interface HistoryItem {
 ### 5.3 设置 (Settings Screen)
 
 #### 5.3.1 服务器配置
+
 ```typescript
 interface ServerConfig {
   type: 'standalone' | 'webdav';
   url: string;
   username: string;
-  password: string;           // 加密存储
+  password: string; // 加密存储
   autoSync: boolean;
-  syncInterval: number;       // 秒
+  syncInterval: number; // 秒
   notificationEnabled: boolean;
 }
 ```
 
 #### 5.3.2 设置项
+
 - **服务器设置**
   - 服务器类型选择
   - URL 配置
@@ -406,16 +421,16 @@ interface ServerConfig {
 class SyncManager {
   // 上传剪贴板
   async uploadClipboard(): Promise<void>;
-  
+
   // 下载剪贴板
   async downloadClipboard(): Promise<void>;
-  
+
   // 双向同步
   async syncBidirectional(): Promise<void>;
-  
+
   // 启动自动同步
   startAutoSync(): void;
-  
+
   // 停止自动同步
   stopAutoSync(): void;
 }
@@ -424,16 +439,19 @@ class SyncManager {
 #### 5.4.2 同步策略
 
 **冲突处理**
+
 1. 比较本地和远程的 hash 值
 2. 比较时间戳（如果可用）
 3. 默认策略：服务器端优先（可配置）
 
 **去重逻辑**
+
 - 使用 hash 值判断内容是否相同
 - 避免重复上传相同内容
 - 缓存最近同步的 hash
 
 **错误重试**
+
 - 指数退避算法
 - 最大重试次数限制
 - 网络恢复后自动重试
@@ -443,16 +461,17 @@ class SyncManager {
 #### 5.5.1 实现方案
 
 **iOS**
+
 ```typescript
 // 使用定时轮询 + App 状态监听
 class iOSClipboardMonitor {
   private intervalId?: NodeJS.Timeout;
-  
+
   start() {
     // App 进入前台时启动轮询
     AppState.addEventListener('change', this.handleAppStateChange);
   }
-  
+
   private async checkClipboard() {
     const content = await Clipboard.getString();
     if (content !== this.lastContent) {
@@ -464,26 +483,25 @@ class iOSClipboardMonitor {
 ```
 
 **Android**
+
 ```typescript
 // 使用原生模块 + 前台服务
 class AndroidClipboardMonitor {
   async start() {
     // 请求前台服务权限
     await this.requestForegroundPermission();
-    
+
     // 启动前台服务
     await NativeModules.ClipboardService.start();
-    
+
     // 监听原生事件
-    DeviceEventEmitter.addListener(
-      'onClipboardChanged',
-      this.handleClipboardChanged
-    );
+    DeviceEventEmitter.addListener('onClipboardChanged', this.handleClipboardChanged);
   }
 }
 ```
 
 #### 5.5.2 性能考虑
+
 - iOS: 轮询间隔不小于 1 秒
 - Android: 使用原生监听器，避免轮询
 - 防止频繁触发同步（防抖）
@@ -504,19 +522,19 @@ class AndroidClipboardMonitor {
 interface SyncClipboardAPI {
   // 获取剪贴板
   getClipboard(): Promise<ProfileDto>;
-  
+
   // 上传剪贴板
   putClipboard(profile: ProfileDto): Promise<void>;
-  
+
   // 获取文件
   getFile(fileName: string): Promise<Blob>;
-  
+
   // 上传文件
   putFile(fileName: string, data: Blob): Promise<void>;
-  
+
   // 获取服务器时间
   getServerTime(): Promise<Date>;
-  
+
   // 获取服务器版本
   getVersion(): Promise<string>;
 }
@@ -528,11 +546,11 @@ interface SyncClipboardAPI {
 // 剪贴板配置 DTO
 interface ProfileDto {
   type: 'Text' | 'Image' | 'File' | 'Group';
-  hash?: string;              // SHA256 hash
-  text: string;               // 预览文本或完整文本
-  hasData: boolean;           // 是否有额外数据文件
-  dataName?: string;          // 数据文件名
-  size?: number;              // 文件大小（字节）
+  hash?: string; // SHA256 hash
+  text: string; // 预览文本或完整文本
+  hasData: boolean; // 是否有额外数据文件
+  dataName?: string; // 数据文件名
+  size?: number; // 文件大小（字节）
 }
 ```
 
@@ -545,7 +563,7 @@ class AuthService {
     username: string;
     password: string;
   };
-  
+
   getAuthHeader(): string {
     const encoded = btoa(`${this.username}:${this.password}`);
     return `Basic ${encoded}`;
@@ -560,7 +578,7 @@ import axios, { AxiosInstance } from 'axios';
 
 class APIClient {
   private client: AxiosInstance;
-  
+
   constructor(baseURL: string, authService: AuthService) {
     this.client = axios.create({
       baseURL,
@@ -569,17 +587,17 @@ class APIClient {
         'Content-Type': 'application/json',
       },
     });
-    
+
     // 请求拦截器 - 添加认证
-    this.client.interceptors.request.use(config => {
+    this.client.interceptors.request.use((config) => {
       config.headers.Authorization = authService.getAuthHeader();
       return config;
     });
-    
+
     // 响应拦截器 - 错误处理
     this.client.interceptors.response.use(
-      response => response,
-      error => {
+      (response) => response,
+      (error) => {
         if (error.response?.status === 401) {
           // 认证失败
           throw new AuthenticationError('Invalid credentials');
@@ -588,12 +606,12 @@ class APIClient {
       }
     );
   }
-  
+
   async getClipboard(): Promise<ProfileDto> {
     const response = await this.client.get('/SyncClipboard.json');
     return response.data;
   }
-  
+
   async putClipboard(profile: ProfileDto): Promise<void> {
     await this.client.put('/SyncClipboard.json', profile);
   }
@@ -605,7 +623,7 @@ class APIClient {
 ```typescript
 class WebDAVClient implements SyncClipboardAPI {
   private client: AxiosInstance;
-  
+
   constructor(baseURL: string, username: string, password: string) {
     // WebDAV 特定配置
     this.client = axios.create({
@@ -613,13 +631,13 @@ class WebDAVClient implements SyncClipboardAPI {
       auth: { username, password },
     });
   }
-  
+
   async getClipboard(): Promise<ProfileDto> {
     // WebDAV GET 请求
     const response = await this.client.get('/SyncClipboard.json');
     return response.data;
   }
-  
+
   async putClipboard(profile: ProfileDto): Promise<void> {
     // WebDAV PUT 请求
     await this.client.put('/SyncClipboard.json', profile);
@@ -632,12 +650,12 @@ class WebDAVClient implements SyncClipboardAPI {
 ```typescript
 class OfflineQueueManager {
   private queue: SyncOperation[] = [];
-  
+
   async enqueue(operation: SyncOperation): Promise<void> {
     this.queue.push(operation);
     await this.persistQueue();
   }
-  
+
   async processQueue(): Promise<void> {
     while (this.queue.length > 0) {
       const operation = this.queue[0];
@@ -670,14 +688,14 @@ class OfflineQueueManager {
 ```typescript
 const theme = {
   colors: {
-    primary: '#0066CC',      // 主色调
-    secondary: '#5856D6',    // 次要色
-    success: '#34C759',      // 成功
-    warning: '#FF9500',      // 警告
-    error: '#FF3B30',        // 错误
-    background: '#FFFFFF',   // 背景
-    surface: '#F2F2F7',      // 表面
-    text: '#000000',         // 文本
+    primary: '#0066CC', // 主色调
+    secondary: '#5856D6', // 次要色
+    success: '#34C759', // 成功
+    warning: '#FF9500', // 警告
+    error: '#FF3B30', // 错误
+    background: '#FFFFFF', // 背景
+    surface: '#F2F2F7', // 表面
+    text: '#000000', // 文本
     textSecondary: '#8E8E93', // 次要文本
   },
   spacing: {
@@ -699,18 +717,21 @@ const theme = {
 ### 7.3 关键界面设计
 
 #### 7.3.1 首页设计要点
+
 - 大卡片展示当前剪贴板内容
 - 醒目的同步按钮（底部 FAB）
 - 状态指示器（已同步/未同步/同步中）
 - 下拉刷新支持
 
 #### 7.3.2 历史记录设计要点
+
 - 列表项差异化展示不同类型
 - 快速操作菜单（长按）
 - 搜索框置顶
 - 空状态提示
 
 #### 7.3.3 设置页面设计要点
+
 - 分组折叠设计
 - 重要设置醒目标识
 - 危险操作二次确认
@@ -719,6 +740,7 @@ const theme = {
 ### 7.4 动画与过渡
 
 遵循 React Native 最佳实践：
+
 - 使用 Reanimated 3 实现流畅动画
 - 避免在 JS 线程执行复杂动画
 - 合理使用手势交互
@@ -731,6 +753,7 @@ const theme = {
 ### 8.1 数据加密
 
 #### 8.1.1 敏感信息存储
+
 ```typescript
 // 使用 Expo SecureStore 存储密码
 import * as SecureStore from 'expo-secure-store';
@@ -739,7 +762,7 @@ class SecureConfigStorage {
   async savePassword(password: string): Promise<void> {
     await SecureStore.setItemAsync('server_password', password);
   }
-  
+
   async getPassword(): Promise<string | null> {
     return await SecureStore.getItemAsync('server_password');
   }
@@ -747,6 +770,7 @@ class SecureConfigStorage {
 ```
 
 #### 8.1.2 传输安全
+
 - 强制使用 HTTPS（生产环境）
 - 证书验证
 - 支持自签名证书（可选）
@@ -767,12 +791,12 @@ class PermissionManager {
     // iOS 自动请求，Android 无需特殊权限
     return true;
   }
-  
+
   async requestNotificationPermission(): Promise<boolean> {
     const { status } = await Notifications.requestPermissionsAsync();
     return status === 'granted';
   }
-  
+
   async requestStoragePermission(): Promise<boolean> {
     // Android 文件访问权限
     const { status } = await MediaLibrary.requestPermissionsAsync();
@@ -853,20 +877,20 @@ import { Image } from 'expo-image';
 ```typescript
 class RequestCache {
   private cache = new Map<string, CachedResponse>();
-  
+
   async fetch<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
     const cached = this.cache.get(key);
     if (cached && !cached.isExpired()) {
       return cached.data as T;
     }
-    
+
     const data = await fetcher();
     this.cache.set(key, {
       data,
       timestamp: Date.now(),
       ttl: 60000, // 1 分钟
     });
-    
+
     return data;
   }
 }
@@ -881,7 +905,7 @@ class RequestCache {
 ```typescript
 useEffect(() => {
   const subscription = eventEmitter.on('clipboardChanged', handler);
-  
+
   return () => {
     // 清理订阅
     subscription.remove();
@@ -896,6 +920,7 @@ useEffect(() => {
 ### 10.1 Phase 1: MVP 开发 (4-6 周)
 
 **Week 1-2: 项目初始化与基础架构**
+
 - [ ] 初始化 Expo 项目
 - [ ] 配置 TypeScript 和 ESLint
 - [ ] 搭建基础目录结构
@@ -904,6 +929,7 @@ useEffect(() => {
 - [ ] 实现主题系统
 
 **Week 3-4: 核心功能开发**
+
 - [ ] 实现 API 客户端
 - [ ] 实现剪贴板服务
 - [ ] 实现同步管理器
@@ -911,6 +937,7 @@ useEffect(() => {
 - [ ] 实现 Zustand stores
 
 **Week 5-6: UI 开发与集成**
+
 - [ ] 开发首页界面
 - [ ] 开发设置界面
 - [ ] 开发基础历史记录界面
@@ -918,6 +945,7 @@ useEffect(() => {
 - [ ] 基础测试
 
 **交付物**
+
 - 可运行的 MVP 应用
 - 支持文本剪贴板同步
 - 基础设置功能
@@ -926,6 +954,7 @@ useEffect(() => {
 ### 10.2 Phase 2: 功能完善 (3-4 周)
 
 **Week 7-8: 高级功能**
+
 - [ ] 实现完整历史记录功能
 - [ ] 实现搜索功能
 - [ ] 实现图片剪贴板支持
@@ -933,12 +962,14 @@ useEffect(() => {
 - [ ] 优化同步逻辑
 
 **Week 9-10: 平台特性**
+
 - [ ] iOS Share Extension
 - [ ] Android 前台服务
 - [ ] Widget 支持（可选）
 - [ ] 后台同步优化
 
 **交付物**
+
 - 功能完整的应用
 - 平台特定优化
 - Beta 测试版本
@@ -946,6 +977,7 @@ useEffect(() => {
 ### 10.3 Phase 3: 优化与发布 (2-3 周)
 
 **Week 11-12: 性能优化**
+
 - [ ] 性能分析与优化
 - [ ] 启动速度优化
 - [ ] 内存优化
@@ -953,18 +985,21 @@ useEffect(() => {
 - [ ] 电池优化
 
 **Week 13: 测试与修复**
+
 - [ ] 完整功能测试
 - [ ] 兼容性测试
 - [ ] Bug 修复
 - [ ] 文档编写
 
 **Week 14: 发布准备**
+
 - [ ] App Store 素材准备
 - [ ] Google Play 素材准备
 - [ ] 提交审核
 - [ ] 发布计划
 
 **交付物**
+
 - 生产就绪的应用
 - App Store / Google Play 上架
 
@@ -990,11 +1025,11 @@ import { useSyncStore } from '@/stores/syncStore';
 describe('useSyncStore', () => {
   it('should upload clipboard successfully', async () => {
     const { result } = renderHook(() => useSyncStore());
-    
+
     await act(async () => {
       await result.current.uploadClipboard('test content');
     });
-    
+
     expect(result.current.lastSyncTime).toBeDefined();
     expect(result.current.syncStatus).toBe('success');
   });
@@ -1072,10 +1107,7 @@ describe('Sync Flow', () => {
     "android": {
       "package": "com.syncclipboard.mobile",
       "versionCode": 1,
-      "permissions": [
-        "FOREGROUND_SERVICE",
-        "RECEIVE_BOOT_COMPLETED"
-      ],
+      "permissions": ["FOREGROUND_SERVICE", "RECEIVE_BOOT_COMPLETED"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
@@ -1108,7 +1140,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
-      
+
   build:
     needs: test
     runs-on: ubuntu-latest
@@ -1124,6 +1156,7 @@ jobs:
 ### 12.4 发布检查清单
 
 #### 发布前
+
 - [ ] 所有测试通过
 - [ ] 性能指标达标
 - [ ] 安全审计完成
@@ -1131,6 +1164,7 @@ jobs:
 - [ ] 变更日志编写
 
 #### App Store 提交
+
 - [ ] 应用图标和截图
 - [ ] 应用描述和关键词
 - [ ] 隐私政策 URL
@@ -1138,6 +1172,7 @@ jobs:
 - [ ] 测试账号
 
 #### Google Play 提交
+
 - [ ] 应用图标和特色图片
 - [ ] 应用描述
 - [ ] 隐私政策
@@ -1164,6 +1199,7 @@ async function checkForUpdates() {
 ```
 
 **更新策略**
+
 - 小版本更新使用 OTA
 - 大版本更新引导用户去商店更新
 - 强制更新用于关键安全修复
@@ -1201,12 +1237,11 @@ async function checkForUpdates() {
 
 ## 版本历史
 
-| 版本 | 日期 | 变更内容 | 作者 |
-|-----|------|---------|------|
-| 1.0.0 | 2026-02-12 | 初始版本 | - |
+| 版本  | 日期       | 变更内容 | 作者 |
+| ----- | ---------- | -------- | ---- |
+| 1.0.0 | 2026-02-12 | 初始版本 | -    |
 
 ---
 
 **文档状态**: ✅ 初稿完成  
 **下一步行动**: 开始 Phase 1 开发
-
