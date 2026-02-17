@@ -68,8 +68,11 @@ export interface ClipboardContent {
   /** 文件大小 */
   fileSize?: number;
 
-  /** 内容 hash */
+  /** 内容 hash（用于服务器上传，遵循服务器规则） */
   hash?: string;
+
+  /** 内容 hash（用于本地变化检测和文件名，基于纯内容） */
+  contentHash?: string;
 
   /** 文件数据（二进制） */
   fileData?: ArrayBuffer;

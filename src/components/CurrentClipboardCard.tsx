@@ -37,6 +37,19 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   const { theme } = useTheme();
   const [, setUpdateTrigger] = useState(0);
 
+  // 监控 clipboard 变化并强制更新
+  useEffect(() => {
+    if (clipboard?.contentHash) {
+      console.log('[CurrentClipboardCard] ✓ Received clipboard update:', {
+        type: clipboard.type,
+        contentHash: clipboard.contentHash.substring(0, 8),
+        imageUri: clipboard.imageUri?.substring(clipboard.imageUri.lastIndexOf('/') + 1),
+        timestamp: clipboard.timestamp,
+      });
+      setUpdateTrigger(prev => prev + 1);
+    }
+  }, [clipboard?.contentHash, clipboard?.imageUri]);
+
   // 每 30 秒更新一次时间显示
   useEffect(() => {
     const interval = setInterval(() => {
@@ -252,11 +265,30 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         {clipboard.type === 'Image' && (
           <View style={styles.mediaPreview}>
             {clipboard.imageUri ? (
-              <Image
-                source={{ uri: clipboard.imageUri }}
-                style={styles.imagePreview}
-                resizeMode="contain"
-              />
+              <>
+                <Image
+                  key={`image-${clipboard.contentHash?.substring(0, 12)}-${clipboard.timestamp}`}
+                  source={{ 
+                    uri: `${clipboard.imageUri}?hash=${clipboard.contentHash?.substring(0, 12) || clipboard.timestamp || Date.now()}`,
+                    cache: 'reload' as any, // 强制重新加载
+                  }}
+                  style={styles.imagePreview}
+                  resizeMode="contain"
+                  onError={(error) => {
+                    console.error('[CurrentClipboardCard] Image load error:', error.nativeEvent);
+                    console.error('[CurrentClipboardCard] Image URI:', clipboard.imageUri);
+                    console.error('[CurrentClipboardCard] Content Hash:', clipboard.contentHash?.substring(0, 8));
+                  }}
+                  onLoad={() => {
+                    console.log(
+                      '[CurrentClipboardCard] Image loaded successfully:',
+                      clipboard.imageUri,
+                      'contentHash:',
+                      clipboard.contentHash?.substring(0, 8)
+                    );
+                  }}
+                />
+              </>
             ) : (
               <View>
                 <Text style={[styles.mediaLabel, { color: theme.colors.textSecondary }]}>
@@ -296,7 +328,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             ]}
             onPress={handleCopy}
           >
-            <Text style={styles.actionButtonText}>复制</Text>
+            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>复制</Text>
           </TouchableOpacity>
         )}
 

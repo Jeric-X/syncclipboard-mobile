@@ -146,15 +146,18 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
     }
 
     try {
+      console.log(`[WebDAVClient] Uploading file: ${fileName}, size: ${data.size}`);
       // 确保目录存在
       await this.ensureDirectoryExists(`/${WebDAVClient.DATA_FOLDER}`);
 
       const url = `/${WebDAVClient.DATA_FOLDER}/${encodeURIComponent(fileName)}`;
+      console.log(`[WebDAVClient] PUT request to: ${url}`);
       await this.put(url, data, {
         headers: {
           'Content-Type': 'application/octet-stream',
         },
       });
+      console.log(`[WebDAVClient] File uploaded successfully: ${fileName}`);
     } catch (error) {
       console.error(`[WebDAVClient] Failed to put file ${fileName}:`, error);
       throw error;

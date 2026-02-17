@@ -4,7 +4,8 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SyncClipboardAPI } from './SyncClipboardAPI';
+import * as FileSystem from 'expo-file-system';
+import { SyncClipboardAPI, ISyncClipboardAPI } from './SyncClipboardAPI';
 import { WebDAVClient } from './WebDAVClient';
 import { AuthService } from './AuthService';
 import { clipboardManager } from './ClipboardManager';
@@ -55,7 +56,7 @@ export class SyncManager {
   private static instance: SyncManager | null = null;
 
   private config: SyncConfig | null = null;
-  private apiClient: SyncClipboardAPI | null = null;
+  private apiClient: ISyncClipboardAPI | null = null;
   private clipboardManager = clipboardManager;
   private clipboardMonitor = clipboardMonitor;
 
@@ -94,7 +95,7 @@ export class SyncManager {
   /**
    * 创建 API 客户端
    */
-  private createAPIClient(config: ServerConfig): SyncClipboardAPI | WebDAVClient {
+  private createAPIClient(config: ServerConfig): ISyncClipboardAPI {
     const { type, url, username, password } = config;
 
     if (!url) {
@@ -288,18 +289,123 @@ export class SyncManager {
       const { contentToProfileDto } = await import('../utils/clipboard');
       const profile = await contentToProfileDto(localContent);
 
-      // 上传配置
-      await this.apiClient.put('/SyncClipboard.json', profile);
+      console.log('[SyncManager] Upload - Profile info:', {
+        type: profile.type,
+        hasData: profile.hasData,
+        dataName: profile.dataName,
+        size: profile.size,
+      });
 
-      // 如果有文件数据，上传文件
-      if (localContent.fileData && profile.dataName) {
-        const blob = new Blob([localContent.fileData]);
-        await this.apiClient.put(`/file/${encodeURIComponent(profile.dataName)}`, blob, {
-          headers: {
-            'Content-Type': 'application/octet-stream',
-          },
-        });
+      console.log('[SyncManager] Upload - Content info:', {
+        type: localContent.type,
+        hasFileData: !!localContent.fileData,
+        imageUri: localContent.imageUri,
+        fileUri: localContent.fileUri,
+        fileSize: localContent.fileSize,
+      });
+
+      // 如果有文件数据，先上传文件
+      if (profile.dataName && profile.hasData) {
+        console.log('[SyncManager] Preparing to upload file:', profile.dataName);
+        
+        // 优先使用文件 URI 直接上传（避免加载到内存）
+        const fileUri = localContent.imageUri || localContent.fileUri;
+        
+        if (fileUri) {
+          console.log('[SyncManager] Uploading file from URI:', fileUri);
+          try {
+            const { File } = FileSystem;
+            const file = new File(fileUri);
+            
+            if (!file.exists) {
+              throw new Error(`File not found: ${fileUri}`);
+            }
+            
+            console.log('[SyncManager] File exists, size:', file.size);
+            
+            // 读取文件为 base64
+            const base64Data = await file.base64();
+            console.log('[SyncManager] File read as base64, length:', base64Data.length);
+            
+            // 将 base64 转换为二进制字符串，然后创建 Blob
+            // React Native 的 Blob 只支持字符串
+            const binaryString = atob(base64Data);
+            console.log('[SyncManager] Binary string created, length:', binaryString.length);
+            
+            // 创建包含二进制字符串的 Blob
+            const blob = new Blob([binaryString], { type: 'application/octet-stream' });
+            console.log('[SyncManager] Blob created successfully, size:', blob.size, 'type:', blob.type);
+            
+            console.log('[SyncManager] Calling putFile with:', profile.dataName);
+            await this.apiClient.putFile(profile.dataName, blob);
+            console.log('[SyncManager] File uploaded successfully:', profile.dataName);
+          } catch (uploadError) {
+            console.error('[SyncManager] Failed to upload file:', uploadError);
+            console.error('[SyncManager] Upload error details:', {
+              message: uploadError instanceof Error ? uploadError.message : String(uploadError),
+              stack: uploadError instanceof Error ? uploadError.stack : undefined,
+            });
+            throw uploadError;
+          }
+        } else if (localContent.fileData) {
+          // 如果有 fileData 但没有 URI，尝试从 ArrayBuffer 转换
+          console.log('[SyncManager] No file URI, trying to upload from fileData');
+          try {
+            // 将 ArrayBuffer 转换为 base64
+            const uint8Array = new Uint8Array(localContent.fileData);
+            let binaryString = '';
+            for (let i = 0; i < uint8Array.length; i++) {
+              binaryString += String.fromCharCode(uint8Array[i]);
+            }
+            const base64Data = btoa(binaryString);
+            console.log('[SyncManager] Converted ArrayBuffer to base64, length:', base64Data.length);
+            
+            // 解码回二进制字符串用于 Blob
+            const decodedBinary = atob(base64Data);
+            const blob = new Blob([decodedBinary], { type: 'application/octet-stream' });
+            console.log('[SyncManager] Blob created from fileData, size:', blob.size);
+            
+            await this.apiClient.putFile(profile.dataName, blob);
+            console.log('[SyncManager] File uploaded successfully:', profile.dataName);
+          } catch (fileDataError) {
+            console.error('[SyncManager] Failed to upload from fileData:', fileDataError);
+            throw fileDataError;
+          }
+        } else {
+          console.warn('[SyncManager] No file URI or fileData available for upload');
+          // 如果没有文件数据，标记为不包含数据
+          profile.hasData = false;
+          profile.dataName = undefined;
+        }
+      } else {
+        console.log('[SyncManager] Skipping file upload - hasData:', profile.hasData, 'dataName:', profile.dataName);
       }
+
+      // 清理 profile 数据，移除 undefined 字段（某些服务器不接受）
+      const cleanProfile: ProfileDto = {
+        type: profile.type,
+        text: profile.text || '',
+        hasData: profile.hasData,
+      };
+      
+      if (profile.hash) {
+        cleanProfile.hash = profile.hash;
+      }
+      
+      if (profile.hasData && profile.dataName) {
+        cleanProfile.dataName = profile.dataName;
+        if (profile.size !== undefined) {
+          cleanProfile.size = profile.size;
+        }
+      }
+
+      // 上传配置
+      console.log('[SyncManager] Uploading profile configuration');
+      console.log('[SyncManager] Profile before upload:', JSON.stringify(cleanProfile, null, 2));
+      
+      await this.apiClient.putClipboard(cleanProfile);
+      
+      console.log('[SyncManager] Profile uploaded successfully');
 
       // 更新最后上传的 hash
       this.lastLocalHash = currentHash || null;
@@ -313,6 +419,51 @@ export class SyncManager {
         contentHash: currentHash,
       };
     } catch (error) {
+      console.error('[SyncManager] Upload failed with error:', error);
+      console.error('[SyncManager] Error type:', typeof error);
+      console.error('[SyncManager] Error details:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        name: error instanceof Error ? error.name : undefined,
+      });
+      
+      // 构建详细的错误信息
+      let errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      // 检查是否有statusCode和response字段（APIError及其子类）
+      const hasStatusCode = error && typeof error === 'object' && 'statusCode' in error;
+      const hasResponse = error && typeof error === 'object' && 'response' in error;
+      
+      if (hasStatusCode) {
+        const statusCode = (error as any).statusCode;
+        console.error('[SyncManager] Status code:', statusCode);
+        
+        if (hasResponse) {
+          const response = (error as any).response;
+          console.error('[SyncManager] Server response body:', JSON.stringify(response, null, 2));
+          
+          // 构建包含状态码和响应体的完整错误信息
+          const responseText = typeof response === 'string' 
+            ? response 
+            : JSON.stringify(response, null, 2);
+          
+          errorMessage = `服务器返回错误 (HTTP ${statusCode}):\n\n${responseText}`;
+        } else {
+          errorMessage = `服务器返回错误 (HTTP ${statusCode}): ${errorMessage}`;
+        }
+      } else if (hasResponse) {
+        // 有response但没有statusCode（可能是Axios原始错误）
+        const response = (error as any).response;
+        console.error('[SyncManager] Server response body:', JSON.stringify(response, null, 2));
+        
+        if (response?.data) {
+          const responseText = typeof response.data === 'string'
+            ? response.data
+            : JSON.stringify(response.data, null, 2);
+          errorMessage = `服务器返回错误 (HTTP ${response.status || 'unknown'}):\n\n${responseText}`;
+        }
+      }
+      
       // 如果启用离线队列且是网络错误，添加到队列
       if (this.config.enableOfflineQueue && this.isNetworkError(error)) {
         const content = await this.clipboardManager.getClipboardContent();
@@ -329,13 +480,13 @@ export class SyncManager {
         return {
           success: false,
           direction: SyncDirection.Upload,
-          error: error instanceof Error ? error.message : 'Network error, added to queue',
+          error: `网络错误，已添加到队列: ${errorMessage}`,
         };
       } else {
         return {
           success: false,
           direction: SyncDirection.Upload,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: errorMessage,
         };
       }
     }
@@ -351,7 +502,7 @@ export class SyncManager {
 
     try {
       // 获取远程剪贴板配置
-      const profile = await this.apiClient.get('/SyncClipboard.json');
+      const profile = await this.apiClient.getClipboard();
 
       if (!profile || !profile.hash) {
         return {
@@ -410,12 +561,7 @@ export class SyncManager {
       // 如果有文件数据，下载文件
       if (profile.hasData && profile.dataName) {
         try {
-          const fileData = await this.apiClient.get(
-            `/file/${encodeURIComponent(profile.dataName)}`,
-            {
-              responseType: 'arraybuffer',
-            }
-          );
+          const fileData = await this.apiClient.getFile(profile.dataName);
           content.fileData = fileData;
         } catch (error) {
           console.warn('Failed to download file data:', error);

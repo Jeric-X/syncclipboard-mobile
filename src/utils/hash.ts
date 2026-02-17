@@ -4,6 +4,7 @@
  */
 
 import * as Crypto from 'expo-crypto';
+import { sha256 } from 'js-sha256';
 
 /**
  * 计算字符串的 SHA256 hash
@@ -23,6 +24,60 @@ export async function calculateTextHash(text: string): Promise<string> {
   } catch (error) {
     console.error('[HashUtils] Failed to calculate text hash:', error);
     throw new Error('Failed to calculate text hash');
+  }
+}
+
+/**
+ * 计算 base64 数据的 SHA256 hash（用于本地变化检测）
+ * 直接对 base64 字符串计算 hash，快速但与文件内容 hash 不同
+ * @param base64Data base64 编码的数据
+ * @returns SHA256 hash 字符串（小写十六进制）
+ */
+export async function calculateBase64Hash(base64Data: string): Promise<string> {
+  if (!base64Data) {
+    return '';
+  }
+
+  try {
+    // 直接对 base64 字符串计算 hash（用于快速比较）
+    const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, base64Data, {
+      encoding: Crypto.CryptoEncoding.HEX,
+    });
+    return hash.toLowerCase();
+  } catch (error) {
+    console.error('[HashUtils] Failed to calculate base64 hash:', error);
+    throw new Error('Failed to calculate base64 hash');
+  }
+}
+
+/**
+ * 计算 base64 数据的二进制内容 SHA256 hash（用于服务器上传）
+ * 先将 base64 解码为二进制，然后计算 hash
+ * @param base64Data base64 编码的数据
+ * @returns SHA256 hash 字符串（小写十六进制）
+ */
+export async function calculateBase64ContentHash(base64Data: string): Promise<string> {
+  if (!base64Data) {
+    return '';
+  }
+
+  try {
+    // 将 base64 解码为二进制字符串
+    const binaryString = atob(base64Data);
+    
+    // 将二进制字符串转换为字节数组
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    // 使用 js-sha256 计算 SHA256（它可以正确处理 Uint8Array）
+    const hash = sha256(bytes);
+    
+    return hash.toLowerCase();
+  } catch (error) {
+    console.error('[HashUtils] Failed to calculate base64 content hash:', error);
+    throw new Error('Failed to calculate base64 content hash');
   }
 }
 

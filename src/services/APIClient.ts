@@ -123,6 +123,10 @@ export class APIClient {
 
       // HTTP 错误
       const { status, data } = axiosError.response;
+      
+      // 记录响应详情
+      console.error('[APIClient] HTTP Error - Status:', status);
+      console.error('[APIClient] Response data:', JSON.stringify(data, null, 2));
 
       // 401 未授权
       if (status === 401) {

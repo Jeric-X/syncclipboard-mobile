@@ -10,6 +10,8 @@
 - [错误处理](#错误处理)
 - [认证管理](#认证管理)
 
+> **相关文档**: 关于图片上传时的 Hash 计算，请参阅 [HASH_CALCULATION.md](HASH_CALCULATION.md)
+
 ## 基础用法
 
 ### 1. 创建 API 客户端

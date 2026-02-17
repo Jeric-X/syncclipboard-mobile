@@ -13,7 +13,9 @@ import {
   Animated,
   AppState,
   AppStateStatus,
+  TouchableOpacity,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '@/hooks/useTheme';
 import { useClipboardStore } from '@/stores/clipboardStore';
 import { useSyncStore } from '@/stores/syncStore';
@@ -34,6 +36,7 @@ export function HomeScreen() {
   const [loadingRemote, setLoadingRemote] = useState(false);
   const [downloadingRemote, setDownloadingRemote] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: MessageType } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [fadeAnim] = useState(new Animated.Value(0));
   const appState = useRef(AppState.currentState);
   const remotePollingInterval = useRef<NodeJS.Timeout | null>(null);
@@ -532,7 +535,9 @@ export function HomeScreen() {
     try {
       await getContent();
       if (activeServer) {
-        await Promise.all([fetchRemoteClipboard(false), sync(SyncDirection.Download)]);
+        // 只刷新远程剪贴板显示，不自动下载复制
+        // 用户可以通过点击"下载"按钮手动复制到剪贴板
+        await fetchRemoteClipboard(false);
       }
     } catch (error) {
       console.error('[HomeScreen] Refresh failed:', error);
@@ -549,11 +554,34 @@ export function HomeScreen() {
     }
 
     try {
-      await sync(SyncDirection.Upload);
-      await fetchRemoteClipboard(false); // 刷新远程剪贴板显示
-      showMessage('剪贴板已上传到服务器', 'success');
+      setUploadError(null); // 清除之前的错误
+      const result = await sync(SyncDirection.Upload);
+      
+      // 检查同步结果
+      if (result.success) {
+        await fetchRemoteClipboard(false); // 刷新远程剪贴板显示
+        showMessage('剪贴板已上传到服务器', 'success');
+      } else {
+        // 上传失败，显示错误信息
+        const errorMessage = result.error || '上传失败';
+        setUploadError(errorMessage);
+        showMessage('上传失败', 'error');
+      }
     } catch (error: unknown) {
-      showMessage(error instanceof Error ? error.message : '无法上传到服务器', 'error');
+      // 处理意外异常（通常不会到这里）
+      const errorMessage = error instanceof Error ? error.message : '无法上传到服务器';
+      const errorDetails = error instanceof Error && (error as any).response?.data
+        ? JSON.stringify((error as any).response.data, null, 2)
+        : errorMessage;
+      setUploadError(errorDetails);
+      showMessage('上传失败', 'error');
+    }
+  };
+
+  const handleCopyError = async () => {
+    if (uploadError) {
+      await Clipboard.setStringAsync(uploadError);
+      showMessage('错误信息已复制', 'success');
     }
   };
 
@@ -633,6 +661,33 @@ export function HomeScreen() {
                 isRemote={false}
                 onUpload={handleUpload}
               />
+              
+              {/* 上传错误信息卡片 */}
+              {uploadError && (
+                <View style={[styles.errorCard, { backgroundColor: '#FEE', borderColor: '#FCC' }]}>
+                  <View style={styles.errorHeader}>
+                    <Text style={[styles.errorTitle, { color: '#D00' }]}>上传失败</Text>
+                    <TouchableOpacity
+                      style={[styles.copyButton, { backgroundColor: '#D00' }]}
+                      onPress={handleCopyError}
+                    >
+                      <Text style={styles.copyButtonText}>复制错误</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView
+                    style={styles.errorScrollView}
+                    nestedScrollEnabled={true}
+                  >
+                    <Text style={[styles.errorText, { color: '#333' }]}>{uploadError}</Text>
+                  </ScrollView>
+                  <TouchableOpacity
+                    style={styles.dismissButton}
+                    onPress={() => setUploadError(null)}
+                  >
+                    <Text style={[styles.dismissButtonText, { color: '#D00' }]}>关闭</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           </>
         ) : (
@@ -786,5 +841,53 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 100,
+  },
+  errorCard: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  errorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  copyButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  copyButtonText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  errorScrollView: {
+    maxHeight: 200,
+    marginBottom: 12,
+  },
+  errorText: {
+    fontSize: 13,
+    fontFamily: 'monospace',
+    lineHeight: 18,
+  },
+  dismissButton: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  dismissButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

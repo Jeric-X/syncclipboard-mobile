@@ -115,6 +115,14 @@ Phase 1 - Week 1: 项目初始化与基础架构 ✅
 - [项目进度](../PROJECT_STATUS.md)
 - [待办清单](../TODO.md)
 
+### 技术文档
+
+- [API 客户端使用](docs/API_USAGE.md)
+- [Hash 计算说明](docs/HASH_CALCULATION.md) - 图片上传的 Hash 计算详解
+- [服务器配置指南](docs/SERVER_CONFIG_GUIDE.md)
+- [同步管理器使用](docs/SYNC_MANAGER_USAGE.md)
+- [手动测试清单](docs/MANUAL_TEST_CHECKLIST.md)
+
 ## 📄 许可证
 
 与主项目保持一致

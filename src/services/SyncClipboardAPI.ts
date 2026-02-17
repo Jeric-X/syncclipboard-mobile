@@ -72,9 +72,23 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
       // 验证输入数据
       this.validateProfile(profile);
 
+      console.log('[SyncClipboardAPI] putClipboard - Profile to upload:', JSON.stringify(profile, null, 2));
+      
       await this.put(SyncClipboardAPI.PROFILE_ENDPOINT, profile);
+      
+      console.log('[SyncClipboardAPI] putClipboard - Upload successful');
     } catch (error) {
       console.error('[SyncClipboardAPI] Failed to put clipboard:', error);
+      if (error instanceof Error) {
+        console.error('[SyncClipboardAPI] Error details:', {
+          message: error.message,
+          name: error.name,
+        });
+      }
+      // 如果是 ServerError，输出响应体
+      if (error && typeof error === 'object' && 'response' in error) {
+        console.error('[SyncClipboardAPI] Server response:', JSON.stringify((error as any).response, null, 2));
+      }
       throw error;
     }
   }
@@ -144,12 +158,15 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
     }
 
     try {
+      console.log(`[SyncClipboardAPI] Uploading file: ${fileName}, size: ${data.size}`);
       const url = `${SyncClipboardAPI.FILE_ENDPOINT}${encodeURIComponent(fileName)}`;
+      console.log(`[SyncClipboardAPI] PUT request to: ${url}`);
       await this.put(url, data, {
         headers: {
           'Content-Type': 'application/octet-stream',
         },
       });
+      console.log(`[SyncClipboardAPI] File uploaded successfully: ${fileName}`);
     } catch (error) {
       console.error(`[SyncClipboardAPI] Failed to put file ${fileName}:`, error);
       throw error;

@@ -150,6 +150,7 @@ export class ClipboardMonitor {
 
       // 检查内容是否发生变化
       if (this.hasContentChanged(content)) {
+        console.log('[ClipboardMonitor] ✓ Change detected, notifying callbacks');
         this.lastContent = content;
         this.notifyCallbacks(content);
       }
@@ -166,7 +167,12 @@ export class ClipboardMonitor {
       return true;
     }
 
-    // 比较 hash
+    // 优先使用 contentHash 比较（用于本地变化检测）
+    if (newContent.contentHash && this.lastContent.contentHash) {
+      return newContent.contentHash !== this.lastContent.contentHash;
+    }
+
+    // 回退到 profileHash 比较
     if (newContent.hash && this.lastContent.hash) {
       return newContent.hash !== this.lastContent.hash;
     }
