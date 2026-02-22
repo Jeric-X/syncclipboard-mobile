@@ -158,7 +158,10 @@ export class SyncManager {
   /**
    * 手动同步
    */
-  public async sync(direction: SyncDirection = SyncDirection.Both): Promise<SyncResult> {
+  public async sync(
+    direction: SyncDirection = SyncDirection.Both,
+    isAuto: boolean = false
+  ): Promise<SyncResult> {
     if (!this.config || !this.apiClient) {
       throw new Error('SyncManager not initialized');
     }
@@ -184,16 +187,16 @@ export class SyncManager {
 
       switch (direction) {
         case SyncDirection.Upload:
-          result = await this.upload();
+          result = await this.upload(isAuto);
           break;
         case SyncDirection.Download:
-          result = await this.download();
+          result = await this.download(isAuto);
           break;
         case SyncDirection.Both:
           // 先下载后上传，避免覆盖远程内容
-          const downloadResult = await this.download();
+          const downloadResult = await this.download(isAuto);
           if (downloadResult.success || downloadResult.skipped) {
-            const uploadResult = await this.upload();
+            const uploadResult = await this.upload(isAuto);
             result = uploadResult;
           } else {
             result = downloadResult;
@@ -217,10 +220,20 @@ export class SyncManager {
 
       return result;
     } catch (error) {
+      // 提取详细错误信息，包含HTTP状态码
+      let errorMessage = 'Unknown error';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        // 如果错误对象包含statusCode属性，添加到错误消息中
+        if ('statusCode' in error && typeof error.statusCode === 'number') {
+          errorMessage = `HTTP ${error.statusCode}: ${errorMessage}`;
+        }
+      }
+
       const result: SyncResult = {
         success: false,
         direction,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
         duration: Date.now() - startTime,
       };
 
@@ -243,7 +256,7 @@ export class SyncManager {
   /**
    * 上传剪贴板内容
    */
-  private async upload(): Promise<SyncResult> {
+  private async upload(isAuto: boolean = false): Promise<SyncResult> {
     if (!this.apiClient || !this.config) {
       throw new Error('SyncManager not initialized');
     }
@@ -263,8 +276,13 @@ export class SyncManager {
       // 计算当前 hash
       const currentHash = localContent.hash;
 
-      // 如果内容未变化，跳过上传
-      if (this.lastLocalHash && currentHash && compareHash(currentHash, this.lastLocalHash)) {
+      // 如果内容未变化，跳过上传（仅在自动同步时）
+      if (
+        isAuto &&
+        this.lastLocalHash &&
+        currentHash &&
+        compareHash(currentHash, this.lastLocalHash)
+      ) {
         return {
           success: true,
           direction: SyncDirection.Upload,
@@ -273,8 +291,8 @@ export class SyncManager {
         };
       }
 
-      // 检查是否是大文件
-      if (localContent.fileSize) {
+      // 检查是否是大文件（仅在自动同步时）
+      if (isAuto && localContent.fileSize) {
         const isLargeFile = localContent.fileSize > this.config.largeFileThreshold;
         if (isLargeFile && !this.config.syncLargeFiles) {
           return {
@@ -307,37 +325,29 @@ export class SyncManager {
       // 如果有文件数据，先上传文件
       if (profile.dataName && profile.hasData) {
         console.log('[SyncManager] Preparing to upload file:', profile.dataName);
-        
+
         // 优先使用文件 URI 直接上传（避免加载到内存）
         const fileUri = localContent.imageUri || localContent.fileUri;
-        
+
         if (fileUri) {
           console.log('[SyncManager] Uploading file from URI:', fileUri);
           try {
             const { File } = FileSystem;
             const file = new File(fileUri);
-            
+
             if (!file.exists) {
               throw new Error(`File not found: ${fileUri}`);
             }
-            
+
             console.log('[SyncManager] File exists, size:', file.size);
-            
-            // 读取文件为 base64
-            const base64Data = await file.base64();
-            console.log('[SyncManager] File read as base64, length:', base64Data.length);
-            
-            // 将 base64 转换为二进制字符串，然后创建 Blob
-            // React Native 的 Blob 只支持字符串
-            const binaryString = atob(base64Data);
-            console.log('[SyncManager] Binary string created, length:', binaryString.length);
-            
-            // 创建包含二进制字符串的 Blob
-            const blob = new Blob([binaryString], { type: 'application/octet-stream' });
-            console.log('[SyncManager] Blob created successfully, size:', blob.size, 'type:', blob.type);
-            
-            console.log('[SyncManager] Calling putFile with:', profile.dataName);
-            await this.apiClient.putFile(profile.dataName, blob);
+
+            console.log(
+              '[SyncManager] Calling putFile with:',
+              profile.dataName,
+              'fileUri:',
+              fileUri
+            );
+            await this.apiClient.putFile(profile.dataName, fileUri);
             console.log('[SyncManager] File uploaded successfully:', profile.dataName);
           } catch (uploadError) {
             console.error('[SyncManager] Failed to upload file:', uploadError);
@@ -348,25 +358,29 @@ export class SyncManager {
             throw uploadError;
           }
         } else if (localContent.fileData) {
-          // 如果有 fileData 但没有 URI，尝试从 ArrayBuffer 转换
+          // 如果有 fileData 但没有 URI，需要先保存到文件再上传
           console.log('[SyncManager] No file URI, trying to upload from fileData');
           try {
-            // 将 ArrayBuffer 转换为 base64
-            const uint8Array = new Uint8Array(localContent.fileData);
-            let binaryString = '';
-            for (let i = 0; i < uint8Array.length; i++) {
-              binaryString += String.fromCharCode(uint8Array[i]);
+            // 创建临时文件目录
+            const baseDir = new FileSystem.Directory(FileSystem.Paths.cache, 'temp-uploads');
+            const tempFile = new FileSystem.File(baseDir, `${profile.hash}.tmp`);
+
+            // 确保目录存在
+            if (!baseDir.exists) {
+              baseDir.create();
             }
-            const base64Data = btoa(binaryString);
-            console.log('[SyncManager] Converted ArrayBuffer to base64, length:', base64Data.length);
-            
-            // 解码回二进制字符串用于 Blob
-            const decodedBinary = atob(base64Data);
-            const blob = new Blob([decodedBinary], { type: 'application/octet-stream' });
-            console.log('[SyncManager] Blob created from fileData, size:', blob.size);
-            
-            await this.apiClient.putFile(profile.dataName, blob);
+
+            // 将 ArrayBuffer 转换为 Uint8Array 并写入临时文件
+            const uint8Array = new Uint8Array(localContent.fileData);
+            tempFile.write(uint8Array);
+            console.log('[SyncManager] Temporary file created:', tempFile.uri);
+
+            // 使用文件 URI 上传
+            await this.apiClient.putFile(profile.dataName, tempFile.uri);
             console.log('[SyncManager] File uploaded successfully:', profile.dataName);
+
+            // 清理临时文件
+            tempFile.delete();
           } catch (fileDataError) {
             console.error('[SyncManager] Failed to upload from fileData:', fileDataError);
             throw fileDataError;
@@ -378,7 +392,12 @@ export class SyncManager {
           profile.dataName = undefined;
         }
       } else {
-        console.log('[SyncManager] Skipping file upload - hasData:', profile.hasData, 'dataName:', profile.dataName);
+        console.log(
+          '[SyncManager] Skipping file upload - hasData:',
+          profile.hasData,
+          'dataName:',
+          profile.dataName
+        );
       }
 
       // 清理 profile 数据，移除 undefined 字段（某些服务器不接受）
@@ -387,11 +406,11 @@ export class SyncManager {
         text: profile.text || '',
         hasData: profile.hasData,
       };
-      
+
       if (profile.hash) {
         cleanProfile.hash = profile.hash;
       }
-      
+
       if (profile.hasData && profile.dataName) {
         cleanProfile.dataName = profile.dataName;
         if (profile.size !== undefined) {
@@ -402,9 +421,9 @@ export class SyncManager {
       // 上传配置
       console.log('[SyncManager] Uploading profile configuration');
       console.log('[SyncManager] Profile before upload:', JSON.stringify(cleanProfile, null, 2));
-      
+
       await this.apiClient.putClipboard(cleanProfile);
-      
+
       console.log('[SyncManager] Profile uploaded successfully');
 
       // 更新最后上传的 hash
@@ -426,44 +445,46 @@ export class SyncManager {
         stack: error instanceof Error ? error.stack : undefined,
         name: error instanceof Error ? error.name : undefined,
       });
-      
+
       // 构建详细的错误信息
       let errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+
       // 检查是否有statusCode和response字段（APIError及其子类）
       const hasStatusCode = error && typeof error === 'object' && 'statusCode' in error;
       const hasResponse = error && typeof error === 'object' && 'response' in error;
-      
+
       if (hasStatusCode) {
-        const statusCode = (error as any).statusCode;
+        const errorObj = error as Record<string, unknown>;
+        const statusCode = errorObj.statusCode;
         console.error('[SyncManager] Status code:', statusCode);
-        
+
         if (hasResponse) {
-          const response = (error as any).response;
+          const response = errorObj.response;
           console.error('[SyncManager] Server response body:', JSON.stringify(response, null, 2));
-          
+
           // 构建包含状态码和响应体的完整错误信息
-          const responseText = typeof response === 'string' 
-            ? response 
-            : JSON.stringify(response, null, 2);
-          
+          const responseText =
+            typeof response === 'string' ? response : JSON.stringify(response, null, 2);
+
           errorMessage = `服务器返回错误 (HTTP ${statusCode}):\n\n${responseText}`;
         } else {
           errorMessage = `服务器返回错误 (HTTP ${statusCode}): ${errorMessage}`;
         }
       } else if (hasResponse) {
         // 有response但没有statusCode（可能是Axios原始错误）
-        const response = (error as any).response;
+        const errorObj = error as Record<string, unknown>;
+        const response = errorObj.response;
         console.error('[SyncManager] Server response body:', JSON.stringify(response, null, 2));
-        
+
         if (response?.data) {
-          const responseText = typeof response.data === 'string'
-            ? response.data
-            : JSON.stringify(response.data, null, 2);
+          const responseText =
+            typeof response.data === 'string'
+              ? response.data
+              : JSON.stringify(response.data, null, 2);
           errorMessage = `服务器返回错误 (HTTP ${response.status || 'unknown'}):\n\n${responseText}`;
         }
       }
-      
+
       // 如果启用离线队列且是网络错误，添加到队列
       if (this.config.enableOfflineQueue && this.isNetworkError(error)) {
         const content = await this.clipboardManager.getClipboardContent();
@@ -495,7 +516,7 @@ export class SyncManager {
   /**
    * 下载剪贴板内容
    */
-  private async download(): Promise<SyncResult> {
+  private async download(isAuto: boolean = false): Promise<SyncResult> {
     if (!this.apiClient || !this.config) {
       throw new Error('SyncManager not initialized');
     }
@@ -514,8 +535,8 @@ export class SyncManager {
 
       const remoteHash = profile.hash;
 
-      // 如果远程内容未变化，跳过下载
-      if (this.lastRemoteHash && compareHash(remoteHash, this.lastRemoteHash)) {
+      // 如果远程内容未变化，跳过下载（仅在自动同步时）
+      if (isAuto && this.lastRemoteHash && compareHash(remoteHash, this.lastRemoteHash)) {
         return {
           success: true,
           direction: SyncDirection.Download,
@@ -595,7 +616,7 @@ export class SyncManager {
 
     const interval = this.config.interval || 5000;
     this.syncTimer = setInterval(() => {
-      this.sync(SyncDirection.Both).catch((error) => {
+      this.sync(SyncDirection.Both, true).catch((error) => {
         console.error('Auto sync failed:', error);
       });
     }, interval);

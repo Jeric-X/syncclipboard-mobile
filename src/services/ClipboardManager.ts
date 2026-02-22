@@ -112,12 +112,12 @@ export class ClipboardManager {
 
       // 步骤2: 先用本地 hash 创建临时文件名
       const tempFileName = `${localHash.substring(0, 16)}.png`;
-      
+
       // 再次确保目录存在（写入前双重检查）
       if (!CLIPBOARD_TEMP_DIR.exists) {
         CLIPBOARD_TEMP_DIR.create();
       }
-      
+
       const tempFile = new File(CLIPBOARD_TEMP_DIR, tempFileName);
 
       let fileUri: string;
@@ -131,7 +131,7 @@ export class ClipboardManager {
         // 文件已存在，直接使用
         fileUri = tempFile.uri;
         fileSize = tempFile.size;
-        
+
         // 读取文件计算正确的 content hash（文件二进制内容的 SHA256）
         const savedBase64 = await tempFile.base64();
         contentHash = await calculateBase64ContentHash(savedBase64);
@@ -166,7 +166,7 @@ export class ClipboardManager {
           throw writeError;
         }
       }
-      
+
       // 步骤3: 根据服务器规则计算 Profile Hash = SHA256(fileName + "|" + ContentHash.ToUpper())
       const combinedString = `${hashFileName}|${contentHash.toUpperCase()}`;
       profileHash = await calculateTextHash(combinedString);

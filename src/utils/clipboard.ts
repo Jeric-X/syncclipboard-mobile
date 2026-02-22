@@ -30,7 +30,7 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
         text: text || '[图片]',
         hash: calculatedHash,
         hasData: true,
-        dataName: generateDataFileName(calculatedHash, 'png'),
+        dataName: fileName,
         size: fileSize,
       };
 
@@ -40,7 +40,7 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
         text: text || fileName || '[文件]',
         hash: calculatedHash,
         hasData: true,
-        dataName: fileName || generateDataFileName(calculatedHash, 'bin'),
+        dataName: fileName,
         size: fileSize,
       };
 
@@ -50,7 +50,7 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
         text: text || '[文件组]',
         hash: calculatedHash,
         hasData: true,
-        dataName: generateDataFileName(calculatedHash, 'zip'),
+        dataName: fileName,
         size: fileSize,
       };
 
@@ -95,21 +95,7 @@ export function profileDtoToContent(profile: ProfileDto): ClipboardContent {
 }
 
 /**
- * 生成数据文件名
- * @param hash 内容 hash
- * @param extension 文件扩展名
- */
-function generateDataFileName(hash?: string, extension: string = 'dat'): string {
-  if (hash) {
-    // 使用 hash 的前 16 位作为文件名
-    return `${hash.substring(0, 16)}.${extension}`;
-  }
 
-  // 使用时间戳作为后备
-  return `${Date.now()}.${extension}`;
-}
-
-/**
  * 从 MIME 类型获取文件扩展名
  */
 export function getExtensionFromMimeType(mimeType: string): string {

@@ -123,7 +123,7 @@ export class APIClient {
 
       // HTTP 错误
       const { status, data } = axiosError.response;
-      
+
       // 记录响应详情
       console.error('[APIClient] HTTP Error - Status:', status);
       console.error('[APIClient] Response data:', JSON.stringify(data, null, 2));
@@ -145,7 +145,7 @@ export class APIClient {
 
       // 500+ 服务器错误
       if (status >= 500) {
-        return new ServerError('Server error', status, data);
+        return new ServerError(`Server error (HTTP ${status})`, status, data);
       }
 
       // 其他 HTTP 错误

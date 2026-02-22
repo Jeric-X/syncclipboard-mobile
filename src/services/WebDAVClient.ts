@@ -135,28 +135,60 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
 
   /**
    * 上传文件数据
+   * @param fileName 服务器上的文件名
+   * @param fileUri 本地文件的 URI，避免将大文件加载到内存中
    */
-  async putFile(fileName: string, data: Blob): Promise<void> {
+  async putFile(fileName: string, fileUri: string): Promise<void> {
     if (!fileName) {
       throw new ValidationError('File name is required');
     }
 
-    if (!data) {
-      throw new ValidationError('File data is required');
+    if (!fileUri) {
+      throw new ValidationError('File URI is required');
     }
 
     try {
-      console.log(`[WebDAVClient] Uploading file: ${fileName}, size: ${data.size}`);
+      const FileSystem = await import('expo-file-system');
+      const file = new FileSystem.File(fileUri);
+
+      if (!file.exists) {
+        throw new ValidationError(`File not found: ${fileUri}`);
+      }
+
+      console.log(`[WebDAVClient] Uploading file: ${fileName}, size: ${file.size} bytes`);
+
       // 确保目录存在
       await this.ensureDirectoryExists(`/${WebDAVClient.DATA_FOLDER}`);
 
-      const url = `/${WebDAVClient.DATA_FOLDER}/${encodeURIComponent(fileName)}`;
+      const url = `${this.baseURL}/${WebDAVClient.DATA_FOLDER}/${encodeURIComponent(fileName)}`;
       console.log(`[WebDAVClient] PUT request to: ${url}`);
-      await this.put(url, data, {
-        headers: {
-          'Content-Type': 'application/octet-stream',
-        },
+
+      // 准备请求头
+      const headers = await this.getHeaders();
+      headers['Content-Type'] = 'application/octet-stream';
+
+      // 读取文件为 base64
+      const base64Data = await file.base64();
+      console.log(`[WebDAVClient] File read as base64, length: ${base64Data.length} chars`);
+
+      // 将 base64 转为 Uint8Array（真正的二进制数据）
+      const binaryString = atob(base64Data);
+      const uint8Array = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        uint8Array[i] = binaryString.charCodeAt(i);
+      }
+
+      // 使用 fetch API 直接发送二进制数据
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers,
+        body: uint8Array,
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
       console.log(`[WebDAVClient] File uploaded successfully: ${fileName}`);
     } catch (error) {
       console.error(`[WebDAVClient] Failed to put file ${fileName}:`, error);

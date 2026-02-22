@@ -6,6 +6,7 @@ import React from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { HomeScreen } from '@/screens/HomeScreen';
 import { HistoryScreen } from '@/screens/HistoryScreen';
@@ -49,7 +50,7 @@ export const AppNavigator = () => {
       />
       <NavigationContainer theme={navigationTheme}>
         <Tab.Navigator
-          screenOptions={{
+          screenOptions={({ route }) => ({
             headerStyle: {
               backgroundColor: theme.colors.surface,
             },
@@ -63,7 +64,16 @@ export const AppNavigator = () => {
             },
             tabBarActiveTintColor: theme.colors.tabBarActive,
             tabBarInactiveTintColor: theme.colors.tabBarInactive,
-          }}
+            tabBarIcon: ({ color, size }) => {
+              let iconName = 'home';
+              if (route.name === 'History') {
+                iconName = 'time';
+              } else if (route.name === 'Settings') {
+                iconName = 'settings';
+              }
+              return <Ionicons name={iconName} size={size} color={color} />;
+            },
+          })}
         >
           <Tab.Screen name="Home" component={HomeScreen} options={{ title: '首页' }} />
           <Tab.Screen name="History" component={HistoryScreen} options={{ title: '历史' }} />

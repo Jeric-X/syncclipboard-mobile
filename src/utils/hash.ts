@@ -64,16 +64,16 @@ export async function calculateBase64ContentHash(base64Data: string): Promise<st
   try {
     // 将 base64 解码为二进制字符串
     const binaryString = atob(base64Data);
-    
+
     // 将二进制字符串转换为字节数组
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
-    
+
     // 使用 js-sha256 计算 SHA256（它可以正确处理 Uint8Array）
     const hash = sha256(bytes);
-    
+
     return hash.toLowerCase();
   } catch (error) {
     console.error('[HashUtils] Failed to calculate base64 content hash:', error);

@@ -36,7 +36,7 @@ export function HomeScreen() {
   const [loadingRemote, setLoadingRemote] = useState(false);
   const [downloadingRemote, setDownloadingRemote] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: MessageType } | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [error, setError] = useState<{ title: string; message: string } | null>(null);
   const [fadeAnim] = useState(new Animated.Value(0));
   const appState = useRef(AppState.currentState);
   const remotePollingInterval = useRef<NodeJS.Timeout | null>(null);
@@ -47,7 +47,7 @@ export function HomeScreen() {
   const signalRConnected = useRef(false);
 
   const { currentContent, getContent, startMonitoring, stopMonitoring } = useClipboardStore();
-  const { stats, sync, initialize: initializeSync } = useSyncStore();
+  const { stats, sync, initialize: initializeSync, destroy: destroySync } = useSyncStore();
   const { getActiveServer, loadConfig, isLoaded, config } = useSettingsStore();
 
   const activeServer = getActiveServer();
@@ -292,6 +292,12 @@ export function HomeScreen() {
       if (!silent) {
         setRemoteContent(null);
         lastRemoteHash.current = null;
+        // 显示连接错误
+        const errorMessage = error instanceof Error ? error.message : '无法连接到服务器';
+        setError({
+          title: '连接失败',
+          message: errorMessage,
+        });
       }
     } finally {
       if (!silent) {
@@ -454,7 +460,12 @@ export function HomeScreen() {
       lastRemoteHash.current = null;
 
       if (activeServer) {
-        // 初始化同步管理器（用于上传功能）
+        // 销毁旧的 SyncManager 实例，然后重新初始化（这样才能使用新的服务器配置）
+        console.log(
+          '[HomeScreen] Destroying old SyncManager and reinitializing with new server:',
+          activeServer.url
+        );
+        await destroySync();
         await initializeSync();
 
         // 立即获取一次（显示 loading）
@@ -478,6 +489,8 @@ export function HomeScreen() {
       } else {
         console.log('[HomeScreen] No active server configured');
         setRemoteContent(null);
+        // 也销毁 SyncManager 当没有服务器时
+        await destroySync();
       }
     };
 
@@ -487,7 +500,7 @@ export function HomeScreen() {
       stopRemotePolling();
       disconnectSignalR();
     };
-  }, [activeServer, initializeSync]);
+  }, [activeServer, initializeSync, destroySync]);
 
   // 监听应用状态变化，控制远程剪贴板轮询或 SignalR
   // 本地剪贴板已由 ClipboardMonitor 持续监听，无需在此处处理
@@ -498,6 +511,10 @@ export function HomeScreen() {
         // 当从后台切换到前台时
         if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
           console.log('[HomeScreen] App has come to the foreground');
+
+          // 重新获取本地剪贴板内容，检查在后台期间是否有变化
+          console.log('[HomeScreen] Checking local clipboard for changes while in background');
+          await getContent();
 
           // 如果有配置服务器
           if (activeServer) {
@@ -527,7 +544,7 @@ export function HomeScreen() {
     return () => {
       subscription.remove();
     };
-  }, [activeServer]);
+  }, [activeServer, getContent]);
 
   // 下拉刷新
   const handleRefresh = async () => {
@@ -554,9 +571,11 @@ export function HomeScreen() {
     }
 
     try {
-      setUploadError(null); // 清除之前的错误
+      setError(null); // 清除之前的错误
+      console.log('[HomeScreen] Starting upload...');
       const result = await sync(SyncDirection.Upload);
-      
+      console.log('[HomeScreen] Upload result:', JSON.stringify(result, null, 2));
+
       // 检查同步结果
       if (result.success) {
         await fetchRemoteClipboard(false); // 刷新远程剪贴板显示
@@ -564,23 +583,34 @@ export function HomeScreen() {
       } else {
         // 上传失败，显示错误信息
         const errorMessage = result.error || '上传失败';
-        setUploadError(errorMessage);
+        console.log('[HomeScreen] Upload failed, setting error:', errorMessage);
+        setError({
+          title: '上传失败',
+          message: errorMessage,
+        });
         showMessage('上传失败', 'error');
       }
     } catch (error: unknown) {
       // 处理意外异常（通常不会到这里）
+      console.error('[HomeScreen] Upload exception:', error);
       const errorMessage = error instanceof Error ? error.message : '无法上传到服务器';
-      const errorDetails = error instanceof Error && (error as any).response?.data
-        ? JSON.stringify((error as any).response.data, null, 2)
-        : errorMessage;
-      setUploadError(errorDetails);
+      const errorObj = error instanceof Error ? (error as unknown as Record<string, unknown>) : {};
+      const errorDetails =
+        error instanceof Error && errorObj.response
+          ? JSON.stringify((errorObj.response as Record<string, unknown>).data, null, 2)
+          : errorMessage;
+      console.log('[HomeScreen] Setting error details:', errorDetails);
+      setError({
+        title: '上传失败',
+        message: errorDetails,
+      });
       showMessage('上传失败', 'error');
     }
   };
 
   const handleCopyError = async () => {
-    if (uploadError) {
-      await Clipboard.setStringAsync(uploadError);
+    if (error) {
+      await Clipboard.setStringAsync(`${error.title}\n\n${error.message}`);
       showMessage('错误信息已复制', 'success');
     }
   };
@@ -661,30 +691,38 @@ export function HomeScreen() {
                 isRemote={false}
                 onUpload={handleUpload}
               />
-              
-              {/* 上传错误信息卡片 */}
-              {uploadError && (
-                <View style={[styles.errorCard, { backgroundColor: '#FEE', borderColor: '#FCC' }]}>
+
+              {/* 错误信息卡片 */}
+              {error && (
+                <View
+                  style={[
+                    styles.errorCard,
+                    {
+                      backgroundColor: theme.colors.errorBackground,
+                      borderColor: theme.colors.errorBorder,
+                    },
+                  ]}
+                >
                   <View style={styles.errorHeader}>
-                    <Text style={[styles.errorTitle, { color: '#D00' }]}>上传失败</Text>
+                    <Text style={[styles.errorTitle, { color: theme.colors.errorTitle }]}>
+                      {error.title}
+                    </Text>
                     <TouchableOpacity
-                      style={[styles.copyButton, { backgroundColor: '#D00' }]}
+                      style={[styles.copyButton, { backgroundColor: theme.colors.errorTitle }]}
                       onPress={handleCopyError}
                     >
                       <Text style={styles.copyButtonText}>复制错误</Text>
                     </TouchableOpacity>
                   </View>
-                  <ScrollView
-                    style={styles.errorScrollView}
-                    nestedScrollEnabled={true}
-                  >
-                    <Text style={[styles.errorText, { color: '#333' }]}>{uploadError}</Text>
+                  <ScrollView style={styles.errorScrollView} nestedScrollEnabled={true}>
+                    <Text style={[styles.errorText, { color: theme.colors.errorText }]}>
+                      {error.message}
+                    </Text>
                   </ScrollView>
-                  <TouchableOpacity
-                    style={styles.dismissButton}
-                    onPress={() => setUploadError(null)}
-                  >
-                    <Text style={[styles.dismissButtonText, { color: '#D00' }]}>关闭</Text>
+                  <TouchableOpacity style={styles.dismissButton} onPress={() => setError(null)}>
+                    <Text style={[styles.dismissButtonText, { color: theme.colors.errorTitle }]}>
+                      关闭
+                    </Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -793,7 +831,8 @@ const styles = StyleSheet.create({
   },
   loadingCard: {
     borderRadius: 12,
-    padding: 32,
+    padding: 16,
+    minHeight: 150,
     alignItems: 'center',
     justifyContent: 'center',
     shadowOffset: { width: 0, height: 2 },
@@ -867,6 +906,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 6,
   },
+  // eslint-disable-next-line react-native/no-color-literals
   copyButtonText: {
     color: '#FFF',
     fontSize: 13,

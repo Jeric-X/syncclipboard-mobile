@@ -64,7 +64,7 @@ export const ServerListItem: React.FC<ServerListItemProps> = ({
       style={[
         styles.container,
         { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
-        isActive && styles.containerActive,
+        isActive && [styles.containerActive, { borderColor: theme.colors.primary }],
       ]}
       onPress={onPress}
       activeOpacity={0.7}

@@ -62,6 +62,12 @@ export const lightColors = {
   tabBarBorder: '#E5E5EA',
   tabBarActive: '#007AFF',
   tabBarInactive: '#8E8E93',
+
+  // 错误卡片
+  errorBackground: '#FEE',
+  errorBorder: '#FCC',
+  errorTitle: '#D00',
+  errorText: '#333',
 };
 
 export const darkColors = {
@@ -123,6 +129,12 @@ export const darkColors = {
   tabBarBorder: '#38383A',
   tabBarActive: '#0A84FF',
   tabBarInactive: '#8E8E93',
+
+  // 错误卡片
+  errorBackground: '#FEE',
+  errorBorder: '#FCC',
+  errorTitle: '#D00',
+  errorText: '#333',
 };
 
 export type ColorScheme = typeof lightColors;

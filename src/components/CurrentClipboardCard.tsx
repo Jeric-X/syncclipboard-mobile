@@ -46,7 +46,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         imageUri: clipboard.imageUri?.substring(clipboard.imageUri.lastIndexOf('/') + 1),
         timestamp: clipboard.timestamp,
       });
-      setUpdateTrigger(prev => prev + 1);
+      setUpdateTrigger((prev) => prev + 1);
     }
   }, [clipboard?.contentHash, clipboard?.imageUri]);
 
@@ -268,16 +268,19 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
               <>
                 <Image
                   key={`image-${clipboard.contentHash?.substring(0, 12)}-${clipboard.timestamp}`}
-                  source={{ 
+                  source={{
                     uri: `${clipboard.imageUri}?hash=${clipboard.contentHash?.substring(0, 12) || clipboard.timestamp || Date.now()}`,
-                    cache: 'reload' as any, // 强制重新加载
+                    cache: 'reload',
                   }}
                   style={styles.imagePreview}
                   resizeMode="contain"
                   onError={(error) => {
                     console.error('[CurrentClipboardCard] Image load error:', error.nativeEvent);
                     console.error('[CurrentClipboardCard] Image URI:', clipboard.imageUri);
-                    console.error('[CurrentClipboardCard] Content Hash:', clipboard.contentHash?.substring(0, 8));
+                    console.error(
+                      '[CurrentClipboardCard] Content Hash:',
+                      clipboard.contentHash?.substring(0, 8)
+                    );
                   }}
                   onLoad={() => {
                     console.log(
