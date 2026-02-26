@@ -10,7 +10,6 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
-  Animated,
   AppState,
   AppStateStatus,
   TouchableOpacity,
@@ -20,14 +19,15 @@ import { useTheme } from '@/hooks/useTheme';
 import { useClipboardStore } from '@/stores/clipboardStore';
 import { useSyncStore } from '@/stores/syncStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useHistoryStore } from '@/stores/historyStore';
 import { SyncDirection } from '@/types/sync';
 import { ClipboardContent } from '@/types/clipboard';
 import { CurrentClipboardCard } from '@/components/CurrentClipboardCard';
+import { MessageToast } from '@/components/MessageToast';
 import { createAPIClient, getSignalRClient } from '@/services';
 import type { RemoteClipboardChangedCallback } from '@/services';
 import { getFileExtension, getFileUri, initFileStorage } from '@/utils/fileStorage';
-
-type MessageType = 'success' | 'error' | 'info';
+import { useMessageToast } from '@/hooks/useMessageToast';
 
 export function HomeScreen() {
   const { theme } = useTheme();
@@ -35,9 +35,8 @@ export function HomeScreen() {
   const [remoteContent, setRemoteContent] = useState<ClipboardContent | null>(null);
   const [loadingRemote, setLoadingRemote] = useState(false);
   const [downloadingRemote, setDownloadingRemote] = useState(false);
-  const [message, setMessage] = useState<{ text: string; type: MessageType } | null>(null);
   const [error, setError] = useState<{ title: string; message: string } | null>(null);
-  const [fadeAnim] = useState(new Animated.Value(0));
+  const { message, showMessage, handleMessageShown } = useMessageToast();
   const appState = useRef(AppState.currentState);
   const remotePollingInterval = useRef<NodeJS.Timeout | null>(null);
   const lastRemoteProfileHash = useRef<string | null>(null);
@@ -108,28 +107,6 @@ export function HomeScreen() {
     }
 
     return updatedContent;
-  };
-
-  // 显示消息提示
-  const showMessage = (text: string, type: MessageType = 'info') => {
-    setMessage({ text, type });
-
-    // 淡入动画
-    Animated.sequence([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.delay(2500),
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setMessage(null);
-    });
   };
 
   // 处理远程剪贴板内容更新的公共逻辑
@@ -223,6 +200,14 @@ export function HomeScreen() {
 
     if (!isFirstLoad) {
       console.log(`[HomeScreen] ${logPrefix}Remote clipboard changed, updated display`);
+
+      // 直接添加到历史记录，无需任何操作或启用自动同步
+      try {
+        await useHistoryStore.getState().addItem(finalContent);
+        console.log(`[HomeScreen] ${logPrefix}Added remote clipboard to history`);
+      } catch (error) {
+        console.error(`[HomeScreen] ${logPrefix}Failed to add remote clipboard to history:`, error);
+      }
 
       // 如果启用了自动同步，自动复制远程内容到本地剪贴板
       const autoSyncEnabled = config?.autoSync ?? false;
@@ -772,19 +757,7 @@ export function HomeScreen() {
       </ScrollView>
 
       {/* 消息提示 */}
-      {message && (
-        <Animated.View
-          style={[
-            styles.messageContainer,
-            message.type === 'success' && { backgroundColor: theme.colors.messageSuccess },
-            message.type === 'error' && { backgroundColor: theme.colors.messageError },
-            message.type === 'info' && { backgroundColor: theme.colors.primary },
-            { opacity: fadeAnim },
-          ]}
-        >
-          <Text style={[styles.messageText, { color: theme.colors.white }]}>{message.text}</Text>
-        </Animated.View>
-      )}
+      <MessageToast message={message} onMessageShown={handleMessageShown} />
     </View>
   );
 }
@@ -793,23 +766,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  messageContainer: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginHorizontal: 16,
-    marginBottom: 8,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  messageText: {
-    fontSize: 15,
-    fontWeight: '500',
-  },
+
   infoLabelSpaced: {
     marginTop: 8,
   },

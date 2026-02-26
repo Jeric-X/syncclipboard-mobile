@@ -16,7 +16,7 @@ export interface ProfileDto {
   type: ClipboardContentType;
 
   /** Profile SHA256 哈希值（遵循服务器规则，用于去重和验证） */
-  profileHash?: string;
+  hash?: string;
 
   /** 预览文本或完整文本内容 */
   text: string;

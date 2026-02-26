@@ -3,14 +3,13 @@
  * 提供主题切换功能、服务器配置、多用户切换
  */
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Animated,
   Switch,
   TextInput,
 } from 'react-native';
@@ -18,10 +17,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import type { ThemeMode } from '@/theme';
 import { useSettingsStore } from '@/stores';
-import { ServerConfigModal, ServerListItem } from '@/components';
+import { ServerConfigModal, ServerListItem, MessageToast } from '@/components';
 import { ServerConfig } from '@/types/api';
-
-type MessageType = 'success' | 'error' | 'info';
+import { useMessageToast } from '@/hooks/useMessageToast';
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
@@ -39,9 +37,7 @@ export const SettingsScreen = () => {
 
   const [showServerModal, setShowServerModal] = useState(false);
   const [editingServerIndex, setEditingServerIndex] = useState<number | null>(null);
-  const [message, setMessage] = useState<{ text: string; type: MessageType } | null>(null);
-  const [fadeAnim] = useState(new Animated.Value(0));
-  const messageTimer = useRef<NodeJS.Timeout | null>(null);
+  const { message, showMessage, handleMessageShown } = useMessageToast();
 
   // 本地状态用于跟踪Switch的当前值，避免闪烁
   const [localAutoSyncEnabled, setLocalAutoSyncEnabled] = useState(config?.autoSync ?? false);
@@ -53,46 +49,10 @@ export const SettingsScreen = () => {
     }
   }, [isLoaded, loadConfig]);
 
-  // 清理定时器
-  useEffect(() => {
-    return () => {
-      if (messageTimer.current) {
-        clearTimeout(messageTimer.current);
-      }
-    };
-  }, []);
-
   // 当配置中的autoSync值变化时，更新本地状态
   useEffect(() => {
     setLocalAutoSyncEnabled(config?.autoSync ?? false);
   }, [config?.autoSync]);
-
-  // 显示消息提示
-  const showMessage = (text: string, type: MessageType = 'info') => {
-    // 清除之前的定时器
-    if (messageTimer.current) {
-      clearTimeout(messageTimer.current);
-    }
-
-    setMessage({ text, type });
-
-    // 淡入动画
-    Animated.sequence([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.delay(2500),
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setMessage(null);
-    });
-  };
 
   const themeOptions: { label: string; value: ThemeMode }[] = [
     { label: '跟随系统', value: 'auto' },
@@ -353,19 +313,7 @@ export const SettingsScreen = () => {
       </ScrollView>
 
       {/* 消息提示 */}
-      {message && (
-        <Animated.View
-          style={[
-            styles.messageContainer,
-            message.type === 'success' && { backgroundColor: theme.colors.messageSuccess },
-            message.type === 'error' && { backgroundColor: theme.colors.messageError },
-            message.type === 'info' && { backgroundColor: theme.colors.primary },
-            { opacity: fadeAnim },
-          ]}
-        >
-          <Text style={[styles.messageText, { color: theme.colors.white }]}>{message.text}</Text>
-        </Animated.View>
-      )}
+      <MessageToast message={message} onMessageShown={handleMessageShown} />
 
       {/* 服务器配置模态框 */}
       <ServerConfigModal
@@ -382,25 +330,6 @@ export const SettingsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  messageContainer: {
-    position: 'absolute',
-    bottom: 20,
-    left: 16,
-    right: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  messageText: {
-    fontSize: 15,
-    fontWeight: '500',
   },
   scrollView: {
     flex: 1,

@@ -187,15 +187,17 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     }
   },
 
-  updateItem: async (id: string, updates: Partial<ClipboardItem>) => {
+  updateItem: async (profileHash: string, updates: Partial<ClipboardItem>) => {
     set({ error: null });
 
     try {
-      await historyStorage.updateItem(id, updates);
+      await historyStorage.updateItem(profileHash, updates);
 
       // 更新本地状态
       set((state) => ({
-        items: state.items.map((item) => (item.id === id ? { ...item, ...updates } : item)),
+        items: state.items.map((item) =>
+          item.profileHash === profileHash ? { ...item, ...updates } : item
+        ),
       }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to update item';
@@ -203,17 +205,19 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     }
   },
 
-  deleteItem: async (id: string) => {
+  deleteItem: async (profileHash: string) => {
     set({ error: null });
 
     try {
-      await historyStorage.deleteItem(id);
+      await historyStorage.deleteItem(profileHash);
 
       // 更新本地状态
       set((state) => ({
-        items: state.items.filter((item) => item.id !== id),
+        items: state.items.filter((item) => item.profileHash !== profileHash),
         totalCount: state.totalCount - 1,
-        selectedIds: new Set([...state.selectedIds].filter((selectedId) => selectedId !== id)),
+        selectedIds: new Set(
+          [...state.selectedIds].filter((selectedId) => selectedId !== profileHash)
+        ),
       }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete item';
@@ -221,17 +225,19 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     }
   },
 
-  deleteItems: async (ids: string[]) => {
+  deleteItems: async (profileHashes: string[]) => {
     set({ error: null });
 
     try {
-      await historyStorage.deleteItems(ids);
+      await historyStorage.deleteItems(profileHashes);
 
       // 更新本地状态
       set((state) => ({
-        items: state.items.filter((item) => !ids.includes(item.id)),
-        totalCount: state.totalCount - ids.length,
-        selectedIds: new Set([...state.selectedIds].filter((id) => !ids.includes(id))),
+        items: state.items.filter((item) => !profileHashes.includes(item.profileHash)),
+        totalCount: state.totalCount - profileHashes.length,
+        selectedIds: new Set(
+          [...state.selectedIds].filter((profileHash) => !profileHashes.includes(profileHash))
+        ),
       }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete items';
@@ -239,16 +245,16 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     }
   },
 
-  toggleStar: async (id: string) => {
+  toggleStar: async (profileHash: string) => {
     set({ error: null });
 
     try {
-      const starred = await historyStorage.toggleStar(id);
+      const starred = await historyStorage.toggleStar(profileHash);
 
       // 更新本地状态
       set((state) => ({
         items: state.items.map((item) =>
-          item.id === id ? { ...item, starred } : item
+          item.profileHash === profileHash ? { ...item, starred } : item
         ) as ClipboardItem[],
       }));
     } catch (error) {
@@ -257,14 +263,14 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     }
   },
 
-  incrementUseCount: async (id: string) => {
+  incrementUseCount: async (profileHash: string) => {
     try {
-      await historyStorage.incrementUseCount(id);
+      await historyStorage.incrementUseCount(profileHash);
 
       // 更新本地状态（可选）
       set((state) => ({
         items: state.items.map((item) => {
-          if (item.id === id) {
+          if (item.profileHash === profileHash) {
             const useCount = (item.useCount || 0) + 1;
             return { ...item, useCount };
           }
@@ -322,7 +328,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
   selectAll: () => {
     set((state) => ({
-      selectedIds: new Set(state.items.map((item) => item.id)),
+      selectedIds: new Set(state.items.map((item) => item.profileHash)),
     }));
   },
 

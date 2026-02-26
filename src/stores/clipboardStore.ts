@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import { ClipboardContent } from '../types/clipboard';
 import { clipboardManager, clipboardMonitor } from '../services';
+import { useHistoryStore } from './historyStore';
 
 /**
  * 剪贴板状态接口
@@ -72,6 +73,11 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     try {
       const content = await clipboardManager.getClipboardContent();
       set({ currentContent: content, isLoading: false });
+
+      // 添加到历史记录
+      if (content) {
+        await useHistoryStore.getState().addItem(content);
+      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to get clipboard content';
@@ -85,6 +91,9 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     try {
       await clipboardManager.setClipboardContent(content);
       set({ currentContent: content, isLoading: false });
+
+      // 添加到历史记录
+      await useHistoryStore.getState().addItem(content);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to set clipboard content';
@@ -99,6 +108,9 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       const content = await clipboardManager.pickImageFromGallery();
       if (content) {
         set({ currentContent: content, isLoading: false });
+
+        // 添加到历史记录
+        await useHistoryStore.getState().addItem(content);
       } else {
         set({ isLoading: false });
       }
@@ -115,6 +127,9 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       const content = await clipboardManager.takePhoto();
       if (content) {
         set({ currentContent: content, isLoading: false });
+
+        // 添加到历史记录
+        await useHistoryStore.getState().addItem(content);
       } else {
         set({ isLoading: false });
       }
@@ -137,6 +152,9 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
         timestamp: content.timestamp,
       });
       set({ currentContent: content });
+
+      // 添加到历史记录
+      await useHistoryStore.getState().addItem(content);
     });
 
     clipboardMonitor.start();

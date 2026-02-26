@@ -20,7 +20,7 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
       return {
         type: 'Text',
         text,
-        profileHash: calculatedProfileHash,
+        hash: calculatedProfileHash,
         hasData: false,
       };
 
@@ -28,7 +28,7 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
       return {
         type: 'Image',
         text: text || '[图片]',
-        profileHash: calculatedProfileHash,
+        hash: calculatedProfileHash,
         hasData: true,
         dataName: fileName,
         size: fileSize,
@@ -38,7 +38,7 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
       return {
         type: 'File',
         text: text || fileName || '[文件]',
-        profileHash: calculatedProfileHash,
+        hash: calculatedProfileHash,
         hasData: true,
         dataName: fileName,
         size: fileSize,
@@ -48,7 +48,7 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
       return {
         type: 'Group',
         text: text || '[文件组]',
-        profileHash: calculatedProfileHash,
+        hash: calculatedProfileHash,
         hasData: true,
         dataName: fileName,
         size: fileSize,
@@ -63,12 +63,12 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
  * 将 ProfileDto 转换为 ClipboardContent
  */
 export function profileDtoToContent(profile: ProfileDto): ClipboardContent {
-  const { type, text, profileHash, hasData, dataName, size } = profile;
+  const { type, text, hash, hasData, dataName, size } = profile;
 
   const baseContent: ClipboardContent = {
     type: type as ClipboardContentType,
     text,
-    profileHash,
+    profileHash: hash,
     timestamp: Date.now(), // 添加当前时间戳
   };
 

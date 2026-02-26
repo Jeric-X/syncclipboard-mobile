@@ -9,3 +9,5 @@ export { CurrentClipboardCard } from './CurrentClipboardCard';
 export { SyncStatusIndicator } from './SyncStatusIndicator';
 export { QuickActionsBar } from './QuickActionsBar';
 export { HistoryListItem } from './HistoryListItem';
+export { MessageToast } from './MessageToast';
+export type { MessageType } from './MessageToast';

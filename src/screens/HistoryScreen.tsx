@@ -21,7 +21,9 @@ import { useTheme } from '@/hooks/useTheme';
 import { useHistoryStore } from '@/stores/historyStore';
 import { ClipboardItem } from '@/types/clipboard';
 import { HistoryListItem } from '@/components/HistoryListItem';
+import { MessageToast } from '@/components/MessageToast';
 import { clipboardManager } from '@/services';
+import { useMessageToast } from '@/hooks/useMessageToast';
 
 type FilterType = 'all' | 'Text' | 'Image' | 'File';
 
@@ -42,6 +44,7 @@ export function HistoryScreen() {
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [selectedItem, setSelectedItem] = useState<ClipboardItem | null>(null);
   const [showActionSheet, setShowActionSheet] = useState(false);
+  const { message, showMessage, handleMessageShown } = useMessageToast();
 
   // 搜索防抖（含初始加载）
   useEffect(() => {
@@ -65,23 +68,26 @@ export function HistoryScreen() {
   }, [items, filterType]);
 
   // 点击列表项 - 复制到剪贴板
-  const handleItemPress = useCallback(async (item: ClipboardItem) => {
-    try {
-      if (item.type === 'Text' && item.text) {
-        await clipboardManager.setClipboardContent({
-          type: 'Text',
-          text: item.text,
-          profileHash: item.profileHash,
-        });
-        Alert.alert('成功', '已复制到剪贴板');
-      } else {
-        Alert.alert('提示', '暂不支持非文本类型的快速复制');
+  const handleItemPress = useCallback(
+    async (item: ClipboardItem) => {
+      try {
+        if (item.type === 'Text' && item.text) {
+          await clipboardManager.setClipboardContent({
+            type: 'Text',
+            text: item.text,
+            profileHash: item.profileHash,
+          });
+          showMessage('已复制到剪贴板', 'success');
+        } else {
+          showMessage('暂不支持非文本类型的快速复制', 'info');
+        }
+      } catch (error) {
+        console.error('[HistoryScreen] Failed to copy:', error);
+        showMessage('复制失败', 'error');
       }
-    } catch (error) {
-      console.error('[HistoryScreen] Failed to copy:', error);
-      Alert.alert('错误', '复制失败');
-    }
-  }, []);
+    },
+    [showMessage]
+  );
 
   // 长按列表项 - 显示操作菜单
   const handleItemLongPress = useCallback((item: ClipboardItem) => {
@@ -108,22 +114,25 @@ export function HistoryScreen() {
   }, []);
 
   // 复制项目
-  const handleCopyItem = useCallback(async (item: ClipboardItem) => {
-    try {
-      if (item.type === 'Text' && item.text) {
-        await clipboardManager.setClipboardContent({
-          type: 'Text',
-          text: item.text,
-          profileHash: item.profileHash,
-        });
-        Alert.alert('成功', '已复制到剪贴板');
+  const handleCopyItem = useCallback(
+    async (item: ClipboardItem) => {
+      try {
+        if (item.type === 'Text' && item.text) {
+          await clipboardManager.setClipboardContent({
+            type: 'Text',
+            text: item.text,
+            profileHash: item.profileHash,
+          });
+          showMessage('已复制到剪贴板', 'success');
+        }
+      } catch (error) {
+        console.error('[HistoryScreen] Failed to copy:', error);
+        showMessage('复制失败', 'error');
       }
-    } catch (error) {
-      console.error('[HistoryScreen] Failed to copy:', error);
-      Alert.alert('错误', '复制失败');
-    }
-    setShowActionSheet(false);
-  }, []);
+      setShowActionSheet(false);
+    },
+    [showMessage]
+  );
 
   // 删除项目
   const handleDeleteItem = useCallback(
@@ -135,7 +144,7 @@ export function HistoryScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteItem(item.id);
+              await deleteItem(item.profileHash);
               setShowActionSheet(false);
             } catch (error) {
               console.error('[HistoryScreen] Failed to delete:', error);
@@ -158,15 +167,15 @@ export function HistoryScreen() {
         onPress: async () => {
           try {
             await clearHistory();
-            Alert.alert('成功', '已清空所有历史记录');
+            showMessage('已清空所有历史记录', 'success');
           } catch (error) {
             console.error('[HistoryScreen] Failed to clear:', error);
-            Alert.alert('错误', '清空失败');
+            showMessage('清空失败', 'error');
           }
         },
       },
     ]);
-  }, [clearHistory]);
+  }, [clearHistory, showMessage]);
 
   // 加载更多（防止重复加载和越界）
   const handleEndReached = useCallback(() => {
@@ -262,7 +271,7 @@ export function HistoryScreen() {
       <FlashList
         data={filteredItems}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.profileHash}
         estimatedItemSize={72}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
@@ -315,6 +324,9 @@ export function HistoryScreen() {
           </Pressable>
         </Modal>
       )}
+
+      {/* 消息提示 */}
+      <MessageToast message={message} onMessageShown={handleMessageShown} />
     </View>
   );
 }

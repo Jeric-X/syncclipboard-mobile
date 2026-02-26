@@ -9,9 +9,6 @@ import { ClipboardContentType } from './api';
  * 剪贴板项目
  */
 export interface ClipboardItem {
-  /** 唯一标识符 */
-  id: string;
-
   /** 内容类型 */
   type: ClipboardContentType;
 

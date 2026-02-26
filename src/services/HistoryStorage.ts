@@ -106,14 +106,14 @@ export class HistoryStorage {
   }
 
   /**
-   * 获取历史记录项
+   * 根据 profileHash 获取历史记录
    */
-  public async getItem(id: string): Promise<ClipboardItem | null> {
+  public async getItem(profileHash: string): Promise<ClipboardItem | null> {
     if (!this.initialized) {
       await this.initialize();
     }
 
-    return this.history.find((item) => item.id === id) || null;
+    return this.history.find((item) => item.profileHash === profileHash) || null;
   }
 
   /**
@@ -222,30 +222,30 @@ export class HistoryStorage {
   /**
    * 更新历史记录项
    */
-  public async updateItem(id: string, updates: Partial<ClipboardItem>): Promise<void> {
+  public async updateItem(profileHash: string, updates: Partial<ClipboardItem>): Promise<void> {
     if (!this.initialized) {
       await this.initialize();
     }
 
-    const index = this.history.findIndex((item) => item.id === id);
+    const index = this.history.findIndex((item) => item.profileHash === profileHash);
 
     if (index >= 0) {
       this.history[index] = { ...this.history[index], ...updates };
       await this.saveHistory();
     } else {
-      throw new Error(`History item not found: ${id}`);
+      throw new Error(`History item not found: ${profileHash}`);
     }
   }
 
   /**
    * 删除历史记录项
    */
-  public async deleteItem(id: string): Promise<void> {
+  public async deleteItem(profileHash: string): Promise<void> {
     if (!this.initialized) {
       await this.initialize();
     }
 
-    const index = this.history.findIndex((item) => item.id === id);
+    const index = this.history.findIndex((item) => item.profileHash === profileHash);
 
     if (index >= 0) {
       this.history.splice(index, 1);
@@ -256,24 +256,24 @@ export class HistoryStorage {
   /**
    * 批量删除历史记录
    */
-  public async deleteItems(ids: string[]): Promise<void> {
+  public async deleteItems(profileHashes: string[]): Promise<void> {
     if (!this.initialized) {
       await this.initialize();
     }
 
-    this.history = this.history.filter((item) => !ids.includes(item.id));
+    this.history = this.history.filter((item) => !profileHashes.includes(item.profileHash));
     await this.saveHistory();
   }
 
   /**
    * 标记/取消标记历史记录
    */
-  public async toggleStar(id: string): Promise<boolean> {
+  public async toggleStar(profileHash: string): Promise<boolean> {
     if (!this.initialized) {
       await this.initialize();
     }
 
-    const index = this.history.findIndex((item) => item.id === id);
+    const index = this.history.findIndex((item) => item.profileHash === profileHash);
 
     if (index >= 0) {
       const item = this.history[index];
@@ -288,12 +288,12 @@ export class HistoryStorage {
   /**
    * 增加使用次数
    */
-  public async incrementUseCount(id: string): Promise<void> {
+  public async incrementUseCount(profileHash: string): Promise<void> {
     if (!this.initialized) {
       await this.initialize();
     }
 
-    const index = this.history.findIndex((item) => item.id === id);
+    const index = this.history.findIndex((item) => item.profileHash === profileHash);
 
     if (index >= 0) {
       const item = this.history[index];
