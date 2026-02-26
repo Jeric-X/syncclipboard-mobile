@@ -43,6 +43,9 @@ export const SettingsScreen = () => {
   const [fadeAnim] = useState(new Animated.Value(0));
   const messageTimer = useRef<NodeJS.Timeout | null>(null);
 
+  // 本地状态用于跟踪Switch的当前值，避免闪烁
+  const [localAutoSyncEnabled, setLocalAutoSyncEnabled] = useState(config?.autoSync ?? false);
+
   // 加载配置
   useEffect(() => {
     if (!isLoaded) {
@@ -58,6 +61,11 @@ export const SettingsScreen = () => {
       }
     };
   }, []);
+
+  // 当配置中的autoSync值变化时，更新本地状态
+  useEffect(() => {
+    setLocalAutoSyncEnabled(config?.autoSync ?? false);
+  }, [config?.autoSync]);
 
   // 显示消息提示
   const showMessage = (text: string, type: MessageType = 'info') => {
@@ -95,7 +103,6 @@ export const SettingsScreen = () => {
   // 获取服务器列表
   const servers = config?.servers || [];
   const activeServerIndex = config?.activeServerIndex ?? -1;
-  const autoSyncEnabled = config?.autoSync ?? false;
   const autoDownloadMaxSizeMB = Math.round(
     (config?.autoDownloadMaxSize ?? 5 * 1024 * 1024) / (1024 * 1024)
   );
@@ -156,10 +163,15 @@ export const SettingsScreen = () => {
 
   // 处理切换自动复制
   const handleToggleAutoSync = async (enabled: boolean) => {
+    // 立即更新本地状态，避免闪烁
+    setLocalAutoSyncEnabled(enabled);
+
     try {
       await setAutoSync(enabled);
       showMessage(enabled ? '已启用自动复制' : '已禁用自动复制', 'success');
     } catch (error: unknown) {
+      // 如果设置失败，恢复原来的状态
+      setLocalAutoSyncEnabled(!enabled);
       showMessage(error instanceof Error ? error.message : '设置失败', 'error');
     }
   };
@@ -238,10 +250,10 @@ export const SettingsScreen = () => {
                 </Text>
               </View>
               <Switch
-                value={autoSyncEnabled}
+                value={localAutoSyncEnabled}
                 onValueChange={handleToggleAutoSync}
                 trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                thumbColor={autoSyncEnabled ? theme.colors.surface : theme.colors.textTertiary}
+                thumbColor={localAutoSyncEnabled ? theme.colors.surface : theme.colors.textTertiary}
               />
             </View>
 

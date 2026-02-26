@@ -52,7 +52,6 @@ export function HomeScreen() {
 
   const activeServer = getActiveServer();
   const lastSyncTime = stats?.lastSyncTime || null;
-  const autoSyncEnabled = config?.autoSync ?? false;
 
   // 远程剪贴板轮询间隔（毫秒）
   const REMOTE_POLLING_INTERVAL = 3000; // 3秒
@@ -226,6 +225,7 @@ export function HomeScreen() {
       console.log(`[HomeScreen] ${logPrefix}Remote clipboard changed, updated display`);
 
       // 如果启用了自动同步，自动复制远程内容到本地剪贴板
+      const autoSyncEnabled = config?.autoSync ?? false;
       if (
         autoSyncEnabled &&
         activeServer &&
@@ -413,6 +413,7 @@ export function HomeScreen() {
 
   // 监听本地剪贴板变化，自动上传
   useEffect(() => {
+    const autoSyncEnabled = config?.autoSync ?? false;
     if (!activeServer || !autoSyncEnabled || !currentContent) {
       return;
     }
@@ -447,7 +448,7 @@ export function HomeScreen() {
           });
       }
     }
-  }, [currentContent, activeServer, autoSyncEnabled, sync]);
+  }, [currentContent, activeServer, config, sync]);
 
   // 当服务器配置改变时，启动/停止远程轮询或 SignalR
   useEffect(() => {
@@ -500,7 +501,7 @@ export function HomeScreen() {
       stopRemotePolling();
       disconnectSignalR();
     };
-  }, [activeServer, initializeSync, destroySync]);
+  }, [activeServer, config, initializeSync, destroySync]);
 
   // 监听应用状态变化，控制远程剪贴板轮询或 SignalR
   // 本地剪贴板已由 ClipboardMonitor 持续监听，无需在此处处理
