@@ -44,6 +44,9 @@ export interface ClipboardItem {
 
   /** 本地剪贴板 hash（用于本地变化检测，基于 base64 内容） */
   localClipboardHash?: string;
+
+  /** 文件 URI（本地文件路径） */
+  fileUri?: string;
 }
 
 /**

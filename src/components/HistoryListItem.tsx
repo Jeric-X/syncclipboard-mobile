@@ -4,18 +4,25 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, TouchableHighlight } from 'react-native';
+import { View, Text, StyleSheet, TouchableHighlight, Image, TouchableOpacity } from 'react-native';
+import { Copy, Share } from 'react-native-feather';
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardItem } from '@/types/clipboard';
 import { useSettingsStore } from '@/stores';
 
 interface HistoryListItemProps {
   item: ClipboardItem;
-  onPress: (item: ClipboardItem) => void;
+  onCopy: (item: ClipboardItem) => void;
+  onShare: (item: ClipboardItem) => void;
   onLongPress: (item: ClipboardItem) => void;
 }
 
-export const HistoryListItem: React.FC<HistoryListItemProps> = ({ item, onPress, onLongPress }) => {
+export const HistoryListItem: React.FC<HistoryListItemProps> = ({
+  item,
+  onCopy,
+  onShare,
+  onLongPress,
+}) => {
   const { theme } = useTheme();
   const { config } = useSettingsStore();
   const isDebugMode = config?.debugMode ?? false;
@@ -95,30 +102,31 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({ item, onPress,
 
   return (
     <TouchableHighlight
-      onPress={() => onPress(item)}
       onLongPress={() => onLongPress(item)}
       underlayColor={theme.colors.border}
       style={styles.touchable}
     >
       <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
-        {/* 左侧图标 */}
-        <View style={styles.iconContainer}>
-          <Text style={styles.typeIcon}>{getTypeIcon(item.type)}</Text>
-        </View>
-
-        {/* 中间内容区 */}
-        <View style={styles.contentContainer}>
-          {/* 第一行：类型标签 + 时间 */}
-          <View style={styles.headerRow}>
-            <Text style={[styles.typeLabel, { color: theme.colors.primary }]}>
-              {getTypeLabel(item.type)}
-            </Text>
-            <Text style={[styles.timestamp, { color: theme.colors.textSecondary }]}>
-              {formatTime(item.timestamp)}
-            </Text>
+        {/* 顶部内容区 */}
+        <View style={styles.topContent}>
+          {/* 左侧图标 */}
+          <View style={styles.iconContainer}>
+            <Text style={styles.typeIcon}>{getTypeIcon(item.type)}</Text>
           </View>
 
-          {/* 第二行：预览文本 */}
+          {/* 类型标签和时间 */}
+          <Text style={[styles.typeLabel, { color: theme.colors.primary, marginLeft: 8, marginRight: 8 }]}>
+            {getTypeLabel(item.type)}
+          </Text>
+
+          {/* 时间戳 */}
+          <Text style={[styles.timestamp, { color: theme.colors.textSecondary, flex: 1, textAlign: 'right' }]}>
+            {formatTime(item.timestamp)}
+          </Text>
+        </View>
+
+        {/* 预览文本 - 另起一行（非图片类型显示） */}
+        {item.type !== 'Image' && (
           <Text
             style={[styles.previewText, { color: theme.colors.text }]}
             numberOfLines={2}
@@ -126,9 +134,18 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({ item, onPress,
           >
             {previewText}
           </Text>
+        )}
 
-          {/* 第三行：附加信息 */}
-          <View style={styles.metaRow}>
+        {/* 图片预览 - 占据整个宽度 */}
+        {item.type === 'Image' && item.fileUri && (
+          <View style={styles.imagePreviewContainer}>
+            <Image source={{ uri: item.fileUri }} style={styles.imagePreview} />
+          </View>
+        )}
+
+        {/* 底部信息区 */}
+        <View style={styles.bottomContent}>
+          <View style={styles.metaInfo}>
             {item.size !== undefined && (
               <Text style={[styles.metaText, { color: theme.colors.textTertiary }]}>
                 {formatSize(item.size)}
@@ -151,22 +168,63 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({ item, onPress,
               </View>
             )}
           </View>
-
-          {/* 调试信息：profileHash */}
-          {isDebugMode && item.profileHash && (
-            <View style={styles.debugRow}>
-              <Text style={[styles.debugLabel, { color: theme.colors.textTertiary }]}>Hash:</Text>
-              <Text style={[styles.debugValue, { color: theme.colors.textSecondary }]}>
-                {item.profileHash.substring(0, 16)}...
-              </Text>
-            </View>
-          )}
+          <View style={styles.actionsRow}>
+            {item.type === 'Text' && (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => onCopy(item)}
+                hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+              >
+                <View style={{ transform: [{ scale: 0.6 }] }}>
+                  <Copy color={theme.colors.primary} />
+                </View>
+              </TouchableOpacity>
+            )}
+            {item.type === 'Image' && (
+              <>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => onShare(item)}
+                  hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                >
+                  <View style={{ transform: [{ scale: 0.6 }] }}>
+                    <Share color={theme.colors.primary} />
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => onCopy(item)}
+                  hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                >
+                  <View style={{ transform: [{ scale: 0.6 }] }}>
+                    <Copy color={theme.colors.primary} />
+                  </View>
+                </TouchableOpacity>
+              </>
+            )}
+            {(item.type === 'File' || item.type === 'Group') && (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => onShare(item)}
+                hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+              >
+                <View style={{ transform: [{ scale: 0.6 }] }}>
+                  <Share color={theme.colors.primary} />
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
-        {/* 右侧箭头 */}
-        <View style={styles.arrowContainer}>
-          <Text style={[styles.arrow, { color: theme.colors.textTertiary }]}>›</Text>
-        </View>
+        {/* 调试信息：profileHash */}
+        {isDebugMode && item.profileHash && (
+          <View style={styles.debugRow}>
+            <Text style={[styles.debugLabel, { color: theme.colors.textTertiary }]}>Hash:</Text>
+            <Text style={[styles.debugValue, { color: theme.colors.textSecondary }]}>
+              {item.profileHash.substring(0, 16)}...
+            </Text>
+          </View>
+        )}
       </View>
     </TouchableHighlight>
   );
@@ -179,7 +237,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   container: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     padding: 12,
     borderRadius: 12,
     shadowOffset: { width: 0, height: 1 },
@@ -187,13 +245,39 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
+  topContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  bottomContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
   iconContainer: {
-    width: 40,
+    width: 24,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 6,
+    overflow: 'hidden',
   },
   typeIcon: {
-    fontSize: 24,
+    fontSize: 13,
+  },
+  imagePreviewContainer: {
+    marginTop: 8,
+    marginBottom: 4,
+    borderRadius: 8,
+    overflow: 'hidden',
+    alignSelf: 'stretch',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 180,
+    resizeMode: 'cover',
   },
   contentContainer: {
     flex: 1,
@@ -217,7 +301,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 4,
   },
-  metaRow: {
+
+  metaInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -232,14 +317,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
-  arrowContainer: {
-    width: 20,
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  actionButton: {
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 14,
   },
-  arrow: {
-    fontSize: 24,
-    fontWeight: '300',
+  actionButtonIcon: {
+    fontSize: 14,
   },
   debugRow: {
     flexDirection: 'row',

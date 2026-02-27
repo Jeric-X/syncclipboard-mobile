@@ -15,6 +15,7 @@ import {
   Platform,
   Modal,
   Pressable,
+  Share,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useTheme } from '@/hooks/useTheme';
@@ -174,6 +175,36 @@ export function HistoryScreen() {
     ]);
   }, [clearHistory, showMessage]);
 
+  // 分享项目
+  const handleShare = useCallback(
+    async (item: ClipboardItem) => {
+      try {
+        if (item.type === 'Text' && item.text) {
+          await Share.share({
+            message: item.text,
+            title: '分享文本',
+          });
+        } else if (item.type === 'Image' && item.fileUri) {
+          await Share.share({
+            url: item.fileUri,
+            title: '分享图片',
+          });
+        } else if ((item.type === 'File' || item.type === 'Group') && item.fileUri) {
+          await Share.share({
+            url: item.fileUri,
+            title: '分享文件',
+          });
+        } else {
+          showMessage('暂不支持分享此类型的内容', 'info');
+        }
+      } catch (error) {
+        console.error('[HistoryScreen] Failed to share:', error);
+        showMessage('分享失败', 'error');
+      }
+    },
+    [showMessage]
+  );
+
   // 加载更多（防止重复加载和越界）
   const handleEndReached = useCallback(() => {
     if (isLoading) return;
@@ -189,9 +220,14 @@ export function HistoryScreen() {
   // 渲染列表项
   const renderItem = useCallback(
     ({ item }: { item: ClipboardItem }) => (
-      <HistoryListItem item={item} onPress={handleItemPress} onLongPress={handleItemLongPress} />
+      <HistoryListItem
+        item={item}
+        onCopy={handleItemPress}
+        onShare={handleShare}
+        onLongPress={handleItemLongPress}
+      />
     ),
-    [handleItemPress, handleItemLongPress]
+    [handleItemPress, handleShare, handleItemLongPress]
   );
 
   // 渲染空状态

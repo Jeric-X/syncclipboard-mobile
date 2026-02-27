@@ -85,6 +85,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
           size: content.fileSize,
           timestamp: content.timestamp || Date.now(),
           synced: false,
+          fileUri: content.fileUri,
         };
         await useHistoryStore.getState().addItem(historyItem);
       }
@@ -116,6 +117,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
         size: content.fileSize,
         timestamp: content.timestamp || Date.now(),
         synced: false,
+        fileUri: content.fileUri,
       };
       await useHistoryStore.getState().addItem(historyItem);
     } catch (error) {
@@ -207,6 +209,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
         size: content.fileSize,
         timestamp: content.timestamp || Date.now(),
         synced: false,
+        fileUri: content.fileUri,
       };
       await useHistoryStore.getState().addItem(historyItem);
     });
