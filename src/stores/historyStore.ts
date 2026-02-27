@@ -133,21 +133,21 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
           page,
           pageSize
         );
-        set({
-          items: result.items,
+        set((state) => ({
+          items: page === 1 ? result.items : [...state.items, ...result.items],
           totalCount: result.total,
           currentPage: page,
           isLoading: false,
-        });
+        }));
       } else {
-        const items = await historyStorage.getItems(page, pageSize);
+        const newItems = await historyStorage.getItems(page, pageSize);
         const totalCount = await historyStorage.getCount();
-        set({
-          items,
+        set((state) => ({
+          items: page === 1 ? newItems : [...state.items, ...newItems],
           totalCount,
           currentPage: page,
           isLoading: false,
-        });
+        }));
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load history';
@@ -348,8 +348,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   },
 
   refresh: async () => {
-    const { currentPage } = get();
-    await get().loadItems(currentPage);
+    await get().loadItems(1);
   },
 
   reset: () => {

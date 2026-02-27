@@ -33,6 +33,7 @@ export const SettingsScreen = () => {
     setActiveServer,
     setAutoSync,
     setAutoDownloadMaxSize,
+    updateConfig,
   } = useSettingsStore();
 
   const [showServerModal, setShowServerModal] = useState(false);
@@ -41,6 +42,7 @@ export const SettingsScreen = () => {
 
   // 本地状态用于跟踪Switch的当前值，避免闪烁
   const [localAutoSyncEnabled, setLocalAutoSyncEnabled] = useState(config?.autoSync ?? false);
+  const [localDebugModeEnabled, setLocalDebugModeEnabled] = useState(config?.debugMode ?? false);
 
   // 加载配置
   useEffect(() => {
@@ -53,6 +55,11 @@ export const SettingsScreen = () => {
   useEffect(() => {
     setLocalAutoSyncEnabled(config?.autoSync ?? false);
   }, [config?.autoSync]);
+
+  // 当配置中的debugMode值变化时，更新本地状态
+  useEffect(() => {
+    setLocalDebugModeEnabled(config?.debugMode ?? false);
+  }, [config?.debugMode]);
 
   const themeOptions: { label: string; value: ThemeMode }[] = [
     { label: '跟随系统', value: 'auto' },
@@ -150,6 +157,21 @@ export const SettingsScreen = () => {
       showMessage(`已设置最大文件大小为 ${sizeMB}MB`, 'success');
     } catch (error: unknown) {
       setMaxSizeInput(autoDownloadMaxSizeMB.toString());
+      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+    }
+  };
+
+  // 处理切换调试模式
+  const handleToggleDebugMode = async (enabled: boolean) => {
+    // 立即更新本地状态，避免闪烁
+    setLocalDebugModeEnabled(enabled);
+
+    try {
+      await updateConfig({ debugMode: enabled });
+      showMessage(enabled ? '已启用调试模式' : '已禁用调试模式', 'success');
+    } catch (error: unknown) {
+      // 如果设置失败，恢复原来的状态
+      setLocalDebugModeEnabled(!enabled);
       showMessage(error instanceof Error ? error.message : '设置失败', 'error');
     }
   };
@@ -298,13 +320,27 @@ export const SettingsScreen = () => {
               </Text>
             </View>
 
-            <View style={styles.infoRow}>
+            <View style={[styles.infoRow, { borderBottomColor: theme.colors.divider }]}>
               <Text style={[styles.infoLabel, { color: theme.colors.textSecondary }]}>
                 服务器数量
               </Text>
               <Text style={[styles.infoValue, { color: theme.colors.text }]}>
                 {servers.length} 个
               </Text>
+            </View>
+
+            <View style={[styles.settingRow, styles.settingRowNoBorder]}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>调试模式</Text>
+              </View>
+              <Switch
+                value={localDebugModeEnabled}
+                onValueChange={handleToggleDebugMode}
+                trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
+                thumbColor={
+                  localDebugModeEnabled ? theme.colors.surface : theme.colors.textTertiary
+                }
+              />
             </View>
           </View>
         </View>
@@ -474,5 +510,8 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 40,
+  },
+  settingRowNoBorder: {
+    borderBottomWidth: 0,
   },
 });

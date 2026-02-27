@@ -9,6 +9,7 @@ import * as Sharing from 'expo-sharing';
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardContent } from '@/types/clipboard';
 import { clipboardManager } from '@/services';
+import { useSettingsStore } from '@/stores';
 
 interface CurrentClipboardCardProps {
   clipboard: ClipboardContent | null;
@@ -28,6 +29,8 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   onCopy,
 }) => {
   const { theme } = useTheme();
+  const { config } = useSettingsStore();
+  const isDebugMode = config?.debugMode ?? false;
   const [, setUpdateTrigger] = useState(0);
 
   // 监控 clipboard 变化并强制更新
@@ -413,7 +416,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
       </View>
 
       {/* Hash 信息 */}
-      {clipboard.profileHash && (
+      {isDebugMode && clipboard.profileHash && (
         <View style={[styles.footer, { borderTopColor: theme.colors.divider }]}>
           <Text style={[styles.hashLabel, { color: theme.colors.textTertiary }]}>
             Hash: {clipboard.profileHash.substring(0, 16)}...

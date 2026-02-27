@@ -49,15 +49,12 @@ export function HistoryScreen() {
   // 搜索防抖（含初始加载）
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (searchText) {
-        searchItems({ keyword: searchText });
-      } else {
-        loadItems();
-      }
+      // 统一使用 searchItems：有关键词时过滤，无关键词时传 undefined 以清除旧 filter 并加载全部
+      searchItems(searchText ? { keyword: searchText } : undefined);
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchText, searchItems, loadItems]);
+  }, [searchText, searchItems]);
 
   // 过滤数据
   const filteredItems = useMemo(() => {

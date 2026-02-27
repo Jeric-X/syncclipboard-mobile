@@ -79,8 +79,10 @@ export class HistoryStorage {
       await this.initialize();
     }
 
-    // 检查是否已存在相同 hash 的记录
-    const existingIndex = this.history.findIndex((h) => h.profileHash === item.profileHash);
+    // 检查是否已存在相同 hash 的记录（不区分大小写）
+    const existingIndex = this.history.findIndex(
+      (h) => h.profileHash.toLowerCase() === item.profileHash.toLowerCase()
+    );
 
     if (existingIndex >= 0) {
       // 更新现有记录
@@ -113,7 +115,10 @@ export class HistoryStorage {
       await this.initialize();
     }
 
-    return this.history.find((item) => item.profileHash === profileHash) || null;
+    return (
+      this.history.find((item) => item.profileHash.toLowerCase() === profileHash.toLowerCase()) ||
+      null
+    );
   }
 
   /**
@@ -238,7 +243,9 @@ export class HistoryStorage {
       await this.initialize();
     }
 
-    const index = this.history.findIndex((item) => item.profileHash === profileHash);
+    const index = this.history.findIndex(
+      (item) => item.profileHash.toLowerCase() === profileHash.toLowerCase()
+    );
 
     if (index >= 0) {
       this.history[index] = { ...this.history[index], ...updates };
@@ -256,7 +263,9 @@ export class HistoryStorage {
       await this.initialize();
     }
 
-    const index = this.history.findIndex((item) => item.profileHash === profileHash);
+    const index = this.history.findIndex(
+      (item) => item.profileHash.toLowerCase() === profileHash.toLowerCase()
+    );
 
     if (index >= 0) {
       this.history.splice(index, 1);
@@ -272,7 +281,9 @@ export class HistoryStorage {
       await this.initialize();
     }
 
-    this.history = this.history.filter((item) => !profileHashes.includes(item.profileHash));
+    this.history = this.history.filter(
+      (item) => !profileHashes.some((hash) => hash.toLowerCase() === item.profileHash.toLowerCase())
+    );
     await this.saveHistory();
   }
 
@@ -284,7 +295,9 @@ export class HistoryStorage {
       await this.initialize();
     }
 
-    const index = this.history.findIndex((item) => item.profileHash === profileHash);
+    const index = this.history.findIndex(
+      (item) => item.profileHash.toLowerCase() === profileHash.toLowerCase()
+    );
 
     if (index >= 0) {
       const item = this.history[index];
@@ -304,7 +317,9 @@ export class HistoryStorage {
       await this.initialize();
     }
 
-    const index = this.history.findIndex((item) => item.profileHash === profileHash);
+    const index = this.history.findIndex(
+      (item) => item.profileHash.toLowerCase() === profileHash.toLowerCase()
+    );
 
     if (index >= 0) {
       const item = this.history[index];

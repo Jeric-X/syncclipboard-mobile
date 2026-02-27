@@ -57,6 +57,9 @@ export interface AppConfig {
 
   /** 自动下载最大文件大小（字节），默认 5MB */
   autoDownloadMaxSize: number;
+
+  /** 调试模式 */
+  debugMode: boolean;
 }
 
 /**
@@ -202,6 +205,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   syncOnStartup: true,
   autoSync: false,
   autoDownloadMaxSize: 5 * 1024 * 1024, // 5MB
+  debugMode: false,
 };
 
 /**

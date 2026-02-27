@@ -7,6 +7,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableHighlight } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardItem } from '@/types/clipboard';
+import { useSettingsStore } from '@/stores';
 
 interface HistoryListItemProps {
   item: ClipboardItem;
@@ -16,6 +17,8 @@ interface HistoryListItemProps {
 
 export const HistoryListItem: React.FC<HistoryListItemProps> = ({ item, onPress, onLongPress }) => {
   const { theme } = useTheme();
+  const { config } = useSettingsStore();
+  const isDebugMode = config?.debugMode ?? false;
 
   const getTypeIcon = (type: string): string => {
     switch (type) {
@@ -148,6 +151,16 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({ item, onPress,
               </View>
             )}
           </View>
+
+          {/* 调试信息：profileHash */}
+          {isDebugMode && item.profileHash && (
+            <View style={styles.debugRow}>
+              <Text style={[styles.debugLabel, { color: theme.colors.textTertiary }]}>Hash:</Text>
+              <Text style={[styles.debugValue, { color: theme.colors.textSecondary }]}>
+                {item.profileHash.substring(0, 16)}...
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* 右侧箭头 */}
@@ -227,5 +240,19 @@ const styles = StyleSheet.create({
   arrow: {
     fontSize: 24,
     fontWeight: '300',
+  },
+  debugRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
+  },
+  debugLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  debugValue: {
+    fontSize: 11,
+    fontFamily: 'monospace',
   },
 });

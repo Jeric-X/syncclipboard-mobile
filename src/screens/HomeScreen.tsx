@@ -116,10 +116,14 @@ export function HomeScreen() {
         // 计算 localClipboardHash 并更新历史记录
         try {
           // 使用 clipboardManager.getClipboardContent 重新获取剪贴板内容
-          const { clipboardManager } = await import('@/services');
-          const clipboardContent = await clipboardManager.getClipboardContent();
+          const { clipboardManager, clipboardMonitor } = await import('@/services');
+          let clipboardContent = await clipboardManager.getClipboardContent();
 
-          if (clipboardContent && clipboardContent.localClipboardHash) {
+          if (
+            clipboardContent &&
+            clipboardContent.type === 'Image' &&
+            clipboardContent.localClipboardHash
+          ) {
             console.log(
               `[HomeScreen] ${logPrefix}Got localClipboardHash from clipboard:`,
               clipboardContent.localClipboardHash.substring(0, 16) + '...'
@@ -135,6 +139,9 @@ export function HomeScreen() {
               await historyStorage.updateItem(content.profileHash!, updatedHistoryItem);
               console.log(`[HomeScreen] ${logPrefix}Updated localClipboardHash in history`);
             }
+
+            // @ts-ignore - 访问私有属性
+            clipboardMonitor.lastContent = clipboardContent;
           }
         } catch (hashError) {
           console.error(`[HomeScreen] ${logPrefix}Failed to update localClipboardHash:`, hashError);
