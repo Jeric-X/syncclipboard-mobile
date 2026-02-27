@@ -117,6 +117,17 @@ export class HistoryStorage {
   }
 
   /**
+   * 根据 localClipboardHash 获取历史记录
+   */
+  public async getItemByLocalHash(localClipboardHash: string): Promise<ClipboardItem | null> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+
+    return this.history.find((item) => item.localClipboardHash === localClipboardHash) || null;
+  }
+
+  /**
    * 获取所有历史记录
    */
   public async getAllItems(): Promise<ClipboardItem[]> {

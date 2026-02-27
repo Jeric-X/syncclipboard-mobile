@@ -9,6 +9,7 @@ import * as FileSystem from 'expo-file-system';
 import { Paths, Directory } from 'expo-file-system';
 import { ClipboardContent } from '@/types';
 import { calculateTextHash, calculateBase64Hash, calculateBase64ContentHash } from '@/utils/hash';
+import { historyStorage } from './HistoryStorage';
 
 // 临时剪贴板图片存储目录
 const CLIPBOARD_TEMP_DIR = new Directory(Paths.cache, 'clipboard_images');
@@ -102,6 +103,63 @@ export class ClipboardManager {
       // 步骤1: 计算本地变化检测用的 hash（快速比较）
       const localClipboardHash = await calculateBase64Hash(base64String);
 
+      // 步骤2: 根据 localClipboardHash 查询历史记录
+      let historyItem = await historyStorage.getItemByLocalHash(localClipboardHash);
+
+      let fileUri: string;
+      let fileSize: number | undefined;
+      let fileHash: string;
+      let fileHashName: string;
+      let profileHash: string;
+
+      if (historyItem && historyItem.hasData && historyItem.dataName) {
+        // console.log('[ClipboardManager] Found image in history:', {
+        //   localClipboardHash: localClipboardHash.substring(0, 16) + '...',
+        //   dataName: historyItem.dataName,
+        // });
+
+        // 从历史记录中获取文件路径
+        const { getHistoryFileUri } = await import('@/utils/fileStorage');
+        const historyFileUri = await getHistoryFileUri(
+          'Image',
+          historyItem.profileHash,
+          historyItem.dataName
+        );
+
+        if (historyFileUri) {
+          // console.log('[ClipboardManager] Using history file:', historyFileUri);
+          // 使用历史记录中的文件
+          const { File } = FileSystem;
+          const historyFile = new File(historyFileUri);
+
+          if (historyFile.exists) {
+            fileUri = historyFile.uri;
+            fileSize = historyFile.size;
+            fileHashName = historyItem.dataName;
+
+            // 读取文件计算正确的 fileHash（文件二进制内容的 SHA256）
+            const savedBase64 = await historyFile.base64();
+            fileHash = await calculateBase64ContentHash(savedBase64);
+
+            // 步骤3: 根据服务器规则计算 profileHash = SHA256(fileName + "|" + fileHash.ToUpper())
+            const combinedString = `${fileHashName}|${fileHash.toUpperCase()}`;
+            profileHash = await calculateTextHash(combinedString);
+
+            return {
+              type: 'Image',
+              text: '[图片]',
+              fileUri: fileUri,
+              fileName: fileHashName,
+              fileSize,
+              profileHash, // 用于服务器上传
+              localClipboardHash, // 用于本地变化检测
+              timestamp,
+            };
+          }
+        }
+      }
+
+      // 历史记录中没有找到，继续处理
       // 将 base64 转换为二进制数据用于保存文件
       const binaryString = atob(base64String);
       const len = binaryString.length;
@@ -119,12 +177,6 @@ export class ClipboardManager {
       }
 
       const tempFile = new File(CLIPBOARD_TEMP_DIR, tempFileName);
-
-      let fileUri: string;
-      let fileSize: number | undefined;
-      let fileHash: string;
-      let fileHashName: string;
-      let profileHash: string;
 
       // 检查文件是否已存在
       if (tempFile.exists) {
@@ -174,7 +226,7 @@ export class ClipboardManager {
       return {
         type: 'Image',
         text: '[图片]',
-        imageUri: fileUri,
+        fileUri: fileUri,
         fileName: fileHashName,
         fileSize,
         profileHash, // 用于服务器上传
@@ -193,7 +245,10 @@ export class ClipboardManager {
   async setTextContent(text: string): Promise<void> {
     try {
       await Clipboard.setStringAsync(text);
-      this.lastProfileHash = await calculateTextHash(text);
+
+      // 计算并更新 localClipboardHash（用于本地变化检测）
+      const localClipboardHash = await calculateTextHash(text);
+      this.lastProfileHash = localClipboardHash;
     } catch (error) {
       console.error('[ClipboardManager] Failed to set text content:', error);
       throw new Error('Failed to set text to clipboard');
@@ -213,7 +268,10 @@ export class ClipboardManager {
 
       // 直接传递纯 base64 字符串（Clipboard.setImageAsync 不需要 data URI 前缀）
       await Clipboard.setImageAsync(base64);
-      this.lastProfileHash = await calculateTextHash(imageUri);
+
+      // 计算并更新 localClipboardHash（用于本地变化检测）
+      const localClipboardHash = await calculateBase64Hash(base64);
+      this.lastProfileHash = localClipboardHash;
     } catch (error) {
       console.error('[ClipboardManager] Failed to set image content:', error);
       throw new Error('Failed to set image to clipboard');
@@ -232,8 +290,8 @@ export class ClipboardManager {
         break;
 
       case 'Image':
-        if (content.imageUri) {
-          await this.setImageContent(content.imageUri);
+        if (content.fileUri) {
+          await this.setImageContent(content.fileUri);
         }
         break;
 
@@ -328,7 +386,7 @@ export class ClipboardManager {
       return {
         type: 'Image',
         text: '[图片]',
-        imageUri: asset.uri,
+        fileUri: asset.uri,
         fileSize: asset.fileSize,
         profileHash,
       };
@@ -365,7 +423,7 @@ export class ClipboardManager {
       return {
         type: 'Image',
         text: '[图片]',
-        imageUri: asset.uri,
+        fileUri: asset.uri,
         fileSize: asset.fileSize,
         profileHash,
       };

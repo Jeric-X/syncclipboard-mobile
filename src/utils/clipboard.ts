@@ -190,7 +190,7 @@ export function validateClipboardContent(content: ClipboardContent): boolean {
       return typeof content.text === 'string' && content.text.length > 0;
 
     case 'Image':
-      return Boolean(content.imageUri || content.fileName);
+      return Boolean(content.fileUri || content.fileName);
 
     case 'File':
     case 'Group':

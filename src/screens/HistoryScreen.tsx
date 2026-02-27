@@ -272,7 +272,6 @@ export function HistoryScreen() {
         data={filteredItems}
         renderItem={renderItem}
         keyExtractor={(item) => item.profileHash}
-        estimatedItemSize={72}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         ListEmptyComponent={renderEmptyComponent}

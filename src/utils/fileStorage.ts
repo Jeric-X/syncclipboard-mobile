@@ -11,10 +11,13 @@ import { Paths, File, Directory } from 'expo-file-system';
  * clipboards/
  *   images/     - 图片文件
  *   files/      - 普通文件
+ * history/      - 历史记录文件
+ *   {Type}-{profileHash}/  - 按类型和profileHash组织的历史文件
  */
 const BASE_DIR = new Directory(Paths.document, 'clipboards');
 const IMAGE_DIR = new Directory(BASE_DIR, 'images');
 const FILE_DIR = new Directory(BASE_DIR, 'files');
+const HISTORY_BASE_DIR = new Directory(BASE_DIR, 'history');
 
 /**
  * 初始化文件存储目录
@@ -31,14 +34,122 @@ export async function initFileStorage(): Promise<void> {
     if (!FILE_DIR.exists) {
       FILE_DIR.create();
     }
+    if (!HISTORY_BASE_DIR.exists) {
+      HISTORY_BASE_DIR.create();
+    }
 
-    console.log('[FileStorage] Initialized directories:', {
-      base: BASE_DIR.uri,
-      images: IMAGE_DIR.uri,
-      files: FILE_DIR.uri,
-    });
+    // console.log('[FileStorage] Initialized directories:', {
+    //   base: BASE_DIR.uri,
+    //   images: IMAGE_DIR.uri,
+    //   files: FILE_DIR.uri,
+    //   history: HISTORY_BASE_DIR.uri,
+    // });
   } catch (error) {
     console.error('[FileStorage] Failed to initialize directories:', error);
+    throw error;
+  }
+}
+
+/**
+ * 获取历史记录文件目录
+ * @param type 文件类型
+ * @param profileHash profileHash值
+ * @returns 目录对象
+ */
+export function getHistoryFileDir(type: string, profileHash: string): Directory {
+  return new Directory(HISTORY_BASE_DIR, `${type}-${profileHash}`);
+}
+
+/**
+ * 保存历史记录文件
+ * @param type 文件类型
+ * @param profileHash profileHash值
+ * @param fileName 文件名（使用dto中的dateName）
+ * @param data 文件数据
+ * @returns 文件URI
+ */
+export async function saveHistoryFile(
+  type: string,
+  profileHash: string,
+  fileName: string,
+  data: ArrayBuffer
+): Promise<string> {
+  try {
+    // 确保基础目录存在
+    await initFileStorage();
+
+    // 获取历史文件目录
+    const historyDir = getHistoryFileDir(type, profileHash);
+
+    // 创建历史文件目录（如果不存在）
+    if (!historyDir.exists) {
+      historyDir.create();
+    }
+
+    // 创建文件
+    const file = new File(historyDir, fileName);
+
+    // 检查文件是否已存在
+    if (file.exists) {
+      console.log('[FileStorage] History file already exists:', file.uri);
+      return file.uri;
+    }
+
+    // 将 ArrayBuffer 转换为 Uint8Array
+    const uint8Array = new Uint8Array(data);
+
+    // 写入文件
+    file.write(uint8Array);
+
+    console.log('[FileStorage] History file saved:', file.uri);
+    return file.uri;
+  } catch (error) {
+    console.error('[FileStorage] Failed to save history file:', error);
+    throw error;
+  }
+}
+
+/**
+ * 获取历史记录文件URI
+ * @param type 文件类型
+ * @param profileHash profileHash值
+ * @param fileName 文件名
+ * @returns 文件URI，如果文件不存在返回 null
+ */
+export async function getHistoryFileUri(
+  type: string,
+  profileHash: string,
+  fileName: string
+): Promise<string | null> {
+  try {
+    // 确保基础目录存在
+    await initFileStorage();
+
+    const historyDir = getHistoryFileDir(type, profileHash);
+    const file = new File(historyDir, fileName);
+
+    return file.exists ? file.uri : null;
+  } catch (error) {
+    console.error('[FileStorage] Failed to get history file URI:', error);
+    return null;
+  }
+}
+
+/**
+ * 删除历史记录文件目录
+ * @param type 文件类型
+ * @param profileHash profileHash值
+ */
+export async function deleteHistoryFileDir(type: string, profileHash: string): Promise<void> {
+  try {
+    const historyDir = getHistoryFileDir(type, profileHash);
+
+    if (historyDir.exists) {
+      historyDir.delete();
+      console.log('[FileStorage] History file directory deleted:', historyDir.uri);
+    }
+  } catch (error) {
+    console.error('[FileStorage] Failed to delete history file directory:', error);
     throw error;
   }
 }

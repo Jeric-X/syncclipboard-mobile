@@ -4,16 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Platform,
-  Clipboard,
-  Share,
-  Image,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Share, Image } from 'react-native';
 import * as Sharing from 'expo-sharing';
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardContent } from '@/types/clipboard';
@@ -25,6 +16,7 @@ interface CurrentClipboardCardProps {
   onUpload?: () => void;
   onDownload?: () => void;
   downloading?: boolean;
+  onCopy?: (content: ClipboardContent) => Promise<void>;
 }
 
 export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
@@ -33,6 +25,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   onUpload,
   onDownload,
   downloading = false,
+  onCopy,
 }) => {
   const { theme } = useTheme();
   const [, setUpdateTrigger] = useState(0);
@@ -43,12 +36,12 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
       console.log('[CurrentClipboardCard] ✓ Received clipboard update:', {
         type: clipboard.type,
         contentHash: clipboard.localClipboardHash.substring(0, 8),
-        imageUri: clipboard.imageUri?.substring(clipboard.imageUri.lastIndexOf('/') + 1),
+        imageUri: clipboard.fileUri?.substring(clipboard.fileUri.lastIndexOf('/') + 1),
         timestamp: clipboard.timestamp,
       });
       setUpdateTrigger((prev) => prev + 1);
     }
-  }, [clipboard?.localClipboardHash, clipboard?.imageUri]);
+  }, [clipboard?.localClipboardHash, clipboard?.fileUri]);
 
   // 每 30 秒更新一次时间显示
   useEffect(() => {
@@ -59,12 +52,16 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // 复制到剪贴板
+  // 复制文本到剪贴板
   const handleCopy = async () => {
     if (!clipboard || clipboard.type !== 'Text' || !clipboard.text) return;
 
     try {
-      await Clipboard.setString(clipboard.text);
+      if (onCopy) {
+        await onCopy(clipboard);
+      } else {
+        await clipboardManager.setTextContent(clipboard.text);
+      }
       // Toast提示已移除，可以通过父组件处理
     } catch (error) {
       console.error('[CurrentClipboardCard] Failed to copy:', error);
@@ -73,10 +70,14 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
 
   // 复制图片到剪贴板
   const handleCopyImage = async () => {
-    if (!clipboard || clipboard.type !== 'Image' || !clipboard.imageUri) return;
+    if (!clipboard || clipboard.type !== 'Image' || !clipboard.fileUri) return;
 
     try {
-      await clipboardManager.setImageContent(clipboard.imageUri);
+      if (onCopy) {
+        await onCopy(clipboard);
+      } else {
+        await clipboardManager.setImageContent(clipboard.fileUri);
+      }
       // Toast提示已移除，可以通过父组件处理
     } catch (error) {
       console.error('[CurrentClipboardCard] Failed to copy image:', error);
@@ -91,11 +92,11 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
       if (clipboard.type === 'Text' && clipboard.text) {
         // 文本内容使用 React Native Share
         await Share.share({ message: clipboard.text });
-      } else if (clipboard.type === 'Image' && clipboard.imageUri) {
+      } else if (clipboard.type === 'Image' && clipboard.fileUri) {
         // 图片文件使用 expo-sharing 避免 file:// URI 问题
         const isAvailable = await Sharing.isAvailableAsync();
         if (isAvailable) {
-          await Sharing.shareAsync(clipboard.imageUri, {
+          await Sharing.shareAsync(clipboard.fileUri, {
             mimeType: 'image/*',
             dialogTitle: clipboard.fileName || '分享图片',
           });
@@ -201,9 +202,9 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
     // 文本类型不需要额外文件
     if (clipboard.type === 'Text') return false;
 
-    // 图片类型：有 fileName 但没有 imageUri 或 fileData
+    // 图片类型：有 fileName 但没有 fileUri 或 fileData
     if (clipboard.type === 'Image') {
-      return !!(clipboard.fileName && !clipboard.imageUri && !clipboard.fileData);
+      return !!(clipboard.fileName && !clipboard.fileUri && !clipboard.fileData);
     }
 
     // 文件类型：有 fileName 但没有 fileUri 或 fileData
@@ -220,8 +221,8 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   const canShowShareButton = (() => {
     if (!clipboard || clipboard.type === 'Text') return false;
 
-    // 图片类型：需要有 imageUri
-    if (clipboard.type === 'Image') return !!clipboard.imageUri;
+    // 图片类型：需要有 fileUri
+    if (clipboard.type === 'Image') return !!clipboard.fileUri;
     // 文件类型：需要有 fileUri
     if (clipboard.type === 'File') return !!clipboard.fileUri;
 
@@ -264,19 +265,19 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
 
         {clipboard.type === 'Image' && (
           <View style={styles.mediaPreview}>
-            {clipboard.imageUri ? (
+            {clipboard.fileUri ? (
               <>
                 <Image
                   key={`image-${clipboard.localClipboardHash?.substring(0, 12)}-${clipboard.timestamp}`}
                   source={{
-                    uri: `${clipboard.imageUri}?hash=${clipboard.localClipboardHash?.substring(0, 12) || clipboard.timestamp || Date.now()}`,
+                    uri: `${clipboard.fileUri}?hash=${clipboard.localClipboardHash?.substring(0, 12) || clipboard.timestamp || Date.now()}`,
                     cache: 'reload',
                   }}
                   style={styles.imagePreview}
                   resizeMode="contain"
                   onError={(error) => {
                     console.error('[CurrentClipboardCard] Image load error:', error.nativeEvent);
-                    console.error('[CurrentClipboardCard] Image URI:', clipboard.imageUri);
+                    console.error('[CurrentClipboardCard] File URI:', clipboard.fileUri);
                     console.error(
                       '[CurrentClipboardCard] Content Hash:',
                       clipboard.localClipboardHash?.substring(0, 8)
@@ -285,7 +286,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
                   onLoad={() => {
                     console.log(
                       '[CurrentClipboardCard] Image loaded successfully:',
-                      clipboard.imageUri,
+                      clipboard.fileUri,
                       'contentHash:',
                       clipboard.localClipboardHash?.substring(0, 8)
                     );
@@ -336,7 +337,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         )}
 
         {/* Image类型：复制按钮 */}
-        {clipboard.type === 'Image' && clipboard.imageUri && (
+        {clipboard.type === 'Image' && clipboard.fileUri && (
           <TouchableOpacity
             style={[
               styles.actionButton,

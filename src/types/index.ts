@@ -22,23 +22,6 @@ export interface ApiResponse<T = unknown> {
   message?: string;
 }
 
-// Clipboard Types
-export enum ClipboardType {
-  Text = 0,
-  Image = 1,
-  File = 2,
-  Group = 3,
-}
-
-export interface ClipboardItem {
-  id: string;
-  type: ClipboardType;
-  content: string;
-  hash: string;
-  timestamp: number;
-  deviceName?: string;
-}
-
 // Settings Types (keeping for backward compatibility)
 export interface ServerConfig {
   type: 'syncclipboard' | 'builtin' | 'webdav';

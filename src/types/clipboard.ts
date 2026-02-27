@@ -41,6 +41,9 @@ export interface ClipboardItem {
 
   /** 使用次数 */
   useCount?: number;
+
+  /** 本地剪贴板 hash（用于本地变化检测，基于 base64 内容） */
+  localClipboardHash?: string;
 }
 
 /**
@@ -52,9 +55,6 @@ export interface ClipboardContent {
 
   /** 文本内容 */
   text?: string;
-
-  /** 图片 URI（本地文件路径） */
-  imageUri?: string;
 
   /** 文件 URI（本地文件路径） */
   fileUri?: string;

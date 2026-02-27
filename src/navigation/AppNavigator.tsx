@@ -71,7 +71,13 @@ export const AppNavigator = () => {
               } else if (route.name === 'Settings') {
                 iconName = 'settings';
               }
-              return <Ionicons name={iconName} size={size} color={color} />;
+              return (
+                <Ionicons
+                  name={iconName as keyof typeof Ionicons.glyphMap}
+                  size={size}
+                  color={color}
+                />
+              );
             },
           })}
         >

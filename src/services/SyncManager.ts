@@ -317,7 +317,7 @@ export class SyncManager {
       console.log('[SyncManager] Upload - Content info:', {
         type: localContent.type,
         hasFileData: !!localContent.fileData,
-        imageUri: localContent.imageUri,
+
         fileUri: localContent.fileUri,
         fileSize: localContent.fileSize,
       });
@@ -327,7 +327,7 @@ export class SyncManager {
         console.log('[SyncManager] Preparing to upload file:', profile.dataName);
 
         // 优先使用文件 URI 直接上传（避免加载到内存）
-        const fileUri = localContent.imageUri || localContent.fileUri;
+        const fileUri = localContent.fileUri;
 
         if (fileUri) {
           console.log('[SyncManager] Uploading file from URI:', fileUri);
@@ -363,7 +363,7 @@ export class SyncManager {
           try {
             // 创建临时文件目录
             const baseDir = new FileSystem.Directory(FileSystem.Paths.cache, 'temp-uploads');
-            const tempFile = new FileSystem.File(baseDir, `${profile.profileHash}.tmp`);
+            const tempFile = new FileSystem.File(baseDir, `${profile.hash}.tmp`);
 
             // 确保目录存在
             if (!baseDir.exists) {
@@ -407,8 +407,8 @@ export class SyncManager {
         hasData: profile.hasData,
       };
 
-      if (profile.profileHash) {
-        cleanProfile.profileHash = profile.profileHash;
+      if (profile.hash) {
+        cleanProfile.hash = profile.hash;
       }
 
       if (profile.hasData && profile.dataName) {
@@ -473,7 +473,7 @@ export class SyncManager {
       } else if (hasResponse) {
         // 有response但没有statusCode（可能是Axios原始错误）
         const errorObj = error as Record<string, unknown>;
-        const response = errorObj.response;
+        const response = errorObj.response as Record<string, unknown> | undefined;
         console.error('[SyncManager] Server response body:', JSON.stringify(response, null, 2));
 
         if (response?.data) {
@@ -481,7 +481,8 @@ export class SyncManager {
             typeof response.data === 'string'
               ? response.data
               : JSON.stringify(response.data, null, 2);
-          errorMessage = `服务器返回错误 (HTTP ${response.status || 'unknown'}):\n\n${responseText}`;
+          const status = response.status as number | undefined;
+          errorMessage = `服务器返回错误 (HTTP ${status || 'unknown'}):\n\n${responseText}`;
         }
       }
 
@@ -525,7 +526,7 @@ export class SyncManager {
       // 获取远程剪贴板配置
       const profile = await this.apiClient.getClipboard();
 
-      if (!profile || !profile.profileHash) {
+      if (!profile || !profile.hash) {
         return {
           success: true,
           direction: SyncDirection.Download,
@@ -533,7 +534,7 @@ export class SyncManager {
         };
       }
 
-      const remoteProfileHash = profile.profileHash;
+      const remoteProfileHash = profile.hash;
 
       // 如果远程内容未变化，跳过下载（仅在自动同步时）
       if (
@@ -588,6 +589,15 @@ export class SyncManager {
         try {
           const fileData = await this.apiClient.getFile(profile.dataName);
           content.fileData = fileData;
+
+          // 保存到历史记录文件目录
+          const { saveHistoryFile } = await import('../utils/fileStorage');
+          content.fileUri = await saveHistoryFile(
+            profile.type,
+            profile.hash!,
+            profile.dataName,
+            fileData
+          );
         } catch (error) {
           console.warn('Failed to download file data:', error);
           // 继续处理，即使文件下载失败

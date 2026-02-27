@@ -2,7 +2,7 @@
  * Utility Functions
  */
 
-import { ClipboardType } from '../types';
+import { ClipboardContentType } from '../types/api';
 
 /**
  * Format timestamp to readable date string
@@ -15,12 +15,12 @@ export const formatDate = (timestamp: number): string => {
 /**
  * Get clipboard type display name
  */
-export const getClipboardTypeName = (type: ClipboardType): string => {
+export const getClipboardTypeName = (type: ClipboardContentType): string => {
   const typeNames = {
-    [ClipboardType.Text]: '文本',
-    [ClipboardType.Image]: '图片',
-    [ClipboardType.File]: '文件',
-    [ClipboardType.Group]: '文件组',
+    Text: '文本',
+    Image: '图片',
+    File: '文件',
+    Group: '文件组',
   };
   return typeNames[type] || '未知';
 };

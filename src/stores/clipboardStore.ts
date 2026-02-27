@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import { ClipboardContent } from '../types/clipboard';
+import { ClipboardContent, ClipboardItem } from '../types/clipboard';
 import { clipboardManager, clipboardMonitor } from '../services';
 import { useHistoryStore } from './historyStore';
 
@@ -76,7 +76,17 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
 
       // 添加到历史记录
       if (content) {
-        await useHistoryStore.getState().addItem(content);
+        const historyItem: ClipboardItem = {
+          type: content.type,
+          text: content.text || '',
+          profileHash: content.profileHash || '',
+          hasData: !!(content.fileName || content.fileUri),
+          dataName: content.fileName,
+          size: content.fileSize,
+          timestamp: content.timestamp || Date.now(),
+          synced: false,
+        };
+        await useHistoryStore.getState().addItem(historyItem);
       }
     } catch (error) {
       const errorMessage =
@@ -90,10 +100,24 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
 
     try {
       await clipboardManager.setClipboardContent(content);
+
+      console.log(
+        `[clipboardManager] new content set: type=${content.type}, text=${content.text?.substring(0, 20)}, profileHash=${content.profileHash?.substring(0, 8)}, timestamp=${content.timestamp}`
+      );
       set({ currentContent: content, isLoading: false });
 
       // 添加到历史记录
-      await useHistoryStore.getState().addItem(content);
+      const historyItem: ClipboardItem = {
+        type: content.type,
+        text: content.text || '',
+        profileHash: content.profileHash || '',
+        hasData: !!(content.fileName || content.fileUri),
+        dataName: content.fileName,
+        size: content.fileSize,
+        timestamp: content.timestamp || Date.now(),
+        synced: false,
+      };
+      await useHistoryStore.getState().addItem(historyItem);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to set clipboard content';
@@ -110,7 +134,17 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
         set({ currentContent: content, isLoading: false });
 
         // 添加到历史记录
-        await useHistoryStore.getState().addItem(content);
+        const historyItem: ClipboardItem = {
+          type: content.type,
+          text: content.text || '',
+          profileHash: content.profileHash || '',
+          hasData: !!(content.fileName || content.fileUri),
+          dataName: content.fileName,
+          size: content.fileSize,
+          timestamp: content.timestamp || Date.now(),
+          synced: false,
+        };
+        await useHistoryStore.getState().addItem(historyItem);
       } else {
         set({ isLoading: false });
       }
@@ -129,7 +163,17 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
         set({ currentContent: content, isLoading: false });
 
         // 添加到历史记录
-        await useHistoryStore.getState().addItem(content);
+        const historyItem: ClipboardItem = {
+          type: content.type,
+          text: content.text || '',
+          profileHash: content.profileHash || '',
+          hasData: !!(content.fileName || content.fileUri),
+          dataName: content.fileName,
+          size: content.fileSize,
+          timestamp: content.timestamp || Date.now(),
+          synced: false,
+        };
+        await useHistoryStore.getState().addItem(historyItem);
       } else {
         set({ isLoading: false });
       }
@@ -148,13 +192,23 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       console.log('[ClipboardStore] Clipboard content updated:', {
         type: content.type,
         localClipboardHash: content.localClipboardHash?.substring(0, 8),
-        imageUri: content.imageUri,
+
         timestamp: content.timestamp,
       });
       set({ currentContent: content });
 
       // 添加到历史记录
-      await useHistoryStore.getState().addItem(content);
+      const historyItem: ClipboardItem = {
+        type: content.type,
+        text: content.text || '',
+        profileHash: content.profileHash || '',
+        hasData: !!(content.fileName || content.fileUri),
+        dataName: content.fileName,
+        size: content.fileSize,
+        timestamp: content.timestamp || Date.now(),
+        synced: false,
+      };
+      await useHistoryStore.getState().addItem(historyItem);
     });
 
     clipboardMonitor.start();
