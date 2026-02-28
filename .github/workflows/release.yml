@@ -1,0 +1,71 @@
+name: Build Release APK
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x android/gradlew
+
+      - name: Build Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease
+
+      - name: Get version name
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: List APK files
+        run: |
+          echo "Built APK files:"
+          find android/app/build/outputs/apk -name "*.apk" -type f
+
+      - name: Rename APK files
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          cd android/app/build/outputs/apk/release
+          for apk in *.apk; do
+            if [[ "$apk" == *"universal"* ]]; then
+              new_name="syncclipboard-mobile-${VERSION}-universal-release.apk"
+            else
+              arch=$(echo "$apk" | sed -E 's/.*-([^-]+)-release\.apk/\1/')
+              new_name="syncclipboard-mobile-${VERSION}-${arch}-release.apk"
+            fi
+            mv "$apk" "$new_name"
+            echo "Renamed: $apk -> $new_name"
+          done
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk-${{ steps.version.outputs.version }}
+          path: android/app/build/outputs/apk/release/*.apk
