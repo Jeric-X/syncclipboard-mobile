@@ -3,7 +3,7 @@
  * 历史记录页面 - 显示剪贴板历史记录
  */
 
-import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -19,18 +19,23 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
+import { MoreVertical, Check } from 'react-native-feather';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '@/hooks/useTheme';
 import { useHistoryStore } from '@/stores/historyStore';
+import { useHistoryDisplaySettings } from '@/hooks/useHistoryDisplaySettings';
 import { ClipboardItem } from '@/types/clipboard';
 import { HistoryListItem } from '@/components/HistoryListItem';
 import { MessageToast } from '@/components/MessageToast';
 import { clipboardManager } from '@/services';
 import { useMessageToast } from '@/hooks/useMessageToast';
+import { copyClipboardItem } from '@/utils/clipboard';
 
 type FilterType = 'all' | 'Text' | 'Image' | 'File';
 
 export function HistoryScreen() {
+  const navigation = useNavigation();
   const { theme } = useTheme();
   const {
     items,
@@ -44,14 +49,37 @@ export function HistoryScreen() {
     lastAddedTimestamp,
   } = useHistoryStore();
 
+  const { showFullImage, setShowFullImage } = useHistoryDisplaySettings();
+
   const [searchText, setSearchText] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [selectedItem, setSelectedItem] = useState<ClipboardItem | null>(null);
   const [showActionSheet, setShowActionSheet] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const { message, showMessage, handleMessageShown } = useMessageToast();
 
   const listRef = useRef<FlashListRef<ClipboardItem>>(null);
   const isScrolledRef = useRef(false);
+
+  // 设置自定义 header
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={handleOpenMenu}
+          style={styles.headerButton}
+          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+        >
+          <MoreVertical color={theme.colors.text} width={20} height={20} />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, theme.colors.text]);
+
+  // 打开菜单
+  const handleOpenMenu = useCallback(() => {
+    setShowMenu(true);
+  }, []);
 
   // 搜索防抖（含初始加载）
   useEffect(() => {
@@ -68,7 +96,11 @@ export function HistoryScreen() {
     if (lastAddedTimestamp > 0 && !isScrolledRef.current) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          listRef.current?.scrollToOffset({ offset: 0, animated: true });
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              listRef.current?.scrollToOffset({ offset: 0, animated: true });
+            });
+          });
         });
       });
     }
@@ -91,21 +123,8 @@ export function HistoryScreen() {
   // 点击列表项 - 复制到剪贴板
   const handleItemPress = useCallback(
     async (item: ClipboardItem) => {
-      try {
-        if (item.type === 'Text' && item.text) {
-          await clipboardManager.setClipboardContent({
-            type: 'Text',
-            text: item.text,
-            profileHash: item.profileHash,
-          });
-          showMessage('已复制到剪贴板', 'success');
-        } else {
-          showMessage('暂不支持非文本类型的快速复制', 'info');
-        }
-      } catch (error) {
-        console.error('[HistoryScreen] Failed to copy:', error);
-        showMessage('复制失败', 'error');
-      }
+      const result = await copyClipboardItem(item, clipboardManager);
+      showMessage(result.message, result.success ? 'success' : 'info');
     },
     [showMessage]
   );
@@ -137,19 +156,8 @@ export function HistoryScreen() {
   // 复制项目
   const handleCopyItem = useCallback(
     async (item: ClipboardItem) => {
-      try {
-        if (item.type === 'Text' && item.text) {
-          await clipboardManager.setClipboardContent({
-            type: 'Text',
-            text: item.text,
-            profileHash: item.profileHash,
-          });
-          showMessage('已复制到剪贴板', 'success');
-        }
-      } catch (error) {
-        console.error('[HistoryScreen] Failed to copy:', error);
-        showMessage('复制失败', 'error');
-      }
+      const result = await copyClipboardItem(item, clipboardManager);
+      showMessage(result.message, result.success ? 'success' : 'error');
       setShowActionSheet(false);
     },
     [showMessage]
@@ -240,6 +248,12 @@ export function HistoryScreen() {
     setFilterType(type);
   }, []);
 
+  // 切换完整图片显示
+  const handleToggleFullImage = useCallback(async () => {
+    await setShowFullImage(!showFullImage);
+    setShowMenu(false);
+  }, [showFullImage, setShowFullImage]);
+
   // 渲染列表项
   const renderItem = useCallback(
     ({ item }: { item: ClipboardItem }) => (
@@ -248,9 +262,10 @@ export function HistoryScreen() {
         onCopy={handleItemPress}
         onShare={handleShare}
         onLongPress={handleItemLongPress}
+        showFullImage={showFullImage}
       />
     ),
-    [handleItemPress, handleShare, handleItemLongPress]
+    [handleItemPress, handleShare, handleItemLongPress, showFullImage]
   );
 
   // 渲染空状态
@@ -336,6 +351,32 @@ export function HistoryScreen() {
         contentContainerStyle={styles.listContent}
       />
 
+      {/* 悬浮菜单 */}
+      {showMenu && (
+        <Modal
+          visible={showMenu}
+          transparent
+          animationType="none"
+          onRequestClose={() => setShowMenu(false)}
+        >
+          <Pressable style={styles.fullScreenOverlay} onPress={() => setShowMenu(false)}>
+            <View
+              style={[
+                styles.floatingMenu,
+                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+              ]}
+            >
+              <TouchableOpacity style={styles.menuItem} onPress={handleToggleFullImage}>
+                <Text style={[styles.menuItemText, { color: theme.colors.text }]}>
+                  展示完整图片
+                </Text>
+                {showFullImage && <Check color={theme.colors.primary} width={18} height={18} />}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Modal>
+      )}
+
       {/* Android 操作菜单 Modal */}
       {Platform.OS === 'android' && (
         <Modal
@@ -415,6 +456,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
+  headerButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   filterContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
@@ -461,10 +508,36 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: 'center',
   },
-  // Android Modal 样式
+  // Modal 样式
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
+  },
+  fullScreenOverlay: {
+    flex: 1,
+  },
+  floatingMenu: {
+    position: 'absolute',
+    top: 60,
+    right: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+    minWidth: 180,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  menuItemText: {
+    fontSize: 15,
+    fontWeight: '500',
   },
   actionSheet: {
     borderTopLeftRadius: 16,

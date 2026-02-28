@@ -209,7 +209,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   autoSync: false,
   autoDownloadMaxSize: 5 * 1024 * 1024, // 5MB
   debugMode: false,
-  maxHistoryItems: 1000, // 默认1000条
+  maxHistoryItems: 1000, // 默认 1000 条
 };
 
 /**

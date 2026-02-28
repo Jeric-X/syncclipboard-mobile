@@ -200,3 +200,51 @@ export function validateClipboardContent(content: ClipboardContent): boolean {
       return false;
   }
 }
+
+/**
+ * 剪贴板项目复制结果
+ */
+export interface CopyResult {
+  success: boolean;
+  message: string;
+}
+
+/**
+ * 复制剪贴板项目到系统剪贴板
+ * @param item 剪贴板项目（可以是 ClipboardContent 或 ClipboardItem）
+ * @param clipboardManager 剪贴板管理器实例
+ * @returns 复制结果
+ */
+export async function copyClipboardItem(
+  item: {
+    type: string;
+    text?: string;
+    fileUri?: string;
+    profileHash?: string;
+  },
+  clipboardManager: {
+    setClipboardContent: (content: ClipboardContent) => Promise<void>;
+    setImageContent: (uri: string) => Promise<void>;
+  }
+): Promise<CopyResult> {
+  try {
+    if (item.type === 'Text' && item.text) {
+      await clipboardManager.setClipboardContent({
+        type: 'Text',
+        text: item.text,
+        profileHash: item.profileHash,
+      });
+      return { success: true, message: '已复制到剪贴板' };
+    }
+
+    if (item.type === 'Image' && item.fileUri) {
+      await clipboardManager.setImageContent(item.fileUri);
+      return { success: true, message: '图片已复制到剪贴板' };
+    }
+
+    return { success: false, message: '暂不支持此类型的快速复制' };
+  } catch (error) {
+    console.error('[copyClipboardItem] Failed to copy:', error);
+    return { success: false, message: '复制失败' };
+  }
+}

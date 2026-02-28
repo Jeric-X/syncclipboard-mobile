@@ -3,7 +3,7 @@
  * 历史记录列表项组件
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableHighlight, Image, TouchableOpacity } from 'react-native';
 import { Copy, Share } from 'react-native-feather';
 import { useTheme } from '@/hooks/useTheme';
@@ -15,6 +15,7 @@ interface HistoryListItemProps {
   onCopy: (item: ClipboardItem) => void;
   onShare: (item: ClipboardItem) => void;
   onLongPress: (item: ClipboardItem) => void;
+  showFullImage?: boolean;
 }
 
 export const HistoryListItem: React.FC<HistoryListItemProps> = ({
@@ -22,10 +23,15 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
   onCopy,
   onShare,
   onLongPress,
+  showFullImage = false,
 }) => {
   const { theme } = useTheme();
   const { config } = useSettingsStore();
   const isDebugMode = config?.debugMode ?? false;
+  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(
+    null
+  );
+  const [containerWidth, setContainerWidth] = useState<number>(0);
 
   const getTypeIcon = (type: string): string => {
     switch (type) {
@@ -142,8 +148,33 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
 
         {/* 图片预览 - 占据整个宽度 */}
         {item.type === 'Image' && item.fileUri && (
-          <View style={styles.imagePreviewContainer}>
-            <Image source={{ uri: item.fileUri }} style={styles.imagePreview} />
+          <View
+            style={styles.imagePreviewContainer}
+            onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+          >
+            {showFullImage ? (
+              <Image
+                source={{ uri: item.fileUri }}
+                style={[
+                  styles.imagePreview,
+                  imageDimensions &&
+                    containerWidth > 0 && {
+                      height: (containerWidth / imageDimensions.width) * imageDimensions.height,
+                    },
+                ]}
+                resizeMode="cover"
+                onLoad={(e) => {
+                  const { width, height } = e.nativeEvent.source;
+                  setImageDimensions({ width, height });
+                }}
+              />
+            ) : (
+              <Image
+                source={{ uri: item.fileUri }}
+                style={[styles.imagePreview, styles.imagePreviewLimited]}
+                resizeMode="cover"
+              />
+            )}
           </View>
         )}
 
@@ -296,8 +327,9 @@ const styles = StyleSheet.create({
   },
   imagePreview: {
     width: '100%',
+  },
+  imagePreviewLimited: {
     height: 180,
-    resizeMode: 'cover',
   },
   contentContainer: {
     flex: 1,

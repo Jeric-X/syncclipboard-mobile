@@ -162,6 +162,18 @@ export function HomeScreen() {
     }
   };
 
+  // 复制本地剪贴板内容（简单模式，直接设置到剪贴板）
+  const copyLocalToClipboard = async (content: ClipboardContent) => {
+    try {
+      const { clipboardManager } = await import('@/services');
+      await clipboardManager.setClipboardContent(content);
+      showMessage('已复制到剪贴板', 'success');
+    } catch (error) {
+      console.error('[HomeScreen] Failed to copy local content:', error);
+      showMessage('复制失败', 'error');
+    }
+  };
+
   // 处理远程剪贴板内容更新的公共逻辑
   const processRemoteClipboardContent = async (
     content: ClipboardContent,
@@ -776,13 +788,10 @@ export function HomeScreen() {
                   isRemote={true}
                   onDownload={handleDownloadRemoteFile}
                   downloading={downloadingRemote}
-                  onCopy={
-                    remoteContent
-                      ? async (content) => {
-                          await copyRemoteToLocal(content, 'Manual copy: ');
-                        }
-                      : undefined
-                  }
+                  onCopy={async (content) => {
+                    await copyRemoteToLocal(content, 'Manual copy: ');
+                    showMessage('已复制到剪贴板', 'success');
+                  }}
                 />
               )}
             </View>
@@ -796,6 +805,7 @@ export function HomeScreen() {
                 clipboard={currentContent}
                 isRemote={false}
                 onUpload={handleUpload}
+                onCopy={copyLocalToClipboard}
               />
 
               {/* 错误信息卡片 */}
@@ -837,7 +847,11 @@ export function HomeScreen() {
         ) : (
           <>
             {/* 未配置服务器时只显示本地剪贴板 */}
-            <CurrentClipboardCard clipboard={currentContent} isRemote={false} />
+            <CurrentClipboardCard
+              clipboard={currentContent}
+              isRemote={false}
+              onCopy={copyLocalToClipboard}
+            />
           </>
         )}
 

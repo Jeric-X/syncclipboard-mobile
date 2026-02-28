@@ -8,7 +8,6 @@ import { View, Text, StyleSheet, TouchableOpacity, Platform, Share, Image } from
 import * as Sharing from 'expo-sharing';
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardContent } from '@/types/clipboard';
-import { clipboardManager } from '@/services';
 import { useSettingsStore } from '@/stores';
 
 interface CurrentClipboardCardProps {
@@ -17,7 +16,7 @@ interface CurrentClipboardCardProps {
   onUpload?: () => void;
   onDownload?: () => void;
   downloading?: boolean;
-  onCopy?: (content: ClipboardContent) => Promise<void>;
+  onCopy: (content: ClipboardContent) => Promise<void>;
 }
 
 export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
@@ -54,38 +53,6 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
 
     return () => clearInterval(interval);
   }, []);
-
-  // 复制文本到剪贴板
-  const handleCopy = async () => {
-    if (!clipboard || clipboard.type !== 'Text' || !clipboard.text) return;
-
-    try {
-      if (onCopy) {
-        await onCopy(clipboard);
-      } else {
-        await clipboardManager.setTextContent(clipboard.text);
-      }
-      // Toast提示已移除，可以通过父组件处理
-    } catch (error) {
-      console.error('[CurrentClipboardCard] Failed to copy:', error);
-    }
-  };
-
-  // 复制图片到剪贴板
-  const handleCopyImage = async () => {
-    if (!clipboard || clipboard.type !== 'Image' || !clipboard.fileUri) return;
-
-    try {
-      if (onCopy) {
-        await onCopy(clipboard);
-      } else {
-        await clipboardManager.setImageContent(clipboard.fileUri);
-      }
-      // Toast提示已移除，可以通过父组件处理
-    } catch (error) {
-      console.error('[CurrentClipboardCard] Failed to copy image:', error);
-    }
-  };
 
   // 分享内容
   const handleShare = async () => {
@@ -325,7 +292,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
 
       {/* 按钮区域 */}
       <View style={styles.actionButtons}>
-        {/* Text类型：复制按钮 */}
+        {/* Text 类型：复制按钮 */}
         {clipboard.type === 'Text' && (
           <TouchableOpacity
             style={[
@@ -333,13 +300,13 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
               { backgroundColor: theme.colors.primary },
               !onUpload && !showDownloadButton && styles.actionButtonLast,
             ]}
-            onPress={handleCopy}
+            onPress={() => onCopy(clipboard)}
           >
             <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>复制</Text>
           </TouchableOpacity>
         )}
 
-        {/* Image类型：复制按钮 */}
+        {/* Image 类型：复制按钮 */}
         {clipboard.type === 'Image' && clipboard.fileUri && (
           <TouchableOpacity
             style={[
@@ -347,7 +314,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
               { backgroundColor: theme.colors.primary },
               !canShowShareButton && !onUpload && !showDownloadButton && styles.actionButtonLast,
             ]}
-            onPress={handleCopyImage}
+            onPress={() => onCopy(clipboard)}
           >
             <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>复制</Text>
           </TouchableOpacity>
