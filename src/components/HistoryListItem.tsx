@@ -115,12 +115,16 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
           </View>
 
           {/* 类型标签和时间 */}
-          <Text style={[styles.typeLabel, { color: theme.colors.primary, marginLeft: 8, marginRight: 8 }]}>
+          <Text
+            style={[styles.typeLabel, styles.typeLabelSpacing, { color: theme.colors.primary }]}
+          >
             {getTypeLabel(item.type)}
           </Text>
 
           {/* 时间戳 */}
-          <Text style={[styles.timestamp, { color: theme.colors.textSecondary, flex: 1, textAlign: 'right' }]}>
+          <Text
+            style={[styles.timestamp, styles.timestampAlign, { color: theme.colors.textSecondary }]}
+          >
             {formatTime(item.timestamp)}
           </Text>
         </View>
@@ -225,6 +229,22 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
             </Text>
           </View>
         )}
+
+        {/* 调试信息：fileUrl */}
+        {isDebugMode && item.fileUri && (
+          <View style={styles.debugRow}>
+            <Text style={[styles.debugLabel, { color: theme.colors.textTertiary }]}>URL:</Text>
+            <Text
+              style={[
+                styles.debugValue,
+                styles.debugValueFlex,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              {item.fileUri}
+            </Text>
+          </View>
+        )}
       </View>
     </TouchableHighlight>
   );
@@ -293,8 +313,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  typeLabelSpacing: {
+    marginLeft: 8,
+    marginRight: 8,
+  },
   timestamp: {
     fontSize: 12,
+  },
+  timestampAlign: {
+    flex: 1,
+    textAlign: 'right',
   },
   previewText: {
     fontSize: 15,
@@ -344,5 +372,8 @@ const styles = StyleSheet.create({
   debugValue: {
     fontSize: 11,
     fontFamily: 'monospace',
+  },
+  debugValueFlex: {
+    flex: 1,
   },
 });

@@ -46,11 +46,10 @@ export function HomeScreen() {
   const signalRConnected = useRef(false);
 
   const { currentContent, getContent, startMonitoring, stopMonitoring } = useClipboardStore();
-  const { stats, sync, initialize: initializeSync, destroy: destroySync } = useSyncStore();
+  const { sync, initialize: initializeSync, destroy: destroySync } = useSyncStore();
   const { getActiveServer, loadConfig, isLoaded, config } = useSettingsStore();
 
   const activeServer = getActiveServer();
-  const lastSyncTime = stats?.lastSyncTime || null;
 
   // 远程剪贴板轮询间隔（毫秒）
   const REMOTE_POLLING_INTERVAL = 3000; // 3秒
@@ -117,7 +116,7 @@ export function HomeScreen() {
         try {
           // 使用 clipboardManager.getClipboardContent 重新获取剪贴板内容
           const { clipboardManager, clipboardMonitor } = await import('@/services');
-          let clipboardContent = await clipboardManager.getClipboardContent();
+          let clipboardContent = await clipboardManager.getClipboardContent(false);
 
           if (
             clipboardContent &&
@@ -292,6 +291,7 @@ export function HomeScreen() {
               size: finalContent.fileSize,
               timestamp: finalContent.timestamp || Date.now(),
               synced: true,
+              fileUri: finalContent.fileUri,
             };
             await useHistoryStore.getState().addItem(historyItem);
             console.log(`[HomeScreen] ${logPrefix}Added remote clipboard to history`);
@@ -847,28 +847,6 @@ export function HomeScreen() {
             <Text style={[styles.emptyStateTitle, { color: theme.colors.text }]}>未配置服务器</Text>
             <Text style={[styles.emptyStateText, { color: theme.colors.textSecondary }]}>
               请在"设置"页面添加服务器配置以启用同步功能
-            </Text>
-          </View>
-        )}
-
-        {/* 最近同步信息 */}
-        {activeServer && lastSyncTime && (
-          <View style={[styles.infoCard, { backgroundColor: theme.colors.surface }]}>
-            <Text style={[styles.infoLabel, { color: theme.colors.textSecondary }]}>
-              当前服务器
-            </Text>
-            <Text style={[styles.infoValue, { color: theme.colors.text }]}>{activeServer.url}</Text>
-            <Text
-              style={[
-                styles.infoLabel,
-                styles.infoLabelSpaced,
-                { color: theme.colors.textSecondary },
-              ]}
-            >
-              最近同步
-            </Text>
-            <Text style={[styles.infoValue, { color: theme.colors.text }]}>
-              {new Date(lastSyncTime).toLocaleString('zh-CN')}
             </Text>
           </View>
         )}

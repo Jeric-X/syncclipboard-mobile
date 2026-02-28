@@ -263,7 +263,7 @@ export class SyncManager {
 
     try {
       // 获取本地剪贴板内容
-      const localContent = await this.clipboardManager.getClipboardContent();
+      const localContent = await this.clipboardManager.getClipboardContent(false);
 
       if (!localContent) {
         return {
@@ -488,7 +488,7 @@ export class SyncManager {
 
       // 如果启用离线队列且是网络错误，添加到队列
       if (this.config.enableOfflineQueue && this.isNetworkError(error)) {
-        const content = await this.clipboardManager.getClipboardContent();
+        const content = await this.clipboardManager.getClipboardContent(false);
         if (content) {
           const task: SyncTask = {
             id: `upload-${Date.now()}`,
@@ -551,7 +551,7 @@ export class SyncManager {
       }
 
       // 获取本地剪贴板内容（用于冲突检测）
-      const localContent = await this.clipboardManager.getClipboardContent();
+      const localContent = await this.clipboardManager.getClipboardContent(false);
 
       // 检测冲突
       if (localContent && localContent.profileHash) {

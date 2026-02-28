@@ -3,7 +3,7 @@
  * 历史记录页面 - 显示剪贴板历史记录
  */
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,8 +16,10 @@ import {
   Modal,
   Pressable,
   Share,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, FlashListRef } from '@shopify/flash-list';
 import { useTheme } from '@/hooks/useTheme';
 import { useHistoryStore } from '@/stores/historyStore';
 import { ClipboardItem } from '@/types/clipboard';
@@ -39,6 +41,7 @@ export function HistoryScreen() {
     deleteItem,
     clearHistory,
     currentPage,
+    lastAddedTimestamp,
   } = useHistoryStore();
 
   const [searchText, setSearchText] = useState('');
@@ -46,6 +49,9 @@ export function HistoryScreen() {
   const [selectedItem, setSelectedItem] = useState<ClipboardItem | null>(null);
   const [showActionSheet, setShowActionSheet] = useState(false);
   const { message, showMessage, handleMessageShown } = useMessageToast();
+
+  const listRef = useRef<FlashListRef<ClipboardItem>>(null);
+  const isScrolledRef = useRef(false);
 
   // 搜索防抖（含初始加载）
   useEffect(() => {
@@ -56,6 +62,23 @@ export function HistoryScreen() {
 
     return () => clearTimeout(timer);
   }, [searchText, searchItems]);
+
+  // 监听新项目添加，如果列表未滚动则滚动到顶部
+  useEffect(() => {
+    if (lastAddedTimestamp > 0 && !isScrolledRef.current) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          listRef.current?.scrollToOffset({ offset: 0, animated: true });
+        });
+      });
+    }
+  }, [lastAddedTimestamp]);
+
+  // 滚动事件处理
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    isScrolledRef.current = offsetY > 10;
+  }, []);
 
   // 过滤数据
   const filteredItems = useMemo(() => {
@@ -302,11 +325,13 @@ export function HistoryScreen() {
 
       {/* 历史记录列表 */}
       <FlashList
+        ref={listRef}
         data={filteredItems}
         renderItem={renderItem}
         keyExtractor={(item) => item.profileHash}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
+        onScroll={handleScroll}
         ListEmptyComponent={renderEmptyComponent}
         contentContainerStyle={styles.listContent}
       />

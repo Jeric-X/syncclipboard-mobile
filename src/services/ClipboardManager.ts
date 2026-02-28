@@ -12,7 +12,7 @@ import { calculateTextHash, calculateBase64Hash, calculateBase64ContentHash } fr
 import { historyStorage } from './HistoryStorage';
 
 // 临时剪贴板图片存储目录
-const CLIPBOARD_TEMP_DIR = new Directory(Paths.cache, 'clipboard_images');
+export const CLIPBOARD_TEMP_DIR = new Directory(Paths.cache, 'clipboard_images');
 
 /**
  * 剪贴板管理器类
@@ -22,13 +22,14 @@ export class ClipboardManager {
 
   /**
    * 获取当前剪贴板内容
+   * @param createTempFile 是否创建临时文件
    */
-  async getClipboardContent(): Promise<ClipboardContent | null> {
+  async getClipboardContent(createTempFile: boolean = true): Promise<ClipboardContent | null> {
     try {
       // 检查是否有图片
       const hasImage = await Clipboard.hasImageAsync();
       if (hasImage) {
-        return await this.getImageContent();
+        return await this.getImageContent(createTempFile);
       }
 
       // 检查是否有文本
@@ -63,8 +64,9 @@ export class ClipboardManager {
 
   /**
    * 获取图片内容
+   * @param createTempFile 是否创建临时文件
    */
-  private async getImageContent(): Promise<ClipboardContent> {
+  private async getImageContent(createTempFile: boolean): Promise<ClipboardContent> {
     try {
       // 使用 getImageAsync 获取图片数据
       const imageData = await Clipboard.getImageAsync({ format: 'png' });
@@ -168,55 +170,63 @@ export class ClipboardManager {
         bytes[i] = binaryString.charCodeAt(i);
       }
 
-      // 步骤2: 先用本地 hash 创建临时文件名
-      const tempFileName = `${localClipboardHash.substring(0, 16)}.png`;
+      if (createTempFile) {
+        // 步骤2: 先用本地 hash 创建临时文件名
+        const tempFileName = `${localClipboardHash.substring(0, 16)}.png`;
 
-      // 再次确保目录存在（写入前双重检查）
-      if (!CLIPBOARD_TEMP_DIR.exists) {
-        CLIPBOARD_TEMP_DIR.create();
-      }
+        // 再次确保目录存在（写入前双重检查）
+        if (!CLIPBOARD_TEMP_DIR.exists) {
+          CLIPBOARD_TEMP_DIR.create();
+        }
 
-      const tempFile = new File(CLIPBOARD_TEMP_DIR, tempFileName);
+        const tempFile = new File(CLIPBOARD_TEMP_DIR, tempFileName);
 
-      // 检查文件是否已存在
-      if (tempFile.exists) {
-        // 文件已存在，直接使用
-        fileUri = tempFile.uri;
-        fileSize = tempFile.size;
-
-        // 读取文件计算正确的 fileHash（文件二进制内容的 SHA256）
-        const savedBase64 = await tempFile.base64();
-        fileHash = await calculateBase64ContentHash(savedBase64);
-        fileHashName = `${fileHash.substring(0, 16)}.png`;
-      } else {
-        // 文件不存在，写入新文件
-        console.log('[ClipboardManager] Saving new image:', {
-          fileName: tempFileName,
-          binaryLength: bytes.length,
-        });
-
-        try {
-          // 写入二进制数据
-          tempFile.write(bytes);
+        // 检查文件是否已存在
+        if (tempFile.exists) {
+          // 文件已存在，直接使用
           fileUri = tempFile.uri;
           fileSize = tempFile.size;
 
-          // 保存后读回计算正确的 fileHash（用于服务器）
+          // 读取文件计算正确的 fileHash（文件二进制内容的 SHA256）
           const savedBase64 = await tempFile.base64();
           fileHash = await calculateBase64ContentHash(savedBase64);
           fileHashName = `${fileHash.substring(0, 16)}.png`;
-
-          console.log('[ClipboardManager] Image saved successfully:', {
-            fileHash: fileHash.substring(0, 16) + '...',
-            fileName: fileHashName,
-            size: fileSize,
+        } else {
+          // 文件不存在，写入新文件
+          console.log('[ClipboardManager] Saving new image:', {
+            fileName: tempFileName,
+            binaryLength: bytes.length,
           });
-        } catch (writeError) {
-          console.error('[ClipboardManager] Failed to write file:', writeError);
-          console.error('[ClipboardManager] File path:', tempFile.uri);
-          console.error('[ClipboardManager] Directory exists:', CLIPBOARD_TEMP_DIR.exists);
-          throw writeError;
+
+          try {
+            // 写入二进制数据
+            tempFile.write(bytes);
+            fileUri = tempFile.uri;
+            fileSize = tempFile.size;
+
+            // 保存后读回计算正确的 fileHash（用于服务器）
+            const savedBase64 = await tempFile.base64();
+            fileHash = await calculateBase64ContentHash(savedBase64);
+            fileHashName = `${fileHash.substring(0, 16)}.png`;
+
+            console.log('[ClipboardManager] Image saved successfully:', {
+              fileHash: fileHash.substring(0, 16) + '...',
+              fileName: fileHashName,
+              size: fileSize,
+            });
+          } catch (writeError) {
+            console.error('[ClipboardManager] Failed to write file:', writeError);
+            console.error('[ClipboardManager] File path:', tempFile.uri);
+            console.error('[ClipboardManager] Directory exists:', CLIPBOARD_TEMP_DIR.exists);
+            throw writeError;
+          }
         }
+      } else {
+        // 不创建临时文件，直接计算 hash
+        fileHash = await calculateBase64ContentHash(base64String);
+        fileHashName = `${fileHash.substring(0, 16)}.png`;
+        fileUri = '';
+        fileSize = bytes.length;
       }
 
       // 步骤3: 根据服务器规则计算 profileHash = SHA256(fileName + "|" + fileHash.ToUpper())

@@ -17,7 +17,7 @@ import { Paths, File, Directory } from 'expo-file-system';
 const BASE_DIR = new Directory(Paths.document, 'clipboards');
 const IMAGE_DIR = new Directory(BASE_DIR, 'images');
 const FILE_DIR = new Directory(BASE_DIR, 'files');
-const HISTORY_BASE_DIR = new Directory(BASE_DIR, 'history');
+export const HISTORY_BASE_DIR = new Directory(BASE_DIR, 'history');
 
 /**
  * 初始化文件存储目录
@@ -397,4 +397,67 @@ export async function downloadAndSaveFile(
 export function getFileExtension(fileName: string): string {
   const match = fileName.match(/\.[^.]+$/);
   return match ? match[0] : '';
+}
+
+/**
+ * 计算目录大小
+ * @param directory 目录对象
+ * @returns 目录大小（字节）
+ */
+export function calculateDirectorySize(directory: Directory): number {
+  try {
+    let totalSize = 0;
+
+    if (directory.exists) {
+      const entries = directory.list();
+
+      for (const entry of entries) {
+        try {
+          if (entry instanceof File) {
+            // 处理文件
+            const info = entry.info();
+            totalSize += info.size || 0;
+          } else if (entry instanceof Directory) {
+            // 处理目录
+            totalSize += calculateDirectorySize(entry);
+          }
+        } catch {
+          // 忽略单个文件/目录错误
+        }
+      }
+    }
+
+    return totalSize;
+  } catch (error) {
+    console.error('[FileStorage] Failed to calculate directory size:', error);
+    return 0;
+  }
+}
+
+/**
+ * 清空目录
+ * @param directory 目录对象
+ */
+export function clearDirectory(directory: Directory): void {
+  try {
+    if (directory.exists) {
+      const entries = directory.list();
+      for (const entry of entries) {
+        try {
+          if (entry instanceof File) {
+            // 处理文件
+            entry.delete();
+          } else if (entry instanceof Directory) {
+            // 处理目录
+            entry.delete();
+          }
+        } catch {
+          // 忽略单个文件/目录错误
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[FileStorage] Failed to clear directory:', error);
+    throw error;
+  }
 }

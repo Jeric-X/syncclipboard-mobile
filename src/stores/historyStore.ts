@@ -40,6 +40,9 @@ interface HistoryState {
   /** 选中的项目ID */
   selectedIds: Set<string>;
 
+  /** 最后添加项目的时间戳 */
+  lastAddedTimestamp: number;
+
   // 动作
   /** 加载历史记录 */
   loadItems: (page?: number) => Promise<void>;
@@ -112,6 +115,7 @@ const initialState = {
   isLoading: false,
   error: null,
   selectedIds: new Set<string>(),
+  lastAddedTimestamp: 0,
 };
 
 /**
@@ -178,6 +182,9 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
     try {
       await historyStorage.addItem(item);
+
+      // 更新最后添加时间戳
+      set({ lastAddedTimestamp: Date.now() });
 
       // 刷新当前页
       await get().refresh();
