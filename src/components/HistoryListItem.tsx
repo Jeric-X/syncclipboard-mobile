@@ -3,9 +3,11 @@
  * 历史记录列表项组件
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableHighlight, Image, TouchableOpacity } from 'react-native';
-import { Copy, Share } from 'react-native-feather';
+import { Copy, Share, Trash2 } from 'react-native-feather';
+import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+import Reanimated from 'react-native-reanimated';
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardItem } from '@/types/clipboard';
 import { useSettingsStore } from '@/stores';
@@ -15,6 +17,7 @@ interface HistoryListItemProps {
   onCopy: (item: ClipboardItem) => void;
   onShare: (item: ClipboardItem) => void;
   onLongPress: (item: ClipboardItem) => void;
+  onDelete?: (item: ClipboardItem) => void;
   showFullImage?: boolean;
 }
 
@@ -23,6 +26,7 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
   onCopy,
   onShare,
   onLongPress,
+  onDelete,
   showFullImage = false,
 }) => {
   const { theme } = useTheme();
@@ -32,6 +36,7 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
     null
   );
   const [containerWidth, setContainerWidth] = useState<number>(0);
+  const swipeableRef = useRef<React.ComponentRef<typeof Swipeable>>(null);
 
   const getTypeIcon = (type: string): string => {
     switch (type) {
@@ -111,125 +116,145 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
 
   const previewText = getPreviewText();
 
+  // 渲染右侧滑动操作（删除按钮）
+  const renderRightActions = () => {
+    if (!onDelete) return null;
+
+    return (
+      <Reanimated.View style={styles.swipeActionsContainer}>
+        <TouchableOpacity
+          style={[styles.deleteButton, { backgroundColor: theme.colors.error || '#F44336' }]}
+          onPress={() => {
+            swipeableRef.current?.close();
+            onDelete(item);
+          }}
+        >
+          <Trash2 color="#FFFFFF" width={20} height={20} />
+          <Text style={styles.deleteButtonText}>删除</Text>
+        </TouchableOpacity>
+      </Reanimated.View>
+    );
+  };
+
+  // 完全滑开时直接删除
+  const handleSwipeableWillOpen = () => {
+    if (onDelete) {
+      onDelete(item);
+    }
+  };
+
   return (
-    <TouchableHighlight
-      onLongPress={() => onLongPress(item)}
-      underlayColor={theme.colors.border}
-      style={styles.touchable}
+    <Swipeable
+      ref={swipeableRef}
+      renderRightActions={renderRightActions}
+      friction={2}
+      rightThreshold={160}
+      overshootRight={false}
+      onSwipeableWillOpen={handleSwipeableWillOpen}
     >
-      <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
-        {/* 顶部内容区 */}
-        <View style={styles.topContent}>
-          {/* 左侧图标 */}
-          <View style={styles.iconContainer}>
-            <Text style={styles.typeIcon}>{getTypeIcon(item.type)}</Text>
+      <TouchableHighlight
+        onLongPress={() => onLongPress(item)}
+        underlayColor={theme.colors.border}
+        style={styles.touchable}
+      >
+        <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
+          {/* 顶部内容区 */}
+          <View style={styles.topContent}>
+            {/* 左侧图标 */}
+            <View style={styles.iconContainer}>
+              <Text style={styles.typeIcon}>{getTypeIcon(item.type)}</Text>
+            </View>
+
+            {/* 类型标签和时间 */}
+            <Text
+              style={[styles.typeLabel, styles.typeLabelSpacing, { color: theme.colors.primary }]}
+            >
+              {getTypeLabel(item.type)}
+            </Text>
+
+            {/* 时间戳 */}
+            <Text
+              style={[
+                styles.timestamp,
+                styles.timestampAlign,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              {formatTime(item.timestamp)}
+            </Text>
           </View>
 
-          {/* 类型标签和时间 */}
-          <Text
-            style={[styles.typeLabel, styles.typeLabelSpacing, { color: theme.colors.primary }]}
-          >
-            {getTypeLabel(item.type)}
-          </Text>
+          {/* 预览文本 - 另起一行（非图片类型显示） */}
+          {item.type !== 'Image' && (
+            <Text
+              style={[styles.previewText, { color: theme.colors.text }]}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+            >
+              {previewText}
+            </Text>
+          )}
 
-          {/* 时间戳 */}
-          <Text
-            style={[styles.timestamp, styles.timestampAlign, { color: theme.colors.textSecondary }]}
-          >
-            {formatTime(item.timestamp)}
-          </Text>
-        </View>
-
-        {/* 预览文本 - 另起一行（非图片类型显示） */}
-        {item.type !== 'Image' && (
-          <Text
-            style={[styles.previewText, { color: theme.colors.text }]}
-            numberOfLines={2}
-            ellipsizeMode="tail"
-          >
-            {previewText}
-          </Text>
-        )}
-
-        {/* 图片预览 - 占据整个宽度 */}
-        {item.type === 'Image' && item.fileUri && (
-          <View
-            style={styles.imagePreviewContainer}
-            onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
-          >
-            {showFullImage ? (
-              <Image
-                source={{ uri: item.fileUri }}
-                style={[
-                  styles.imagePreview,
-                  imageDimensions && containerWidth > 0
-                    ? { height: (containerWidth / imageDimensions.width) * imageDimensions.height }
-                    : styles.imagePreviewLimited,
-                ]}
-                resizeMode="cover"
-                onLoad={(e) => {
-                  const { width, height } = e.nativeEvent.source;
-                  setImageDimensions({ width, height });
-                }}
-              />
-            ) : (
-              <Image
-                source={{ uri: item.fileUri }}
-                style={[styles.imagePreview, styles.imagePreviewLimited]}
-                resizeMode="cover"
-              />
-            )}
-          </View>
-        )}
-
-        {/* 底部信息区 */}
-        <View style={styles.bottomContent}>
-          <View style={styles.metaInfo}>
-            {item.size !== undefined && (
-              <Text style={[styles.metaText, { color: theme.colors.textTertiary }]}>
-                {formatSize(item.size, item.type)}
-              </Text>
-            )}
-            {item.synced !== undefined && (
-              <View style={styles.syncBadge}>
-                <Text
+          {/* 图片预览 - 占据整个宽度 */}
+          {item.type === 'Image' && item.fileUri && (
+            <View
+              style={styles.imagePreviewContainer}
+              onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+            >
+              {showFullImage ? (
+                <Image
+                  source={{ uri: item.fileUri }}
                   style={[
-                    styles.syncBadgeText,
-                    {
-                      color: item.synced
-                        ? theme.colors.success || '#4CAF50'
-                        : theme.colors.textTertiary,
-                    },
+                    styles.imagePreview,
+                    imageDimensions && containerWidth > 0
+                      ? {
+                          height: (containerWidth / imageDimensions.width) * imageDimensions.height,
+                        }
+                      : styles.imagePreviewLimited,
                   ]}
-                >
-                  {item.synced ? '✓ 已同步' : '未同步'}
+                  resizeMode="cover"
+                  onLoad={(e) => {
+                    const { width, height } = e.nativeEvent.source;
+                    setImageDimensions({ width, height });
+                  }}
+                />
+              ) : (
+                <Image
+                  source={{ uri: item.fileUri }}
+                  style={[styles.imagePreview, styles.imagePreviewLimited]}
+                  resizeMode="cover"
+                />
+              )}
+            </View>
+          )}
+
+          {/* 底部信息区 */}
+          <View style={styles.bottomContent}>
+            <View style={styles.metaInfo}>
+              {item.size !== undefined && (
+                <Text style={[styles.metaText, { color: theme.colors.textTertiary }]}>
+                  {formatSize(item.size, item.type)}
                 </Text>
-              </View>
-            )}
-          </View>
-          <View style={styles.actionsRow}>
-            {item.type === 'Text' && (
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => onCopy(item)}
-                hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-              >
-                <View style={{ transform: [{ scale: 0.6 }] }}>
-                  <Copy color={theme.colors.primary} />
+              )}
+              {item.synced !== undefined && (
+                <View style={styles.syncBadge}>
+                  <Text
+                    style={[
+                      styles.syncBadgeText,
+                      {
+                        color: item.synced
+                          ? theme.colors.success || '#4CAF50'
+                          : theme.colors.textTertiary,
+                      },
+                    ]}
+                  >
+                    {item.synced ? '✓ 已同步' : '未同步'}
+                  </Text>
                 </View>
-              </TouchableOpacity>
-            )}
-            {item.type === 'Image' && (
-              <>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => onShare(item)}
-                  hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-                >
-                  <View style={{ transform: [{ scale: 0.6 }] }}>
-                    <Share color={theme.colors.primary} />
-                  </View>
-                </TouchableOpacity>
+              )}
+            </View>
+            <View style={styles.actionsRow}>
+              {item.type === 'Text' && (
                 <TouchableOpacity
                   style={styles.actionButton}
                   onPress={() => onCopy(item)}
@@ -239,49 +264,71 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
                     <Copy color={theme.colors.primary} />
                   </View>
                 </TouchableOpacity>
-              </>
-            )}
-            {(item.type === 'File' || item.type === 'Group') && (
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => onShare(item)}
-                hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+              )}
+              {item.type === 'Image' && (
+                <>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => onShare(item)}
+                    hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                  >
+                    <View style={{ transform: [{ scale: 0.6 }] }}>
+                      <Share color={theme.colors.primary} />
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => onCopy(item)}
+                    hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                  >
+                    <View style={{ transform: [{ scale: 0.6 }] }}>
+                      <Copy color={theme.colors.primary} />
+                    </View>
+                  </TouchableOpacity>
+                </>
+              )}
+              {(item.type === 'File' || item.type === 'Group') && (
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => onShare(item)}
+                  hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                >
+                  <View style={{ transform: [{ scale: 0.6 }] }}>
+                    <Share color={theme.colors.primary} />
+                  </View>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* 调试信息：profileHash */}
+          {isDebugMode && item.profileHash && (
+            <View style={styles.debugRow}>
+              <Text style={[styles.debugLabel, { color: theme.colors.textTertiary }]}>Hash:</Text>
+              <Text style={[styles.debugValue, { color: theme.colors.textSecondary }]}>
+                {item.profileHash.substring(0, 16)}...
+              </Text>
+            </View>
+          )}
+
+          {/* 调试信息：fileUrl */}
+          {isDebugMode && item.fileUri && (
+            <View style={styles.debugRow}>
+              <Text style={[styles.debugLabel, { color: theme.colors.textTertiary }]}>URL:</Text>
+              <Text
+                style={[
+                  styles.debugValue,
+                  styles.debugValueFlex,
+                  { color: theme.colors.textSecondary },
+                ]}
               >
-                <View style={{ transform: [{ scale: 0.6 }] }}>
-                  <Share color={theme.colors.primary} />
-                </View>
-              </TouchableOpacity>
-            )}
-          </View>
+                {item.fileUri}
+              </Text>
+            </View>
+          )}
         </View>
-
-        {/* 调试信息：profileHash */}
-        {isDebugMode && item.profileHash && (
-          <View style={styles.debugRow}>
-            <Text style={[styles.debugLabel, { color: theme.colors.textTertiary }]}>Hash:</Text>
-            <Text style={[styles.debugValue, { color: theme.colors.textSecondary }]}>
-              {item.profileHash.substring(0, 16)}...
-            </Text>
-          </View>
-        )}
-
-        {/* 调试信息：fileUrl */}
-        {isDebugMode && item.fileUri && (
-          <View style={styles.debugRow}>
-            <Text style={[styles.debugLabel, { color: theme.colors.textTertiary }]}>URL:</Text>
-            <Text
-              style={[
-                styles.debugValue,
-                styles.debugValueFlex,
-                { color: theme.colors.textSecondary },
-              ]}
-            >
-              {item.fileUri}
-            </Text>
-          </View>
-        )}
-      </View>
-    </TouchableHighlight>
+      </TouchableHighlight>
+    </Swipeable>
   );
 };
 
@@ -411,5 +458,24 @@ const styles = StyleSheet.create({
   },
   debugValueFlex: {
     flex: 1,
+  },
+  swipeActionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    marginVertical: 4,
+    marginRight: 16,
+  },
+  deleteButton: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+  },
+  deleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
   },
 });

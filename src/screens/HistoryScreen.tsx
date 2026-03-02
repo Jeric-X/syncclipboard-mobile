@@ -163,30 +163,6 @@ export function HistoryScreen() {
     [showMessage, copyItemWithSync]
   );
 
-  // 长按列表项 - 显示操作菜单
-  const handleItemLongPress = useCallback((item: ClipboardItem) => {
-    setSelectedItem(item);
-
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ['取消', '复制', '删除'],
-          destructiveButtonIndex: 2,
-          cancelButtonIndex: 0,
-        },
-        (buttonIndex) => {
-          if (buttonIndex === 1) {
-            handleCopyItem(item);
-          } else if (buttonIndex === 2) {
-            handleDeleteItem(item);
-          }
-        }
-      );
-    } else {
-      setShowActionSheet(true);
-    }
-  }, []);
-
   // 复制项目
   const handleCopyItem = useCallback(
     async (item: ClipboardItem) => {
@@ -197,27 +173,46 @@ export function HistoryScreen() {
     [showMessage, copyItemWithSync]
   );
 
-  // 删除项目
+  // 删除项目（直接删除，不弹确认框）
   const handleDeleteItem = useCallback(
-    (item: ClipboardItem) => {
-      Alert.alert('确认删除', '确定要删除这条历史记录吗？', [
-        { text: '取消', style: 'cancel' },
-        {
-          text: '删除',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteItem(item.profileHash);
-              setShowActionSheet(false);
-            } catch (error) {
-              console.error('[HistoryScreen] Failed to delete:', error);
-              Alert.alert('错误', '删除失败');
-            }
-          },
-        },
-      ]);
+    async (item: ClipboardItem) => {
+      try {
+        await deleteItem(item.profileHash);
+        setShowActionSheet(false);
+        showMessage('已删除', 'success');
+      } catch (error) {
+        console.error('[HistoryScreen] Failed to delete:', error);
+        showMessage('删除失败', 'error');
+      }
     },
-    [deleteItem]
+    [deleteItem, showMessage]
+  );
+
+  // 长按列表项 - 显示操作菜单
+  const handleItemLongPress = useCallback(
+    (item: ClipboardItem) => {
+      setSelectedItem(item);
+
+      if (Platform.OS === 'ios') {
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            options: ['取消', '复制', '删除'],
+            destructiveButtonIndex: 2,
+            cancelButtonIndex: 0,
+          },
+          (buttonIndex) => {
+            if (buttonIndex === 1) {
+              handleCopyItem(item);
+            } else if (buttonIndex === 2) {
+              handleDeleteItem(item);
+            }
+          }
+        );
+      } else {
+        setShowActionSheet(true);
+      }
+    },
+    [handleCopyItem, handleDeleteItem]
   );
 
   // 清空所有历史记录
@@ -296,10 +291,11 @@ export function HistoryScreen() {
         onCopy={handleItemPress}
         onShare={handleShare}
         onLongPress={handleItemLongPress}
+        onDelete={handleDeleteItem}
         showFullImage={showFullImage}
       />
     ),
-    [handleItemPress, handleShare, handleItemLongPress, showFullImage]
+    [handleItemPress, handleShare, handleItemLongPress, handleDeleteItem, showFullImage]
   );
 
   // 渲染空状态
