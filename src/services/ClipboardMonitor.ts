@@ -237,6 +237,31 @@ export class ClipboardMonitor {
   }
 
   /**
+   * 手动更新上次已知内容，防止监听器将外部设置的剪贴板内容误判为用户新复制
+   */
+  setLastContent(content: ClipboardContent): void {
+    this.lastContent = content;
+  }
+
+  /**
+   * 临时暂停轮询计时器，不改变 isMonitoring 状态。
+   * 用于"程序内写入剪贴板"期间防止监听器误触发，配合 resumePolling 使用。
+   */
+  pausePolling(): void {
+    this.stopPolling();
+  }
+
+  /**
+   * 恢复被 pausePolling 暂停的轮询计时器。
+   * 会重置计时器间隔，下次轮询从调用此方法起重新计时。
+   */
+  resumePolling(): void {
+    if (this.isMonitoring) {
+      this.startPolling();
+    }
+  }
+
+  /**
    * 重置监听器状态
    */
   reset(): void {

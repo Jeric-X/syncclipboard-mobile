@@ -1,8 +1,30 @@
 # SyncClipboard Mobile
 
-SyncClipboard 的官方 React Native 移动应用，支持 iOS 和 Android。
+SyncClipboard 的官方 React Native 移动客户端，支持 Android 和 iOS。
 
-## 🚀 快速开始
+## 功能特性
+
+### 剪贴板同步
+
+- 本地剪贴板实时监听（1 秒轮询）
+- 支持文本、图片、文件同步
+- 手动上传/下载，支持自动复制模式
+
+### 服务器支持
+
+- **SyncClipboard 服务器**：基于 SignalR 的实时推送，零延迟同步
+- **WebDAV 服务器**：定时轮询（3 秒间隔）
+
+### 其他功能
+
+- 多服务器配置与快速切换
+- 剪贴板历史记录（可配置最大保留条数）
+- 自动下载文件（可配置大小限制，默认 5MB）
+- 前后台切换时自动恢复/暂停同步
+- 本地存储管理（缓存清理、占用空间查看）
+- 深色/浅色/跟随系统主题
+
+## 快速开始
 
 ### 安装依赖
 
@@ -22,26 +44,39 @@ npm start
 # Android
 npm run android
 
-# iOS (需要 macOS)
+# iOS（需要 macOS）
 npm run ios
-
-# Web
-npm run web
 ```
 
-## 📁 项目结构
+## 构建
+
+### 本地构建 APK
+
+```bash
+npm run build:apk
+```
+
+### CI/CD 自动构建
+
+推送代码或手动触发 GitHub Actions 工作流 (`Build Release APK`) 即可自动构建 APK，产物会以 Artifact 形式上传。
+
+## 项目结构
 
 ```
 syncclipboard-mobile/
 ├── src/
-│   ├── assets/          # 静态资源（图片、字体等）
-│   ├── components/      # 可复用组件
+│   ├── components/      # 可复用 UI 组件
 │   ├── constants/       # 常量定义
+│   ├── contexts/        # React Context（主题等）
 │   ├── hooks/           # 自定义 Hooks
 │   ├── navigation/      # 导航配置
 │   ├── screens/         # 页面组件
-│   ├── services/        # API 和业务逻辑
+│   │   ├── HomeScreen   # 主页（本地/远程剪贴板）
+│   │   ├── HistoryScreen# 历史记录
+│   │   └── SettingsScreen# 设置
+│   ├── services/        # API 客户端与业务逻辑
 │   ├── stores/          # Zustand 状态管理
+│   ├── theme/           # 主题颜色定义
 │   ├── types/           # TypeScript 类型定义
 │   └── utils/           # 工具函数
 ├── App.tsx              # 应用入口
@@ -49,7 +84,7 @@ syncclipboard-mobile/
 └── package.json
 ```
 
-## 🛠️ 技术栈
+## 技术栈
 
 - **框架**: React Native + Expo
 - **语言**: TypeScript
@@ -60,7 +95,7 @@ syncclipboard-mobile/
 - **本地存储**: AsyncStorage
 - **代码质量**: ESLint + Prettier
 
-## 📝 开发命令
+## 开发命令
 
 ```bash
 # 类型检查
@@ -79,50 +114,10 @@ npm run format
 npm run format:check
 ```
 
-## 🎯 当前开发阶段
-
-Phase 1 - Week 1: 项目初始化与基础架构 ✅
-
-- [x] 初始化 Expo 项目
-- [x] 配置 TypeScript、ESLint、Prettier
-- [x] 搭建基础目录结构
-- [x] 配置导航结构
-- [x] 安装核心依赖
-
-## ✨ 核心功能
-
-### 剪贴板监听
-
-- ✅ 本地剪贴板自动监听（1秒轮询）
-- ✅ App 前后台切换时自动刷新
-
-### 服务器支持
-
-- ✅ **SyncClipboard 服务器**：基于 SignalR 的实时推送（零延迟）
-- ✅ **WebDAV 服务器**：轮询模式（3秒间隔）
-
-### 同步策略
-
-- ✅ 智能通信模式选择
-  - SyncClipboard：SignalR 实时通信 + 自动重连
-  - WebDAV：定时轮询
-- ✅ 后台节能：App 在后台时自动暂停轮询
-- ✅ 前台恢复：切回前台时自动恢复同步
-
-## 📚 相关文档
-
-- [开发规划](../DEVELOPMENT_PLAN.md)
-- [项目进度](../PROJECT_STATUS.md)
-- [待办清单](../TODO.md)
-
-### 技术文档
+## 技术文档
 
 - [API 客户端使用](docs/API_USAGE.md)
-- [Hash 计算说明](docs/HASH_CALCULATION.md) - 图片上传的 Hash 计算详解
+- [Hash 计算说明](docs/HASH_CALCULATION.md)
 - [服务器配置指南](docs/SERVER_CONFIG_GUIDE.md)
 - [同步管理器使用](docs/SYNC_MANAGER_USAGE.md)
 - [手动测试清单](docs/MANUAL_TEST_CHECKLIST.md)
-
-## 📄 许可证
-
-与主项目保持一致

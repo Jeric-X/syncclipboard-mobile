@@ -25,12 +25,11 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '@/hooks/useTheme';
 import { useHistoryStore } from '@/stores/historyStore';
 import { useHistoryDisplaySettings } from '@/hooks/useHistoryDisplaySettings';
-import { ClipboardItem } from '@/types/clipboard';
+import { ClipboardItem, ClipboardContent } from '@/types/clipboard';
 import { HistoryListItem } from '@/components/HistoryListItem';
 import { MessageToast } from '@/components/MessageToast';
-import { clipboardManager } from '@/services';
+import { copyToLocalClipboard } from '@/utils/clipboard';
 import { useMessageToast } from '@/hooks/useMessageToast';
-import { copyClipboardItem } from '@/utils/clipboard';
 
 type FilterType = 'all' | 'Text' | 'Image' | 'File';
 
@@ -132,13 +131,28 @@ export function HistoryScreen() {
     return items.filter((item) => item.type === filterType);
   }, [items, filterType]);
 
+  // ClipboardItem 转换为 ClipboardContent 后调用公共复制函数
+  const copyItemWithSync = useCallback(async (item: ClipboardItem) => {
+    const content: ClipboardContent = {
+      type: item.type,
+      text: item.text,
+      profileHash: item.profileHash,
+      fileUri: item.fileUri,
+      fileName: item.dataName,
+      fileSize: item.size,
+      timestamp: item.timestamp,
+      localClipboardHash: item.localClipboardHash,
+    };
+    return copyToLocalClipboard(content);
+  }, []);
+
   // 点击列表项 - 复制到剪贴板
   const handleItemPress = useCallback(
     async (item: ClipboardItem) => {
-      const result = await copyClipboardItem(item, clipboardManager);
+      const result = await copyItemWithSync(item);
       showMessage(result.message, result.success ? 'success' : 'info');
     },
-    [showMessage]
+    [showMessage, copyItemWithSync]
   );
 
   // 长按列表项 - 显示操作菜单
@@ -168,11 +182,11 @@ export function HistoryScreen() {
   // 复制项目
   const handleCopyItem = useCallback(
     async (item: ClipboardItem) => {
-      const result = await copyClipboardItem(item, clipboardManager);
+      const result = await copyItemWithSync(item);
       showMessage(result.message, result.success ? 'success' : 'error');
       setShowActionSheet(false);
     },
-    [showMessage]
+    [showMessage, copyItemWithSync]
   );
 
   // 删除项目

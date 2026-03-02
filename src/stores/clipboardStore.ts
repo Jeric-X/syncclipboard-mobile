@@ -44,6 +44,9 @@ interface ClipboardState {
   /** 停止监听剪贴板 */
   stopMonitoring: () => void;
 
+  /** 仅更新本地剪贴板卡片显示，不写系统剪贴板、不添加历史记录 */
+  setCurrentContentDisplay: (content: ClipboardContent) => void;
+
   /** 清除错误 */
   clearError: () => void;
 
@@ -72,6 +75,21 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
 
     try {
       const content = await clipboardManager.getClipboardContent();
+
+      // 如果内容未变化（localClipboardHash 相同），跳过状态更新，避免 Image 组件因
+      // key 中的 timestamp 变化而重新挂载导致闪烁（切换前后台场景）
+      const currentContent = get().currentContent;
+      if (
+        content &&
+        currentContent &&
+        content.localClipboardHash &&
+        currentContent.localClipboardHash &&
+        content.localClipboardHash === currentContent.localClipboardHash
+      ) {
+        set({ isLoading: false });
+        return;
+      }
+
       set({ currentContent: content, isLoading: false });
 
       // 添加到历史记录
@@ -225,6 +243,10 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
 
     clipboardMonitor.stop();
     set({ isMonitoring: false });
+  },
+
+  setCurrentContentDisplay: (content: ClipboardContent) => {
+    set({ currentContent: content });
   },
 
   clearError: () => {

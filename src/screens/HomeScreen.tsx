@@ -27,6 +27,7 @@ import { MessageToast } from '@/components/MessageToast';
 import { createAPIClient, getSignalRClient, historyStorage } from '@/services';
 import type { RemoteClipboardChangedCallback } from '@/services';
 import { initFileStorage } from '@/utils/fileStorage';
+import { copyToLocalClipboard } from '@/utils/clipboard';
 import { useMessageToast } from '@/hooks/useMessageToast';
 
 export function HomeScreen() {
@@ -46,7 +47,9 @@ export function HomeScreen() {
   const signalRConnected = useRef(false);
 
   const { currentContent, getContent, startMonitoring, stopMonitoring } = useClipboardStore();
-  const { sync, initialize: initializeSync, destroy: destroySync } = useSyncStore();
+  const sync = useSyncStore((state) => state.sync);
+  const initializeSync = useSyncStore((state) => state.initialize);
+  const destroySync = useSyncStore((state) => state.destroy);
   const { getActiveServer, loadConfig, isLoaded, config } = useSettingsStore();
 
   const activeServer = getActiveServer();
@@ -96,69 +99,13 @@ export function HomeScreen() {
 
   // 复制远程内容到本地剪贴板的公共函数
   const copyRemoteToLocal = async (content: ClipboardContent, logPrefix: string = '') => {
-    try {
-      // 移除本地剪贴板的变化监听
-      stopMonitoring();
-      console.log(`[HomeScreen] ${logPrefix}Stopped local clipboard monitoring`);
-
-      // 添加短暂延迟，确保所有轮询和防抖操作都已停止
-      // await new Promise((resolve) => setTimeout(resolve, 500));
-      // console.log(`[HomeScreen] ${logPrefix}Waited for monitoring to fully stop`);
-
-      const { setContent } = useClipboardStore.getState();
-      await setContent(content);
-
-      // 如果是图片类型，重新读取本地剪贴板并计算 localClipboardHash
-      if (content.type === 'Image' && content.profileHash) {
-        console.log(`[HomeScreen] ${logPrefix}Re-reading image from local clipboard`);
-
-        // 计算 localClipboardHash 并更新历史记录
-        try {
-          // 使用 clipboardManager.getClipboardContent 重新获取剪贴板内容
-          const { clipboardManager, clipboardMonitor } = await import('@/services');
-          let clipboardContent = await clipboardManager.getClipboardContent(false);
-
-          if (
-            clipboardContent &&
-            clipboardContent.type === 'Image' &&
-            clipboardContent.localClipboardHash
-          ) {
-            console.log(
-              `[HomeScreen] ${logPrefix}Got localClipboardHash from clipboard:`,
-              clipboardContent.localClipboardHash.substring(0, 16) + '...'
-            );
-
-            // 更新历史记录
-            const historyItem = await historyStorage.getItem(content.profileHash!);
-            if (historyItem) {
-              const updatedHistoryItem = {
-                ...historyItem,
-                localClipboardHash: clipboardContent.localClipboardHash,
-              };
-              await historyStorage.updateItem(content.profileHash!, updatedHistoryItem);
-              console.log(`[HomeScreen] ${logPrefix}Updated localClipboardHash in history`);
-            }
-
-            // @ts-ignore - 访问私有属性
-            clipboardMonitor.lastContent = clipboardContent;
-          }
-        } catch (hashError) {
-          console.error(`[HomeScreen] ${logPrefix}Failed to update localClipboardHash:`, hashError);
-        }
-      }
-
+    const result = await copyToLocalClipboard(content);
+    if (result.success) {
       // 更新本地哈希，避免触发自动上传
-      const currentHash = content.profileHash || content.text || '';
-      lastLocalProfileHash.current = currentHash;
+      lastLocalProfileHash.current = content.profileHash || content.text || '';
       console.log(`[HomeScreen] ${logPrefix}Copy to local clipboard completed`);
-
-      // 重新启用本地剪贴板监听
-      startMonitoring();
-      console.log(`[HomeScreen] ${logPrefix}Restarted local clipboard monitoring`);
-    } catch (error) {
-      console.error(`[HomeScreen] ${logPrefix}Copy to local clipboard failed:`, error);
-      // 即使出错也要重新启用监听
-      startMonitoring();
+    } else {
+      console.error(`[HomeScreen] ${logPrefix}Copy to local clipboard failed: ${result.message}`);
     }
   };
 
@@ -689,7 +636,7 @@ export function HomeScreen() {
 
       // 检查同步结果
       if (result.success) {
-        await fetchRemoteClipboard(false); // 刷新远程剪贴板显示
+        await fetchRemoteClipboard(true); // 静默刷新，避免 loading 指示器导致组件闪烁
         showMessage('剪贴板已上传到服务器', 'success');
       } else {
         // 上传失败，显示错误信息
