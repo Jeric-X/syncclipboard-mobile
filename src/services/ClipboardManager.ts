@@ -52,13 +52,68 @@ export class ClipboardManager {
   private async getTextContent(): Promise<ClipboardContent> {
     const text = await Clipboard.getStringAsync();
     const profileHash = await calculateTextHash(text);
+    const timestamp = Date.now();
 
+    // 文本长度阈值（字符数），超过此长度将保存为文件
+    const TEXT_STORAGE_THRESHOLD = 1000;
+    const TEXT_PREVIEW_MAX_LENGTH = 200;
+
+    // 如果文本长度超过阈值，保存为文件
+    if (text.length > TEXT_STORAGE_THRESHOLD) {
+      try {
+        // 确保临时目录存在
+        if (!CLIPBOARD_TEMP_DIR.exists) {
+          CLIPBOARD_TEMP_DIR.create();
+        }
+
+        // 生成文件名
+        const fileName = `${profileHash}.txt`;
+        const tempFile = new FileSystem.File(CLIPBOARD_TEMP_DIR, fileName);
+
+        // 检查文件是否已存在
+        if (!tempFile.exists) {
+          // 文件不存在，保存完整文本到文件
+          tempFile.write(new TextEncoder().encode(text));
+          console.log(`[ClipboardManager] Text saved to file: ${fileName}, length: ${text.length}`);
+        } else {
+          // 文件已存在，直接使用
+          console.log(
+            `[ClipboardManager] Text file already exists: ${fileName}, length: ${text.length}`
+          );
+        }
+
+        // 生成预览文本
+        const previewText =
+          text.length > TEXT_PREVIEW_MAX_LENGTH
+            ? text.substring(0, TEXT_PREVIEW_MAX_LENGTH) + '...'
+            : text;
+
+        return {
+          type: 'Text',
+          text: previewText, // 只保存预览文本在内存中
+          fileUri: tempFile.uri, // 文件路径
+          fileName: fileName,
+          fileSize: text.length,
+          profileHash,
+          localClipboardHash: profileHash, // 文本类型，profileHash 和 localClipboardHash 相同
+          hasData: true, // 标记有外部文件
+          timestamp,
+        };
+      } catch (error) {
+        console.error('[ClipboardManager] Failed to save text to file:', error);
+        // 出错时降级为普通文本处理
+      }
+    }
+
+    // 短文本或保存失败时，直接返回
     return {
       type: 'Text',
       text,
-      profileHash, // 文本类型，profileHash 和 localClipboardHash 相同
-      localClipboardHash: profileHash, // 用于本地变化检测
-      timestamp: Date.now(),
+      fileSize: text.length, // 设置文字数量
+      profileHash,
+      localClipboardHash: profileHash,
+      hasData: false, // 短文本没有外部文件
+      timestamp,
     };
   }
 
@@ -155,6 +210,7 @@ export class ClipboardManager {
               fileSize,
               profileHash, // 用于服务器上传
               localClipboardHash, // 用于本地变化检测
+              hasData: true, // 图片有外部文件
               timestamp,
             };
           }
@@ -241,6 +297,7 @@ export class ClipboardManager {
         fileSize,
         profileHash, // 用于服务器上传
         localClipboardHash, // 用于本地变化检测
+        hasData: true, // 图片有外部文件
         timestamp,
       };
     } catch (error) {
@@ -261,6 +318,11 @@ export class ClipboardManager {
       this.lastProfileHash = localClipboardHash;
     } catch (error) {
       console.error('[ClipboardManager] Failed to set text content:', error);
+
+      // 保留原始错误信息，特别是 TransactionTooLargeException
+      if (error instanceof Error) {
+        throw error; // 直接抛出原始错误，保留详细信息
+      }
       throw new Error('Failed to set text to clipboard');
     }
   }

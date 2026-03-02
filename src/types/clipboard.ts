@@ -79,6 +79,9 @@ export interface ClipboardContent {
 
   /** 创建时间戳 */
   timestamp?: number;
+
+  /** 是否有额外数据文件（用于标识是否需要处理外部文件） */
+  hasData?: boolean;
 }
 
 /**

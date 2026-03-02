@@ -125,8 +125,13 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
     }
   };
 
-  const formatSize = (bytes?: number): string => {
+  const formatSize = (bytes?: number, type?: string): string => {
     if (!bytes) return '';
+    // Text 类型显示字符数（添加千分位逗号）
+    if (type === 'Text') {
+      return bytes.toLocaleString('zh-CN');
+    }
+    // 其他类型显示文件大小
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -169,8 +174,19 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   const needsFileDownload = (): boolean => {
     if (!isRemote || !clipboard) return false;
 
-    // 文本类型不需要额外文件
-    if (clipboard.type === 'Text') return false;
+    // 文本类型：当 hasData 为 true 且有 fileName 但没有 fileUri 时，需要下载完整文本
+    if (clipboard.type === 'Text') {
+      const needsDownload = !!(clipboard.hasData && clipboard.fileName && !clipboard.fileUri);
+      if (isDebugMode) {
+        console.log('[CurrentClipboardCard] Text needsFileDownload check:', {
+          hasData: clipboard.hasData,
+          fileName: clipboard.fileName,
+          fileUri: clipboard.fileUri,
+          needsDownload,
+        });
+      }
+      return needsDownload;
+    }
 
     // 图片类型：有 fileName 但没有 fileUri 或 fileData
     if (clipboard.type === 'Image') {
@@ -186,6 +202,16 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   };
 
   const showDownloadButton = isRemote && onDownload && needsFileDownload();
+
+  if (isDebugMode && isRemote && clipboard?.type === 'Text') {
+    console.log('[CurrentClipboardCard] Text button display check:', {
+      isRemote,
+      hasOnDownload: !!onDownload,
+      needsFileDownload: needsFileDownload(),
+      showDownloadButton,
+      willShowCopyButton: !showDownloadButton,
+    });
+  }
 
   // 判断是否显示分享按钮（非Text类型且有文件URI）
   const canShowShareButton = (() => {
@@ -217,7 +243,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
 
         {clipboard.fileSize !== undefined && (
           <Text style={[styles.sizeLabel, { color: theme.colors.textSecondary }]}>
-            {formatSize(clipboard.fileSize)}
+            {formatSize(clipboard.fileSize, clipboard.type)}
           </Text>
         )}
       </View>
@@ -292,8 +318,8 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
 
       {/* 按钮区域 */}
       <View style={styles.actionButtons}>
-        {/* Text 类型：复制按钮 */}
-        {clipboard.type === 'Text' && (
+        {/* Text 类型：只有在不需要下载时才显示复制按钮 */}
+        {clipboard.type === 'Text' && !showDownloadButton && (
           <TouchableOpacity
             style={[
               styles.actionButton,

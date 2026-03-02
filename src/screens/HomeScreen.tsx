@@ -88,11 +88,45 @@ export function HomeScreen() {
       );
     }
 
-    // 返回更新后的内容
+    // 返回更新后的内容，只设置fileUri，不读取文件内容到内存
+    // 文件内容仅在调用 copyToLocalClipboard 时才会读取
     const updatedContent: ClipboardContent = {
       ...content,
       fileUri: fileUri,
+      // 对于Text类型，恢复到原始的预览文本（来自服务器的text字段）
+      // 完整文本只在复制时从文件读取
     };
+
+    return updatedContent;
+  };
+
+  // 下载并添加到历史记录的公共逻辑
+  const downloadAndAddToHistory = async (
+    content: ClipboardContent,
+    hasData: boolean,
+    logPrefix: string = ''
+  ): Promise<ClipboardContent> => {
+    const apiClient = createAPIClient(activeServer!);
+    const updatedContent = await downloadRemoteFileInternal(content, apiClient, hasData);
+
+    // 添加到历史记录
+    try {
+      const historyItem: ClipboardItem = {
+        type: updatedContent.type,
+        text: updatedContent.text || '',
+        profileHash: updatedContent.profileHash || '',
+        hasData: hasData,
+        dataName: updatedContent.fileName,
+        size: updatedContent.fileSize,
+        timestamp: updatedContent.timestamp || Date.now(),
+        synced: true,
+        fileUri: updatedContent.fileUri,
+      };
+      await useHistoryStore.getState().addItem(historyItem);
+      console.log(`[HomeScreen] ${logPrefix}Added remote clipboard to history`);
+    } catch (error) {
+      console.error(`[HomeScreen] ${logPrefix}Failed to add remote clipboard to history:`, error);
+    }
 
     return updatedContent;
   };
@@ -107,6 +141,7 @@ export function HomeScreen() {
     } else {
       console.error(`[HomeScreen] ${logPrefix}Copy to local clipboard failed: ${result.message}`);
     }
+    return result;
   };
 
   // 复制本地剪贴板内容（简单模式，直接设置到剪贴板）
@@ -209,12 +244,16 @@ export function HomeScreen() {
             `[HomeScreen] ${logPrefix}File too large (${content.fileSize} bytes > ${autoDownloadMaxSize} bytes), skipping auto-download and auto-copy`
           );
         } else {
-          // 文件大小在限制内，执行自动下载
+          // 文件大小在限制内，执行自动下载并添加到历史
           console.log(
             `[HomeScreen] ${logPrefix}Auto-downloading file (${content.fileSize} bytes, limit: ${autoDownloadMaxSize} bytes)`
           );
           try {
-            finalContent = await downloadRemoteFileInternal(content, apiClient, hasData);
+            finalContent = await downloadAndAddToHistory(
+              content,
+              hasData,
+              `${logPrefix}Auto-download: `
+            );
             console.log(`[HomeScreen] ${logPrefix}Auto-download completed:`, finalContent.fileUri);
           } catch (downloadError) {
             console.error(`[HomeScreen] ${logPrefix}Auto-download failed:`, downloadError);
@@ -235,48 +274,27 @@ export function HomeScreen() {
     if (!isFirstLoad) {
       console.log(`[HomeScreen] ${logPrefix}Remote clipboard changed, updated display`);
 
-      // 远程剪贴板hasData为true时，下载后再添加到历史记录
-      if (hasData) {
-        // 如果已经下载了文件，添加到历史记录
-        if (!skipAutoCopyDueToLargeFile) {
-          try {
-            // 转换为 ClipboardItem 类型
-            const historyItem: ClipboardItem = {
-              type: finalContent.type,
-              text: finalContent.text || '',
-              profileHash: finalContent.profileHash || '',
-              hasData: hasData,
-              dataName: finalContent.fileName,
-              size: finalContent.fileSize,
-              timestamp: finalContent.timestamp || Date.now(),
-              synced: true,
-              fileUri: finalContent.fileUri,
-            };
-            await useHistoryStore.getState().addItem(historyItem);
-            console.log(`[HomeScreen] ${logPrefix}Added remote clipboard to history`);
-          } catch (error) {
-            console.error(
-              `[HomeScreen] ${logPrefix}Failed to add remote clipboard to history:`,
-              error
-            );
-          }
-        }
-      } else {
+      // 远程剪贴板内容添加到历史记录
+      // 如果已在自动下载时添加过，则不再添加；否则如果 hasData=false，添加不含文件的记录
+      const shouldAddToHistory =
+        (hasData && !foundInHistory && !skipAutoCopyDueToLargeFile) || // 自动下载成功的已在 downloadAndAddToHistory 中添加
+        !hasData; // 没有文件数据的需要添加
+
+      if (shouldAddToHistory && !hasData) {
         // 没有文件数据，直接添加到历史记录
         try {
-          // 转换为 ClipboardItem 类型
           const historyItem: ClipboardItem = {
             type: finalContent.type,
             text: finalContent.text || '',
             profileHash: finalContent.profileHash || '',
-            hasData: hasData,
+            hasData: false,
             dataName: finalContent.fileName,
             size: finalContent.fileSize,
             timestamp: finalContent.timestamp || Date.now(),
             synced: true,
           };
           await useHistoryStore.getState().addItem(historyItem);
-          console.log(`[HomeScreen] ${logPrefix}Added remote clipboard to history`);
+          console.log(`[HomeScreen] ${logPrefix}Added remote clipboard (no file) to history`);
         } catch (error) {
           console.error(
             `[HomeScreen] ${logPrefix}Failed to add remote clipboard to history:`,
@@ -296,7 +314,12 @@ export function HomeScreen() {
         console.log(`[HomeScreen] ${logPrefix}Auto-copying remote changes to local clipboard`);
         isAutoSyncing.current = true;
         try {
-          await copyRemoteToLocal(finalContent, logPrefix);
+          const result = await copyRemoteToLocal(finalContent, logPrefix);
+          if (!result.success) {
+            console.warn(
+              `[HomeScreen] ${logPrefix}Auto-copy skipped due to error: ${result.message}`
+            );
+          }
         } catch (error) {
           console.error(`[HomeScreen] ${logPrefix}Auto-copy to local clipboard failed:`, error);
         } finally {
@@ -681,6 +704,10 @@ export function HomeScreen() {
 
     // 检查是否需要下载文件
     const needsDownload =
+      (remoteContent.type === 'Text' &&
+        remoteContent.hasData &&
+        remoteContent.fileName &&
+        !remoteContent.fileUri) ||
       (remoteContent.type === 'Image' && remoteContent.fileName && !remoteContent.fileUri) ||
       (remoteContent.type === 'File' && remoteContent.fileName && !remoteContent.fileUri);
 
@@ -690,8 +717,12 @@ export function HomeScreen() {
 
     setDownloadingRemote(true);
     try {
-      const apiClient = createAPIClient(activeServer);
-      const updatedContent = await downloadRemoteFileInternal(remoteContent, apiClient, true);
+      // 使用公共函数：下载并添加到历史记录
+      const updatedContent = await downloadAndAddToHistory(
+        remoteContent,
+        remoteContent.hasData || false,
+        'Manual download: '
+      );
       setRemoteContent(updatedContent);
       showMessage('文件已下载', 'success');
     } catch (error) {
@@ -736,8 +767,12 @@ export function HomeScreen() {
                   onDownload={handleDownloadRemoteFile}
                   downloading={downloadingRemote}
                   onCopy={async (content) => {
-                    await copyRemoteToLocal(content, 'Manual copy: ');
-                    showMessage('已复制到剪贴板', 'success');
+                    const result = await copyRemoteToLocal(content, 'Manual copy: ');
+                    if (result.success) {
+                      showMessage('已复制到剪贴板', 'success');
+                    } else {
+                      showMessage(result.message || '复制失败', 'error');
+                    }
                   }}
                 />
               )}

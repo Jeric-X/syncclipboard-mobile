@@ -133,15 +133,19 @@ export function HistoryScreen() {
 
   // ClipboardItem 转换为 ClipboardContent 后调用公共复制函数
   const copyItemWithSync = useCallback(async (item: ClipboardItem) => {
+    // 构建 ClipboardContent
+    // 对于Text类型的hasData，不在内存中读取完整文本，只设置fileUri
+    // 完整文本的读取将在 copyToLocalClipboard 中进行
     const content: ClipboardContent = {
       type: item.type,
-      text: item.text,
+      text: item.text, // 预览文本或完整文本（如果hasData为false）
       profileHash: item.profileHash,
-      fileUri: item.fileUri,
+      fileUri: item.fileUri, // 对于hasData为true且需要完整文本的情况，使用fileUri
       fileName: item.dataName,
       fileSize: item.size,
       timestamp: item.timestamp,
       localClipboardHash: item.localClipboardHash,
+      hasData: item.hasData, // 添加 hasData 字段
     };
     return copyToLocalClipboard(content);
   }, []);
@@ -150,7 +154,11 @@ export function HistoryScreen() {
   const handleItemPress = useCallback(
     async (item: ClipboardItem) => {
       const result = await copyItemWithSync(item);
-      showMessage(result.message, result.success ? 'success' : 'info');
+      if (result.success) {
+        showMessage(result.message, 'success');
+      } else {
+        showMessage(result.message || '复制失败', 'error');
+      }
     },
     [showMessage, copyItemWithSync]
   );

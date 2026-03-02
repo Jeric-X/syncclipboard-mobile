@@ -11,19 +11,33 @@ import { useClipboardStore } from '@/stores/clipboardStore';
  * 将 ClipboardContent 转换为 ProfileDto
  */
 export async function contentToProfileDto(content: ClipboardContent): Promise<ProfileDto> {
-  const { type, text = '', profileHash, fileName, fileSize } = content;
+  const { type, text = '', profileHash, fileName, fileSize, fileUri } = content;
 
   // 计算 profileHash（如果没有提供）
   const calculatedProfileHash = profileHash || (text ? await calculateTextHash(text) : undefined);
 
   switch (type) {
-    case 'Text':
+    case 'Text': {
+      // 如果有 fileUri，说明文本已经被保存为文件（由 ClipboardManager 处理）
+      if (fileUri && fileName) {
+        return {
+          type: 'Text',
+          text, // 预览文本
+          hash: calculatedProfileHash,
+          hasData: true, // 标记有外部文件
+          dataName: fileName,
+          size: fileSize,
+        };
+      }
+
+      // 短文本直接返回
       return {
         type: 'Text',
         text,
         hash: calculatedProfileHash,
         hasData: false,
       };
+    }
 
     case 'Image':
       return {
@@ -71,10 +85,19 @@ export function profileDtoToContent(profile: ProfileDto): ClipboardContent {
     text,
     profileHash: hash,
     timestamp: Date.now(), // 添加当前时间戳
+    hasData, // 添加 hasData 字段
   };
 
   if (hasData) {
     switch (type) {
+      case 'Text':
+        // Text类型的hasData为true时，需要下载额外的.txt文件获取完整文本
+        return {
+          ...baseContent,
+          fileName: dataName,
+          fileSize: size || text?.length || 0, // 如果 size 为 0，使用文本长度
+        };
+
       case 'Image':
         return {
           ...baseContent,
@@ -90,6 +113,14 @@ export function profileDtoToContent(profile: ProfileDto): ClipboardContent {
           fileSize: size,
         };
     }
+  }
+
+  // hasData 为 false 时，Text 类型仍然需要 fileSize（字符数）
+  if (type === 'Text') {
+    return {
+      ...baseContent,
+      fileSize: size || text?.length || 0, // 使用 size 或文本长度
+    };
   }
 
   return baseContent;
@@ -246,7 +277,25 @@ export async function copyClipboardItem(
     return { success: false, message: '暂不支持此类型的快速复制' };
   } catch (error) {
     console.error('[copyClipboardItem] Failed to copy:', error);
-    return { success: false, message: '复制失败' };
+
+    // 提取错误信息
+    let errorMessage = '复制失败';
+    if (error instanceof Error) {
+      // 将整个错误转为字符串进行检查（包括多层堆栈）
+      const fullErrorString = error.toString() + ' ' + error.message;
+      console.log('[copyClipboardItem] Full error string:', fullErrorString);
+
+      if (fullErrorString.includes('TransactionTooLargeException')) {
+        errorMessage = '文本内容过大，无法复制到剪贴板（超过系统限制）';
+      } else if (fullErrorString.includes('setStringAsync')) {
+        // 提取更简洁的错误信息
+        errorMessage = '复制失败：' + (error.message || '未知错误');
+      } else {
+        errorMessage = error.message || '复制失败';
+      }
+    }
+
+    return { success: false, message: errorMessage };
   }
 }
 
@@ -279,22 +328,47 @@ export async function syncAfterImageCopy(profileHash: string): Promise<void> {
  *
  * 统一的"复制到本地"操作：
  * 1. 暂停轮询，避免写入期间监听器误触发
- * 2. 写入系统剪贴板
- * 3. 更新 Store 中的 currentContent，刷新本地剪贴板卡片
- * 4. 图片类型额外执行 syncAfterImageCopy，同步 localClipboardHash
- * 5. 恢复轮询
+ * 2. 对于Text类型且有文件的情况，从文件读取完整文本
+ * 3. 写入系统剪贴板
+ * 4. 更新 Store 中的 currentContent，刷新本地剪贴板卡片
+ * 5. 图片类型额外执行 syncAfterImageCopy，同步 localClipboardHash
+ * 6. 恢复轮询
  */
 export async function copyToLocalClipboard(content: ClipboardContent): Promise<CopyResult> {
   const { clipboardManager, clipboardMonitor } = await import('@/services');
 
   clipboardMonitor.pausePolling();
   try {
-    const result = await copyClipboardItem(content, clipboardManager);
+    // 对于Text类型且有fileUri，从文件读取完整文本进行复制
+    let contentToCopy = content;
+    if (content.type === 'Text' && content.fileUri && content.hasData) {
+      try {
+        // 使用 File API 的 text() 方法读取文件内容
+        const response = await fetch(content.fileUri);
+        const completeText = await response.text();
+        console.log(
+          `[copyToLocalClipboard] Read complete text from file for profileHash: ${content.profileHash}, length: ${completeText.length}`
+        );
+        contentToCopy = {
+          ...content,
+          text: completeText,
+        };
+      } catch (error) {
+        console.error('[copyToLocalClipboard] Failed to read text file:', error);
+        // 失败时如果有预览文本就使用预览文本，否则返回失败
+        if (!content.text) {
+          return { success: false, message: '无法读取完整文本' };
+        }
+        // 使用预览文本继续执行
+      }
+    }
+
+    const result = await copyClipboardItem(contentToCopy, clipboardManager);
     if (result.success) {
-      useClipboardStore.getState().setCurrentContentDisplay(content);
-      if (content.type === 'Image' && content.profileHash) {
+      useClipboardStore.getState().setCurrentContentDisplay(contentToCopy);
+      if (contentToCopy.type === 'Image' && contentToCopy.profileHash) {
         try {
-          await syncAfterImageCopy(content.profileHash);
+          await syncAfterImageCopy(contentToCopy.profileHash);
         } catch (syncError) {
           console.error('[copyToLocalClipboard] Failed to sync after image copy:', syncError);
         }

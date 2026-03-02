@@ -63,8 +63,13 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
     }
   };
 
-  const formatSize = (bytes?: number): string => {
+  const formatSize = (bytes?: number, type?: string): string => {
     if (!bytes) return '';
+    // Text 类型显示字符数（添加千分位逗号）
+    if (type === 'Text') {
+      return bytes.toLocaleString('zh-CN');
+    }
+    // 其他类型显示文件大小
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -182,7 +187,7 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
           <View style={styles.metaInfo}>
             {item.size !== undefined && (
               <Text style={[styles.metaText, { color: theme.colors.textTertiary }]}>
-                {formatSize(item.size)}
+                {formatSize(item.size, item.type)}
               </Text>
             )}
             {item.synced !== undefined && (

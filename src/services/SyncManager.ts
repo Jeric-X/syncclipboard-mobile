@@ -329,6 +329,13 @@ export class SyncManager {
         // 优先使用文件 URI 直接上传（避免加载到内存）
         const fileUri = localContent.fileUri;
 
+        if (!fileUri && !localContent.fileData) {
+          // hasData为true但没有fileUri和fileData，说明存在逻辑错误
+          throw new Error(
+            `[SyncManager] hasData is true but no fileUri or fileData available for type: ${profile.type}, dataName: ${profile.dataName}`
+          );
+        }
+
         if (fileUri) {
           console.log('[SyncManager] Uploading file from URI:', fileUri);
           try {
