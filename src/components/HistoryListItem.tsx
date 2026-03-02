@@ -157,10 +157,9 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
                 source={{ uri: item.fileUri }}
                 style={[
                   styles.imagePreview,
-                  imageDimensions &&
-                    containerWidth > 0 && {
-                      height: (containerWidth / imageDimensions.width) * imageDimensions.height,
-                    },
+                  imageDimensions && containerWidth > 0
+                    ? { height: (containerWidth / imageDimensions.width) * imageDimensions.height }
+                    : styles.imagePreviewLimited,
                 ]}
                 resizeMode="cover"
                 onLoad={(e) => {

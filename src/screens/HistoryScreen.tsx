@@ -60,12 +60,15 @@ export function HistoryScreen() {
 
   const listRef = useRef<FlashListRef<ClipboardItem>>(null);
   const isScrolledRef = useRef(false);
+  const menuButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
+  const [menuTopOffset, setMenuTopOffset] = useState(60);
 
   // 设置自定义 header
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
         <TouchableOpacity
+          ref={menuButtonRef}
           onPress={handleOpenMenu}
           style={styles.headerButton}
           hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
@@ -78,7 +81,16 @@ export function HistoryScreen() {
 
   // 打开菜单
   const handleOpenMenu = useCallback(() => {
-    setShowMenu(true);
+    if (menuButtonRef.current) {
+      menuButtonRef.current.measure(
+        (_x: number, _y: number, _w: number, h: number, _pageX: number, pageY: number) => {
+          setMenuTopOffset(pageY + h + 4);
+          setShowMenu(true);
+        }
+      );
+    } else {
+      setShowMenu(true);
+    }
   }, []);
 
   // 搜索防抖（含初始加载）
@@ -363,7 +375,11 @@ export function HistoryScreen() {
             <View
               style={[
                 styles.floatingMenu,
-                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                  top: menuTopOffset,
+                },
               ]}
             >
               <TouchableOpacity style={styles.menuItem} onPress={handleToggleFullImage}>
@@ -518,7 +534,6 @@ const styles = StyleSheet.create({
   },
   floatingMenu: {
     position: 'absolute',
-    top: 60,
     right: 10,
     borderRadius: 8,
     borderWidth: 1,
