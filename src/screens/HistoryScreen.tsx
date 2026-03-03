@@ -18,18 +18,22 @@ import {
   Share,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  Animated,
+  Easing,
 } from 'react-native';
 import { MoreVertical, Check } from 'react-native-feather';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '@/hooks/useTheme';
 import { useHistoryStore } from '@/stores/historyStore';
+import { useSettingsStore } from '@/stores';
 import { useHistoryDisplaySettings } from '@/hooks/useHistoryDisplaySettings';
 import { ClipboardItem, ClipboardContent } from '@/types/clipboard';
-import { HistoryListItem } from '@/components/HistoryListItem';
+import { HistoryListItem, type HistoryListItemHandle } from '@/components/HistoryListItem';
 import { MessageToast } from '@/components/MessageToast';
 import { copyToLocalClipboard } from '@/utils/clipboard';
 import { useMessageToast } from '@/hooks/useMessageToast';
+import { calculateTextHash } from '@/utils/hash';
 
 type FilterType = 'all' | 'Text' | 'Image' | 'File';
 
@@ -42,11 +46,13 @@ export function HistoryScreen() {
     isLoading,
     loadItems,
     searchItems,
+    addItems,
     deleteItem,
     clearHistory,
     currentPage,
     lastAddedTimestamp,
   } = useHistoryStore();
+  const { config } = useSettingsStore();
 
   const { showFullImage, setShowFullImage } = useHistoryDisplaySettings();
 
@@ -56,15 +62,50 @@ export function HistoryScreen() {
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const { message, showMessage, handleMessageShown } = useMessageToast();
+  const actionSheetTranslateY = useRef(new Animated.Value(320)).current;
+  const isDebugMode = config?.debugMode ?? false;
 
   const listRef = useRef<FlashListRef<ClipboardItem>>(null);
   const isScrolledRef = useRef(false);
   const menuButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
+  const itemRefsMap = useRef<Map<string, React.RefObject<HistoryListItemHandle | null>>>(
+    new Map()
+  ).current;
   const [menuTopOffset, setMenuTopOffset] = useState(60);
+
+  // 清理不在列表中的 ref
+  useEffect(() => {
+    const currentHashes = new Set(items.map((item) => item.profileHash));
+    for (const hash of itemRefsMap.keys()) {
+      if (!currentHashes.has(hash)) {
+        itemRefsMap.delete(hash);
+      }
+    }
+  }, [items, itemRefsMap]);
+
+  // 获取或创建 ref
+  const getOrCreateItemRef = useCallback(
+    (profileHash: string) => {
+      let itemRef = itemRefsMap.get(profileHash);
+      if (!itemRef) {
+        itemRef = React.createRef<HistoryListItemHandle>();
+        itemRefsMap.set(profileHash, itemRef as React.RefObject<HistoryListItemHandle | null>);
+      }
+      return itemRef as React.RefObject<HistoryListItemHandle>;
+    },
+    [itemRefsMap]
+  );
 
   // 设置自定义 header
   useLayoutEffect(() => {
     navigation.setOptions({
+      headerShadowVisible: false,
+      headerStyle: {
+        backgroundColor: theme.colors.surface,
+        elevation: 0,
+        shadowOpacity: 0,
+        borderBottomWidth: 0,
+      },
       headerRight: () => (
         <TouchableOpacity
           ref={menuButtonRef}
@@ -76,7 +117,7 @@ export function HistoryScreen() {
         </TouchableOpacity>
       ),
     });
-  }, [navigation, theme.colors.text]);
+  }, [navigation, theme.colors.text, theme.colors.surface]);
 
   // 打开菜单
   const handleOpenMenu = useCallback(() => {
@@ -91,6 +132,36 @@ export function HistoryScreen() {
       setShowMenu(true);
     }
   }, []);
+
+  const openActionSheet = useCallback(() => {
+    actionSheetTranslateY.setValue(320);
+    setShowActionSheet(true);
+    requestAnimationFrame(() => {
+      Animated.timing(actionSheetTranslateY, {
+        toValue: 0,
+        duration: 250,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    });
+  }, [actionSheetTranslateY]);
+
+  const closeActionSheet = useCallback(
+    (onClosed?: () => void) => {
+      Animated.timing(actionSheetTranslateY, {
+        toValue: 320,
+        duration: 220,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) {
+          setShowActionSheet(false);
+          onClosed?.();
+        }
+      });
+    },
+    [actionSheetTranslateY]
+  );
 
   // 搜索防抖（含初始加载）
   useEffect(() => {
@@ -168,17 +239,16 @@ export function HistoryScreen() {
     async (item: ClipboardItem) => {
       const result = await copyItemWithSync(item);
       showMessage(result.message, result.success ? 'success' : 'error');
-      setShowActionSheet(false);
+      closeActionSheet();
     },
-    [showMessage, copyItemWithSync]
+    [showMessage, copyItemWithSync, closeActionSheet]
   );
 
-  // 删除项目（直接删除，不弹确认框）
-  const handleDeleteItem = useCallback(
+  // 真正执行删除的函数 - 与存储交互
+  const performDelete = useCallback(
     async (item: ClipboardItem) => {
       try {
         await deleteItem(item.profileHash);
-        setShowActionSheet(false);
         showMessage('已删除', 'success');
       } catch (error) {
         console.error('[HistoryScreen] Failed to delete:', error);
@@ -188,52 +258,21 @@ export function HistoryScreen() {
     [deleteItem, showMessage]
   );
 
-  // 长按列表项 - 显示操作菜单
-  const handleItemLongPress = useCallback(
+  // 菜单删除处理 - 触发 UI 动画，由 HistoryListItem 的 onDelete 执行真正删除
+  const handleDeleteFromMenu = useCallback(
     (item: ClipboardItem) => {
-      setSelectedItem(item);
+      // 立即关闭菜单
+      setShowMenu(false);
+      closeActionSheet();
 
-      if (Platform.OS === 'ios') {
-        ActionSheetIOS.showActionSheetWithOptions(
-          {
-            options: ['取消', '复制', '删除'],
-            destructiveButtonIndex: 2,
-            cancelButtonIndex: 0,
-          },
-          (buttonIndex) => {
-            if (buttonIndex === 1) {
-              handleCopyItem(item);
-            } else if (buttonIndex === 2) {
-              handleDeleteItem(item);
-            }
-          }
-        );
-      } else {
-        setShowActionSheet(true);
+      // 触发 item 的删除动画，动画完成后会自动调用 onDelete (performDelete)
+      const itemRef = itemRefsMap.get(item.profileHash);
+      if (itemRef?.current) {
+        itemRef.current.startDelete();
       }
     },
-    [handleCopyItem, handleDeleteItem]
+    [itemRefsMap]
   );
-
-  // 清空所有历史记录
-  const handleClearAll = useCallback(() => {
-    Alert.alert('确认清空', '确定要清空所有历史记录吗？此操作不可撤销。', [
-      { text: '取消', style: 'cancel' },
-      {
-        text: '清空',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await clearHistory();
-            showMessage('已清空所有历史记录', 'success');
-          } catch (error) {
-            console.error('[HistoryScreen] Failed to clear:', error);
-            showMessage('清空失败', 'error');
-          }
-        },
-      },
-    ]);
-  }, [clearHistory, showMessage]);
 
   // 分享项目
   const handleShare = useCallback(
@@ -265,6 +304,143 @@ export function HistoryScreen() {
     [showMessage]
   );
 
+  // 长按列表项 - 显示操作菜单
+  const handleItemLongPress = useCallback(
+    (item: ClipboardItem) => {
+      setSelectedItem(item);
+
+      if (Platform.OS === 'ios') {
+        // 根据类型构建菜单选项
+        const options: string[] = ['取消'];
+        const actions: Array<() => void> = [];
+
+        // Text: 复制、删除
+        // Image: 分享、复制、删除
+        // File/Group: 分享、删除
+
+        if (item.type === 'Image' || item.type === 'File' || item.type === 'Group') {
+          options.push('分享');
+          actions.push(() => handleShare(item));
+        }
+
+        if (item.type === 'Text' || item.type === 'Image') {
+          options.push('复制');
+          actions.push(() => handleCopyItem(item));
+        }
+
+        options.push('删除');
+        actions.push(() => handleDeleteFromMenu(item));
+
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            options,
+            destructiveButtonIndex: options.length - 1, // 删除始终是最后一项
+            cancelButtonIndex: 0,
+          },
+          (buttonIndex) => {
+            if (buttonIndex > 0 && buttonIndex <= actions.length) {
+              actions[buttonIndex - 1]();
+            }
+          }
+        );
+      } else {
+        openActionSheet();
+      }
+    },
+    [handleCopyItem, handleShare, handleDeleteFromMenu, openActionSheet]
+  );
+
+  // 清空所有历史记录
+  const handleClearAll = useCallback(() => {
+    Alert.alert('确认清空', '确定要清空所有历史记录吗？此操作不可撤销。', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '清空',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await clearHistory();
+            showMessage('已清空所有历史记录', 'success');
+          } catch (error) {
+            console.error('[HistoryScreen] Failed to clear:', error);
+            showMessage('清空失败', 'error');
+          }
+        },
+      },
+    ]);
+  }, [clearHistory, showMessage]);
+
+  const handleMenuClearAll = useCallback(() => {
+    setShowMenu(false);
+    handleClearAll();
+  }, [handleClearAll]);
+
+  const generateRandomDebugText = useCallback(() => {
+    const randomInt = (min: number, max: number) =>
+      Math.floor(Math.random() * (max - min + 1)) + min;
+
+    const totalChars = randomInt(0, 100);
+    const lineCount = randomInt(0, 5);
+
+    if (totalChars === 0 || lineCount === 0) {
+      return '';
+    }
+
+    const chars =
+      'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789，。！？；：、-_[](){}<>/\\@#%&*+= 空格测试随机内容';
+
+    const buildLine = (length: number) => {
+      let line = '';
+      for (let i = 0; i < length; i++) {
+        const index = randomInt(0, chars.length - 1);
+        line += chars[index];
+      }
+      return line;
+    };
+
+    let remaining = totalChars;
+    const lines: string[] = [];
+
+    for (let i = 0; i < lineCount; i++) {
+      const isLastLine = i === lineCount - 1;
+      const currentLength = isLastLine ? remaining : randomInt(0, remaining);
+      lines.push(buildLine(currentLength));
+      remaining -= currentLength;
+    }
+
+    return lines.join('\n');
+  }, []);
+
+  const handleAddRandomRecords = useCallback(async () => {
+    setShowMenu(false);
+
+    try {
+      const now = Date.now();
+      const randomItems = await Promise.all(
+        Array.from({ length: 10 }, async (_unused, index) => {
+          const seed = `debug-random-${now}-${index}-${Math.random().toString(36).slice(2, 10)}`;
+          const profileHash = await calculateTextHash(seed);
+
+          return {
+            type: 'Text' as const,
+            text: generateRandomDebugText(),
+            profileHash,
+            hasData: false,
+            timestamp: now - index * 1000,
+            synced: false,
+          };
+        })
+      );
+
+      await addItems(randomItems);
+
+      showMessage('已添加10条随机记录', 'success');
+    } catch (error) {
+      console.error('[HistoryScreen] Failed to add random records:', error);
+      showMessage('添加随机记录失败', 'error');
+    }
+  }, [addItems, showMessage, generateRandomDebugText]);
+
   // 加载更多（防止重复加载和越界）
   const handleEndReached = useCallback(() => {
     if (isLoading) return;
@@ -277,6 +453,10 @@ export function HistoryScreen() {
     setFilterType(type);
   }, []);
 
+  const handleClearSearch = useCallback(() => {
+    setSearchText('');
+  }, []);
+
   // 切换完整图片显示
   const handleToggleFullImage = useCallback(async () => {
     await setShowFullImage(!showFullImage);
@@ -285,17 +465,29 @@ export function HistoryScreen() {
 
   // 渲染列表项
   const renderItem = useCallback(
-    ({ item }: { item: ClipboardItem }) => (
-      <HistoryListItem
-        item={item}
-        onCopy={handleItemPress}
-        onShare={handleShare}
-        onLongPress={handleItemLongPress}
-        onDelete={handleDeleteItem}
-        showFullImage={showFullImage}
-      />
-    ),
-    [handleItemPress, handleShare, handleItemLongPress, handleDeleteItem, showFullImage]
+    ({ item }: { item: ClipboardItem }) => {
+      const itemRef = getOrCreateItemRef(item.profileHash);
+
+      return (
+        <HistoryListItem
+          ref={itemRef}
+          item={item}
+          onCopy={handleItemPress}
+          onShare={handleShare}
+          onLongPress={handleItemLongPress}
+          onDelete={performDelete}
+          showFullImage={showFullImage}
+        />
+      );
+    },
+    [
+      getOrCreateItemRef,
+      handleItemPress,
+      handleShare,
+      handleItemLongPress,
+      performDelete,
+      showFullImage,
+    ]
   );
 
   // 渲染空状态
@@ -330,9 +522,20 @@ export function HistoryScreen() {
           onChangeText={setSearchText}
           clearButtonMode="while-editing"
         />
-        <TouchableOpacity onPress={handleClearAll} style={styles.clearButton}>
-          <Text style={[styles.clearButtonText, { color: theme.colors.error || '#F44336' }]}>
-            清空
+        <TouchableOpacity
+          style={styles.clearSearchButton}
+          onPress={handleClearSearch}
+          disabled={!searchText}
+        >
+          <Text
+            style={[
+              styles.clearSearchButtonText,
+              {
+                color: searchText ? theme.colors.primary : theme.colors.textTertiary,
+              },
+            ]}
+          >
+            清除
           </Text>
         </TouchableOpacity>
       </View>
@@ -406,6 +609,22 @@ export function HistoryScreen() {
                 </Text>
                 {showFullImage && <Check color={theme.colors.primary} width={18} height={18} />}
               </TouchableOpacity>
+              {isDebugMode && (
+                <>
+                  <View style={[styles.menuDivider, { backgroundColor: theme.colors.border }]} />
+                  <TouchableOpacity style={styles.menuItem} onPress={handleAddRandomRecords}>
+                    <Text style={[styles.menuItemText, { color: theme.colors.text }]}>
+                      添加10条随机记录
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              <View style={[styles.menuDivider, { backgroundColor: theme.colors.border }]} />
+              <TouchableOpacity style={styles.menuItem} onPress={handleMenuClearAll}>
+                <Text style={[styles.menuItemText, { color: theme.colors.error || '#F44336' }]}>
+                  清空所有历史记录
+                </Text>
+              </TouchableOpacity>
             </View>
           </Pressable>
         </Modal>
@@ -416,26 +635,63 @@ export function HistoryScreen() {
         <Modal
           visible={showActionSheet}
           transparent
-          animationType="fade"
-          onRequestClose={() => setShowActionSheet(false)}
+          animationType="none"
+          onRequestClose={() => closeActionSheet()}
         >
           <Pressable
             style={[styles.modalOverlay, { backgroundColor: theme.colors.backdrop }]}
-            onPress={() => setShowActionSheet(false)}
+            onPress={() => closeActionSheet()}
           >
-            <View style={[styles.actionSheet, { backgroundColor: theme.colors.surface }]}>
+            <Animated.View
+              style={[
+                styles.actionSheet,
+                {
+                  backgroundColor: theme.colors.surface,
+                  transform: [{ translateY: actionSheetTranslateY }],
+                },
+              ]}
+            >
+              {/* 分享按钮 - Image/File/Group 类型显示 */}
+              {selectedItem &&
+                (selectedItem.type === 'Image' ||
+                  selectedItem.type === 'File' ||
+                  selectedItem.type === 'Group') && (
+                  <>
+                    <TouchableOpacity
+                      style={styles.actionSheetButton}
+                      onPress={() => selectedItem && handleShare(selectedItem)}
+                    >
+                      <Text style={[styles.actionSheetButtonText, { color: theme.colors.text }]}>
+                        分享
+                      </Text>
+                    </TouchableOpacity>
+                    <View
+                      style={[styles.actionSheetDivider, { backgroundColor: theme.colors.border }]}
+                    />
+                  </>
+                )}
+
+              {/* 复制按钮 - Text/Image 类型显示 */}
+              {selectedItem && (selectedItem.type === 'Text' || selectedItem.type === 'Image') && (
+                <>
+                  <TouchableOpacity
+                    style={styles.actionSheetButton}
+                    onPress={() => selectedItem && handleCopyItem(selectedItem)}
+                  >
+                    <Text style={[styles.actionSheetButtonText, { color: theme.colors.text }]}>
+                      复制
+                    </Text>
+                  </TouchableOpacity>
+                  <View
+                    style={[styles.actionSheetDivider, { backgroundColor: theme.colors.border }]}
+                  />
+                </>
+              )}
+
+              {/* 删除按钮 - 所有类型显示 */}
               <TouchableOpacity
                 style={styles.actionSheetButton}
-                onPress={() => selectedItem && handleCopyItem(selectedItem)}
-              >
-                <Text style={[styles.actionSheetButtonText, { color: theme.colors.text }]}>
-                  复制
-                </Text>
-              </TouchableOpacity>
-              <View style={[styles.actionSheetDivider, { backgroundColor: theme.colors.border }]} />
-              <TouchableOpacity
-                style={styles.actionSheetButton}
-                onPress={() => selectedItem && handleDeleteItem(selectedItem)}
+                onPress={() => selectedItem && handleDeleteFromMenu(selectedItem)}
               >
                 <Text
                   style={[styles.actionSheetButtonText, { color: theme.colors.error || '#F44336' }]}
@@ -444,15 +700,14 @@ export function HistoryScreen() {
                 </Text>
               </TouchableOpacity>
               <View style={[styles.actionSheetDivider, { backgroundColor: theme.colors.border }]} />
-              <TouchableOpacity
-                style={styles.actionSheetButton}
-                onPress={() => setShowActionSheet(false)}
-              >
+
+              {/* 取消按钮 */}
+              <TouchableOpacity style={styles.actionSheetButton} onPress={() => closeActionSheet()}>
                 <Text style={[styles.actionSheetButtonText, { color: theme.colors.textSecondary }]}>
                   取消
                 </Text>
               </TouchableOpacity>
-            </View>
+            </Animated.View>
           </Pressable>
         </Modal>
       )}
@@ -472,6 +727,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
+    paddingTop: 0,
     gap: 8,
   },
   searchInput: {
@@ -482,13 +738,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     borderWidth: 1,
   },
-  clearButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  clearSearchButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
-  clearButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
+  clearSearchButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   headerButton: {
     paddingHorizontal: 16,
@@ -571,6 +827,9 @@ const styles = StyleSheet.create({
   menuItemText: {
     fontSize: 15,
     fontWeight: '500',
+  },
+  menuDivider: {
+    height: StyleSheet.hairlineWidth,
   },
   actionSheet: {
     borderTopLeftRadius: 16,

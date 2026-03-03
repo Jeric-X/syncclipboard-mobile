@@ -49,21 +49,6 @@ jobs:
           echo "Built APK files:"
           find android/app/build/outputs/apk -name "*.apk" -type f
 
-      - name: Rename APK files
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          cd android/app/build/outputs/apk/release
-          for apk in *.apk; do
-            if [[ "$apk" == *"universal"* ]]; then
-              new_name="syncclipboard-mobile-${VERSION}-universal-release.apk"
-            else
-              arch=$(echo "$apk" | sed -E 's/.*-([^-]+)-release\.apk/\1/')
-              new_name="syncclipboard-mobile-${VERSION}-${arch}-release.apk"
-            fi
-            mv "$apk" "$new_name"
-            echo "Renamed: $apk -> $new_name"
-          done
-
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:

@@ -809,7 +809,9 @@ export function HomeScreen() {
                       style={[styles.copyButton, { backgroundColor: theme.colors.errorTitle }]}
                       onPress={handleCopyError}
                     >
-                      <Text style={styles.copyButtonText}>复制错误</Text>
+                      <Text style={[styles.copyButtonText, { color: theme.colors.white }]}>
+                        复制错误
+                      </Text>
                     </TouchableOpacity>
                   </View>
                   <ScrollView style={styles.errorScrollView} nestedScrollEnabled={true}>
@@ -958,9 +960,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 6,
   },
-  // eslint-disable-next-line react-native/no-color-literals
   copyButtonText: {
-    color: '#FFF',
     fontSize: 13,
     fontWeight: '600',
   },

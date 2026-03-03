@@ -53,6 +53,9 @@ interface HistoryState {
   /** 添加历史记录 */
   addItem: (item: ClipboardItem) => Promise<void>;
 
+  /** 批量添加历史记录 */
+  addItems: (items: ClipboardItem[]) => Promise<void>;
+
   /** 更新历史记录 */
   updateItem: (id: string, updates: Partial<ClipboardItem>) => Promise<void>;
 
@@ -190,6 +193,21 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       await get().refresh();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to add item';
+      set({ error: errorMessage });
+    }
+  },
+
+  addItems: async (items: ClipboardItem[]) => {
+    set({ error: null });
+
+    try {
+      await historyStorage.addItems(items);
+
+      set({ lastAddedTimestamp: Date.now() });
+
+      await get().refresh();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add items';
       set({ error: errorMessage });
     }
   },

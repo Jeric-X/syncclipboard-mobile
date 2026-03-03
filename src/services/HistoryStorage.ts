@@ -166,6 +166,40 @@ export class HistoryStorage {
   }
 
   /**
+   * 批量添加历史记录
+   */
+  public async addItems(items: ClipboardItem[]): Promise<void> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+
+    for (const item of items) {
+      const existingIndex = this.history.findIndex(
+        (h) => h.profileHash.toLowerCase() === item.profileHash.toLowerCase()
+      );
+
+      if (existingIndex >= 0) {
+        this.history[existingIndex] = {
+          ...this.history[existingIndex],
+          ...item,
+          timestamp: Date.now(),
+        };
+      } else {
+        this.history.unshift({
+          ...item,
+          timestamp: item.timestamp || Date.now(),
+        });
+      }
+    }
+
+    if (this.history.length > this.maxHistorySize) {
+      this.history = this.history.slice(0, this.maxHistorySize);
+    }
+
+    await this.saveHistory();
+  }
+
+  /**
    * 根据 profileHash 获取历史记录
    */
   public async getItem(profileHash: string): Promise<ClipboardItem | null> {

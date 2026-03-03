@@ -54,6 +54,59 @@ export class ClipboardManager {
     const profileHash = await calculateTextHash(text);
     const timestamp = Date.now();
 
+    // 步骤1: 根据 profileHash 查询历史记录
+    let historyItem = await historyStorage.getItemByLocalHash(profileHash);
+
+    if (historyItem && historyItem.type === 'Text') {
+      // 如果历史记录有外部文件，验证文件是否存在
+      if (historyItem.hasData && historyItem.dataName) {
+        const { getHistoryFileUri } = await import('@/utils/fileStorage');
+        const historyFileUri = await getHistoryFileUri(
+          'Text',
+          historyItem.profileHash,
+          historyItem.dataName
+        );
+
+        if (historyFileUri) {
+          const { File } = FileSystem;
+          const historyFile = new File(historyFileUri);
+
+          if (historyFile.exists) {
+            // 生成预览文本：如果有历史文本则使用，否则从当前文本取前200字符
+            let previewText = historyItem.text;
+            if (!previewText) {
+              previewText = text.length > 200 ? text.substring(0, 200) + '...' : text;
+            }
+
+            // 使用历史记录中的文件信息
+            return {
+              type: 'Text',
+              text: previewText,
+              fileUri: historyFile.uri,
+              fileName: historyItem.dataName,
+              fileSize: historyItem.size || text.length,
+              profileHash: historyItem.profileHash,
+              localClipboardHash: historyItem.profileHash, // 文本类型，两者相同
+              hasData: true,
+              timestamp,
+            };
+          }
+        }
+      } else {
+        // 历史记录中的短文本，直接返回
+        return {
+          type: 'Text',
+          text: historyItem.text || text,
+          fileSize: historyItem.size || text.length,
+          profileHash: historyItem.profileHash,
+          localClipboardHash: historyItem.profileHash,
+          hasData: false,
+          timestamp,
+        };
+      }
+    }
+
+    // 历史记录中没有找到或文件不存在，继续处理
     // 文本长度阈值（字符数），超过此长度将保存为文件
     const TEXT_STORAGE_THRESHOLD = 1000;
     const TEXT_PREVIEW_MAX_LENGTH = 200;
@@ -443,7 +496,7 @@ export class ClipboardManager {
 
       // 选择图片
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: false,
         quality: 1,
       });
