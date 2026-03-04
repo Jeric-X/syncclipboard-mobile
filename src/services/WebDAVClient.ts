@@ -3,6 +3,7 @@
  * Implements SyncClipboard API using WebDAV protocol
  */
 
+import { fetch } from 'expo/fetch';
 import { APIClient } from './APIClient';
 import { ProfileDto, ServerInfo } from '../types/api';
 import { ISyncClipboardAPI } from './SyncClipboardAPI';
@@ -65,7 +66,7 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
   /**
    * 上传剪贴板配置
    */
-  async putClipboard(profile: ProfileDto): Promise<void> {
+  async putClipboard(profile: ProfileDto, signal?: AbortSignal): Promise<void> {
     try {
       // 验证输入数据
       this.validateProfile(profile);
@@ -74,7 +75,7 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
       await this.ensureDirectoryExists('/');
 
       // WebDAV PUT 请求上传文件
-      await this.put(`/${WebDAVClient.PROFILE_FILENAME}`, profile);
+      await this.put(`/${WebDAVClient.PROFILE_FILENAME}`, profile, signal ? { signal } : undefined);
     } catch (error) {
       console.error('[WebDAVClient] Failed to put clipboard:', error);
       throw error;
@@ -138,7 +139,7 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
    * @param fileName 服务器上的文件名
    * @param fileUri 本地文件的 URI，避免将大文件加载到内存中
    */
-  async putFile(fileName: string, fileUri: string): Promise<void> {
+  async putFile(fileName: string, fileUri: string, signal?: AbortSignal): Promise<void> {
     if (!fileName) {
       throw new ValidationError('File name is required');
     }
@@ -148,41 +149,36 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
     }
 
     try {
-      const FileSystem = await import('expo-file-system');
-      const file = new FileSystem.File(fileUri);
+      const { File } = await import('expo-file-system');
 
-      if (!file.exists) {
+      // 创建文件对象
+      const file = new File(fileUri);
+
+      // 检查文件是否存在
+      const fileInfo = await file.info();
+      if (!fileInfo.exists) {
         throw new ValidationError(`File not found: ${fileUri}`);
       }
 
-      console.log(`[WebDAVClient] Uploading file: ${fileName}, size: ${file.size} bytes`);
+      const fileSize = fileInfo.size || 0;
+      const fileSizeMB = (fileSize / 1024 / 1024).toFixed(2);
+      console.log(`[WebDAVClient] Uploading file: ${fileName}, size: ${fileSizeMB}MB`);
 
       // 确保目录存在
       await this.ensureDirectoryExists(`/${WebDAVClient.DATA_FOLDER}`);
 
       const url = `${this.baseURL}/${WebDAVClient.DATA_FOLDER}/${encodeURIComponent(fileName)}`;
-      console.log(`[WebDAVClient] PUT request to: ${url}`);
 
       // 准备请求头
       const headers = await this.getHeaders();
       headers['Content-Type'] = 'application/octet-stream';
 
-      // 读取文件为 base64
-      const base64Data = await file.base64();
-      console.log(`[WebDAVClient] File read as base64, length: ${base64Data.length} chars`);
-
-      // 将 base64 转为 Uint8Array（真正的二进制数据）
-      const binaryString = atob(base64Data);
-      const uint8Array = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        uint8Array[i] = binaryString.charCodeAt(i);
-      }
-
-      // 使用 fetch API 直接发送二进制数据
+      // 直接使用 File 对象作为 body，避免将大文件加载到内存
       const response = await fetch(url, {
         method: 'PUT',
         headers,
-        body: uint8Array,
+        body: file,
+        signal,
       });
 
       if (!response.ok) {

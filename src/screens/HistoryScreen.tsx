@@ -21,7 +21,7 @@ import {
   Animated,
   Easing,
 } from 'react-native';
-import { MoreVertical, Check } from 'react-native-feather';
+import { Check } from 'react-native-feather';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '@/hooks/useTheme';
@@ -31,6 +31,7 @@ import { useHistoryDisplaySettings } from '@/hooks/useHistoryDisplaySettings';
 import { ClipboardItem, ClipboardContent } from '@/types/clipboard';
 import { HistoryListItem, type HistoryListItemHandle } from '@/components/HistoryListItem';
 import { MessageToast } from '@/components/MessageToast';
+import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
 import { copyToLocalClipboard } from '@/utils/clipboard';
 import { useMessageToast } from '@/hooks/useMessageToast';
 import { calculateTextHash } from '@/utils/hash';
@@ -60,18 +61,15 @@ export function HistoryScreen() {
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [selectedItem, setSelectedItem] = useState<ClipboardItem | null>(null);
   const [showActionSheet, setShowActionSheet] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
   const { message, showMessage, handleMessageShown } = useMessageToast();
   const actionSheetTranslateY = useRef(new Animated.Value(320)).current;
   const isDebugMode = config?.debugMode ?? false;
 
   const listRef = useRef<FlashListRef<ClipboardItem>>(null);
   const isScrolledRef = useRef(false);
-  const menuButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
   const itemRefsMap = useRef<Map<string, React.RefObject<HistoryListItemHandle | null>>>(
     new Map()
   ).current;
-  const [menuTopOffset, setMenuTopOffset] = useState(60);
 
   // 清理不在列表中的 ref
   useEffect(() => {
@@ -95,43 +93,6 @@ export function HistoryScreen() {
     },
     [itemRefsMap]
   );
-
-  // 设置自定义 header
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerShadowVisible: false,
-      headerStyle: {
-        backgroundColor: theme.colors.surface,
-        elevation: 0,
-        shadowOpacity: 0,
-        borderBottomWidth: 0,
-      },
-      headerRight: () => (
-        <TouchableOpacity
-          ref={menuButtonRef}
-          onPress={handleOpenMenu}
-          style={styles.headerButton}
-          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-        >
-          <MoreVertical color={theme.colors.text} width={20} height={20} />
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation, theme.colors.text, theme.colors.surface]);
-
-  // 打开菜单
-  const handleOpenMenu = useCallback(() => {
-    if (menuButtonRef.current) {
-      menuButtonRef.current.measure(
-        (_x: number, _y: number, _w: number, h: number, _pageX: number, pageY: number) => {
-          setMenuTopOffset(pageY + h + 4);
-          setShowMenu(true);
-        }
-      );
-    } else {
-      setShowMenu(true);
-    }
-  }, []);
 
   const openActionSheet = useCallback(() => {
     actionSheetTranslateY.setValue(320);
@@ -261,8 +222,7 @@ export function HistoryScreen() {
   // 菜单删除处理 - 触发 UI 动画，由 HistoryListItem 的 onDelete 执行真正删除
   const handleDeleteFromMenu = useCallback(
     (item: ClipboardItem) => {
-      // 立即关闭菜单
-      setShowMenu(false);
+      // 关闭操作表单
       closeActionSheet();
 
       // 触发 item 的删除动画，动画完成后会自动调用 onDelete (performDelete)
@@ -271,7 +231,7 @@ export function HistoryScreen() {
         itemRef.current.startDelete();
       }
     },
-    [itemRefsMap]
+    [itemRefsMap, closeActionSheet]
   );
 
   // 分享项目
@@ -370,11 +330,6 @@ export function HistoryScreen() {
     ]);
   }, [clearHistory, showMessage]);
 
-  const handleMenuClearAll = useCallback(() => {
-    setShowMenu(false);
-    handleClearAll();
-  }, [handleClearAll]);
-
   const generateRandomDebugText = useCallback(() => {
     const randomInt = (min: number, max: number) =>
       Math.floor(Math.random() * (max - min + 1)) + min;
@@ -412,8 +367,6 @@ export function HistoryScreen() {
   }, []);
 
   const handleAddRandomRecords = useCallback(async () => {
-    setShowMenu(false);
-
     try {
       const now = Date.now();
       const randomItems = await Promise.all(
@@ -460,7 +413,6 @@ export function HistoryScreen() {
   // 切换完整图片显示
   const handleToggleFullImage = useCallback(async () => {
     await setShowFullImage(!showFullImage);
-    setShowMenu(false);
   }, [showFullImage, setShowFullImage]);
 
   // 渲染列表项
@@ -502,6 +454,46 @@ export function HistoryScreen() {
       </View>
     );
   }, [theme, searchText]);
+
+  // 菜单项配置
+  const menuItems = useMemo<MenuItemConfig[]>(() => {
+    const items: MenuItemConfig[] = [
+      {
+        label: '展示完整图片',
+        onPress: handleToggleFullImage,
+        icon: showFullImage ? <Check color="#2196F3" width={18} height={18} /> : undefined,
+      },
+    ];
+
+    if (isDebugMode) {
+      items.push({
+        label: '添加10条随机记录',
+        onPress: handleAddRandomRecords,
+      });
+    }
+
+    items.push({
+      label: '清空所有历史记录',
+      onPress: handleClearAll,
+      destructive: true,
+    });
+
+    return items;
+  }, [showFullImage, isDebugMode, handleToggleFullImage, handleAddRandomRecords, handleClearAll]);
+
+  // 设置标题栏菜单按钮
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShadowVisible: false,
+      headerStyle: {
+        backgroundColor: theme.colors.surface,
+        elevation: 0,
+        shadowOpacity: 0,
+        borderBottomWidth: 0,
+      },
+      headerRight: () => <TopRightMenu items={menuItems} />,
+    });
+  }, [navigation, theme.colors.surface, menuItems]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -583,52 +575,6 @@ export function HistoryScreen() {
         ListEmptyComponent={renderEmptyComponent}
         contentContainerStyle={styles.listContent}
       />
-
-      {/* 悬浮菜单 */}
-      {showMenu && (
-        <Modal
-          visible={showMenu}
-          transparent
-          animationType="none"
-          onRequestClose={() => setShowMenu(false)}
-        >
-          <Pressable style={styles.fullScreenOverlay} onPress={() => setShowMenu(false)}>
-            <View
-              style={[
-                styles.floatingMenu,
-                {
-                  backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.border,
-                  top: menuTopOffset,
-                },
-              ]}
-            >
-              <TouchableOpacity style={styles.menuItem} onPress={handleToggleFullImage}>
-                <Text style={[styles.menuItemText, { color: theme.colors.text }]}>
-                  展示完整图片
-                </Text>
-                {showFullImage && <Check color={theme.colors.primary} width={18} height={18} />}
-              </TouchableOpacity>
-              {isDebugMode && (
-                <>
-                  <View style={[styles.menuDivider, { backgroundColor: theme.colors.border }]} />
-                  <TouchableOpacity style={styles.menuItem} onPress={handleAddRandomRecords}>
-                    <Text style={[styles.menuItemText, { color: theme.colors.text }]}>
-                      添加10条随机记录
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              )}
-              <View style={[styles.menuDivider, { backgroundColor: theme.colors.border }]} />
-              <TouchableOpacity style={styles.menuItem} onPress={handleMenuClearAll}>
-                <Text style={[styles.menuItemText, { color: theme.colors.error || '#F44336' }]}>
-                  清空所有历史记录
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Modal>
-      )}
 
       {/* Android 操作菜单 Modal */}
       {Platform.OS === 'android' && (
@@ -746,12 +692,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  headerButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   filterContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
@@ -802,34 +742,6 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-  },
-  fullScreenOverlay: {
-    flex: 1,
-  },
-  floatingMenu: {
-    position: 'absolute',
-    right: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-    minWidth: 180,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  menuItemText: {
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  menuDivider: {
-    height: StyleSheet.hairlineWidth,
   },
   actionSheet: {
     borderTopLeftRadius: 16,

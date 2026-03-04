@@ -5,6 +5,8 @@
 
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import { AuthService } from './AuthService';
+import { ProfileDto } from '../types/api';
+import type { ClipboardContent } from '../types/clipboard';
 import {
   APIError,
   AuthenticationError,
@@ -13,6 +15,14 @@ import {
   TimeoutError,
   ConfigurationError,
 } from './errors';
+
+/**
+ * 扩展的错误接口，包含网络错误标志和原始错误
+ */
+interface ExtendedError extends Error {
+  isNetworkError?: boolean;
+  originalError?: unknown;
+}
 
 /**
  * API 客户端配置
@@ -31,10 +41,14 @@ export interface APIClientConfig {
   headers?: Record<string, string>;
 }
 
+export interface PutContentOptions {
+  signal?: AbortSignal;
+}
+
 /**
  * API 客户端基类
  */
-export class APIClient {
+export abstract class APIClient {
   protected client: AxiosInstance;
   protected authService?: AuthService;
   protected baseURL: string;
@@ -261,5 +275,127 @@ export class APIClient {
    */
   async testConnection(): Promise<void> {
     await this.get('/');
+  }
+
+  /**
+   * 上传剪贴板内容（模板方法）
+   * 子类必须实现 putFile 和 putClipboard 方法
+   * @param content 剪贴板内容对象
+   */
+  async putContent(content: ClipboardContent, options?: PutContentOptions): Promise<void> {
+    try {
+      const prefix = `[${this.constructor.name}]`;
+      console.log(`${prefix} Starting putContent:`, {
+        type: content.type,
+        hasData: content.hasData,
+        fileName: content.fileName,
+      });
+
+      // 转换为 ProfileDto
+      const { contentToProfileDto } = await import('../utils/clipboard');
+      const profile = await contentToProfileDto(content, { signal: options?.signal });
+
+      // 如果有数据文件，先上传
+      if (profile.hasData && profile.dataName && content.fileUri) {
+        console.log(`${prefix} Uploading data file: ${profile.dataName}`);
+        try {
+          await this.putFile(profile.dataName, content.fileUri, options?.signal);
+        } catch (fileError) {
+          throw this.buildError(fileError, `${prefix} File upload failed`);
+        }
+      }
+
+      // 然后上传配置
+      console.log(`${prefix} Uploading profile...`);
+      try {
+        await this.putClipboard(profile, options?.signal);
+      } catch (configError) {
+        throw this.buildError(configError, `${prefix} Profile upload failed`);
+      }
+
+      console.log(`${prefix} putContent completed successfully`);
+    } catch (error) {
+      const prefix = `[${this.constructor.name}]`;
+      console.error(`${prefix} Failed to put content:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 上传文件数据（由子类实现）
+   * @param fileName 服务器上的文件名
+   * @param fileUri 本地文件的 URI
+   */
+  abstract putFile(fileName: string, fileUri: string, signal?: AbortSignal): Promise<void>;
+
+  /**
+   * 上传剪贴板配置（由子类实现）
+   * @param profile 剪贴板配置对象
+   */
+  abstract putClipboard(profile: ProfileDto, signal?: AbortSignal): Promise<void>;
+
+  /**
+   * 构建详细的错误信息，包含HTTP状态码和服务器响应体
+   */
+  protected buildError(error: unknown, context: string): Error {
+    console.error(context, ':', error);
+
+    let errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    let isNetworkError = false;
+
+    // 检查错误对象中是否有 statusCode 和 response 信息
+    const hasStatusCode = error && typeof error === 'object' && 'statusCode' in error;
+    const hasResponse = error && typeof error === 'object' && 'response' in error;
+
+    if (hasStatusCode) {
+      const errorObj = error as Record<string, unknown>;
+      const statusCode = errorObj.statusCode;
+      console.error(`${context} - Status code:`, statusCode);
+
+      if (hasResponse) {
+        const response = errorObj.response;
+        console.error(`${context} - Server response:`, JSON.stringify(response, null, 2));
+
+        // 构建包含状态码和响应体的完整错误信息
+        const responseText =
+          typeof response === 'string' ? response : JSON.stringify(response, null, 2);
+
+        errorMessage = `服务器返回错误 (HTTP ${statusCode}):\n\n${responseText}`;
+      } else {
+        errorMessage = `服务器返回错误 (HTTP ${statusCode}): ${errorMessage}`;
+      }
+    } else if (hasResponse) {
+      // 有response但没有statusCode（可能是Axios原始错误）
+      const errorObj = error as Record<string, unknown>;
+      const response = errorObj.response as Record<string, unknown> | undefined;
+      console.error(`${context} - Server response:`, JSON.stringify(response, null, 2));
+
+      if (response?.data) {
+        const responseText =
+          typeof response.data === 'string'
+            ? response.data
+            : JSON.stringify(response.data, null, 2);
+        const status = response.status as number | undefined;
+        errorMessage = `服务器返回错误 (HTTP ${status || 'unknown'}):\n\n${responseText}`;
+      }
+    }
+
+    // 检查是否是网络错误
+    if (error instanceof Error) {
+      const message = error.message.toLowerCase();
+      isNetworkError =
+        message.includes('network') ||
+        message.includes('timeout') ||
+        message.includes('connection') ||
+        message.includes('econnrefused') ||
+        message.includes('offline');
+    }
+
+    // 创建新的错误对象，附加专有属性
+    const builtError: ExtendedError = new Error(errorMessage);
+    builtError.isNetworkError = isNetworkError;
+    builtError.originalError = error;
+
+    return builtError;
   }
 }

@@ -4,17 +4,26 @@
  */
 
 import { ProfileDto, ClipboardContent, ClipboardContentType } from '@/types';
-import { calculateTextHash } from '@/utils/hash';
+import { calculateContentHash } from '@/utils/hash';
 import { useClipboardStore } from '@/stores/clipboardStore';
+
+export interface ContentToProfileDtoOptions {
+  signal?: AbortSignal;
+}
 
 /**
  * 将 ClipboardContent 转换为 ProfileDto
  */
-export async function contentToProfileDto(content: ClipboardContent): Promise<ProfileDto> {
-  const { type, text = '', profileHash, fileName, fileSize, fileUri } = content;
+export async function contentToProfileDto(
+  content: ClipboardContent,
+  options?: ContentToProfileDtoOptions
+): Promise<ProfileDto> {
+  let { type, text = '', profileHash, fileName, fileSize, fileUri } = content;
 
-  // 计算 profileHash（如果没有提供）
-  const calculatedProfileHash = profileHash || (text ? await calculateTextHash(text) : undefined);
+  // 如果没有提供 profileHash，则计算
+  if (!profileHash) {
+    profileHash = await calculateContentHash(content, options?.signal);
+  }
 
   switch (type) {
     case 'Text': {
@@ -23,7 +32,7 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
         return {
           type: 'Text',
           text, // 预览文本
-          hash: calculatedProfileHash,
+          hash: profileHash,
           hasData: true, // 标记有外部文件
           dataName: fileName,
           size: fileSize,
@@ -34,7 +43,7 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
       return {
         type: 'Text',
         text,
-        hash: calculatedProfileHash,
+        hash: profileHash,
         hasData: false,
       };
     }
@@ -43,7 +52,7 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
       return {
         type: 'Image',
         text: text || '[图片]',
-        hash: calculatedProfileHash,
+        hash: profileHash,
         hasData: true,
         dataName: fileName,
         size: fileSize,
@@ -53,7 +62,7 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
       return {
         type: 'File',
         text: text || fileName || '[文件]',
-        hash: calculatedProfileHash,
+        hash: profileHash,
         hasData: true,
         dataName: fileName,
         size: fileSize,
@@ -63,7 +72,7 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
       return {
         type: 'Group',
         text: text || '[文件组]',
-        hash: calculatedProfileHash,
+        hash: profileHash,
         hasData: true,
         dataName: fileName,
         size: fileSize,

@@ -3,7 +3,7 @@
  * 首页 - 显示当前剪贴板和同步状态
  */
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,11 @@ import {
   AppState,
   AppStateStatus,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
+import * as DocumentPicker from 'expo-document-picker';
 import { useTheme } from '@/hooks/useTheme';
 import { useClipboardStore } from '@/stores/clipboardStore';
 import { useSyncStore } from '@/stores/syncStore';
@@ -24,6 +27,7 @@ import { SyncDirection } from '@/types/sync';
 import { ClipboardContent, ClipboardItem } from '@/types/clipboard';
 import { CurrentClipboardCard } from '@/components/CurrentClipboardCard';
 import { MessageToast } from '@/components/MessageToast';
+import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
 import { createAPIClient, getSignalRClient, historyStorage } from '@/services';
 import type { RemoteClipboardChangedCallback } from '@/services';
 import { initFileStorage } from '@/utils/fileStorage';
@@ -32,10 +36,12 @@ import { useMessageToast } from '@/hooks/useMessageToast';
 
 export function HomeScreen() {
   const { theme } = useTheme();
+  const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
   const [remoteContent, setRemoteContent] = useState<ClipboardContent | null>(null);
   const [loadingRemote, setLoadingRemote] = useState(false);
   const [downloadingRemote, setDownloadingRemote] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [error, setError] = useState<{ title: string; message: string } | null>(null);
   const { message, showMessage, handleMessageShown } = useMessageToast();
   const appState = useRef(AppState.currentState);
@@ -45,6 +51,7 @@ export function HomeScreen() {
   const isAutoSyncing = useRef(false);
   const signalRClient = useRef(getSignalRClient());
   const signalRConnected = useRef(false);
+  const uploadAbortControllerRef = useRef<AbortController | null>(null);
 
   const { currentContent, getContent, startMonitoring, stopMonitoring } = useClipboardStore();
   const sync = useSyncStore((state) => state.sync);
@@ -472,6 +479,119 @@ export function HomeScreen() {
     }
   };
 
+  // 处理上传文件
+  const handleUploadFile = useCallback(async () => {
+    if (!activeServer) {
+      showMessage('请先在设置中配置服务器', 'info');
+      return;
+    }
+
+    try {
+      setError(null); // 清除之前的错误
+
+      // 选择文件
+      const result = await DocumentPicker.getDocumentAsync({
+        multiple: false,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const asset = result.assets?.[0];
+      if (!asset) {
+        showMessage('未选择文件', 'error');
+        return;
+      }
+
+      showMessage('开始上传文件...', 'info');
+
+      const fileName = asset.name || 'file';
+      const fileUri = asset.uri;
+
+      console.log('[HomeScreen] Uploading file with putContent:', { fileName, fileUri });
+
+      // 构建 ClipboardContent
+      const content: ClipboardContent = {
+        type: 'File',
+        text: fileName,
+        fileUri: fileUri,
+        fileName: fileName,
+        fileSize: asset.size,
+        hasData: true,
+      };
+
+      // 使用 putContent 上传文件
+      const apiClient = createAPIClient(activeServer);
+      setUploadingFile(true);
+      const abortController = new AbortController();
+      uploadAbortControllerRef.current = abortController;
+
+      // 让出至少两帧，确保上传遮罩先渲染出来，再进入 hash 计算和上传流程
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => resolve());
+        });
+      });
+
+      await apiClient.putContent(content, { signal: abortController.signal });
+
+      showMessage(`文件 ${fileName} 上传成功`, 'success');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '文件上传失败，请重试';
+      const normalizedMessage = errorMessage.toLowerCase();
+      const isCanceled =
+        (error instanceof Error && error.name === 'AbortError') ||
+        normalizedMessage.includes('abort') ||
+        normalizedMessage.includes('canceled') ||
+        normalizedMessage.includes('cancelled');
+
+      if (isCanceled) {
+        showMessage('已取消上传', 'info');
+        return;
+      }
+
+      console.error('[HomeScreen] Failed to upload file:', error);
+      setError({
+        title: '文件上传失败',
+        message: errorMessage,
+      });
+      showMessage('文件上传失败', 'error');
+    } finally {
+      uploadAbortControllerRef.current = null;
+      setUploadingFile(false);
+    }
+  }, [activeServer, showMessage]);
+
+  const handleCancelUpload = useCallback(() => {
+    if (!uploadingFile) {
+      return;
+    }
+
+    if (uploadAbortControllerRef.current) {
+      uploadAbortControllerRef.current.abort();
+      showMessage('正在取消上传...', 'info');
+    }
+  }, [uploadingFile, showMessage]);
+
+  // 菜单项配置
+  const menuItems = useMemo<MenuItemConfig[]>(
+    () => [
+      {
+        label: '上传文件',
+        onPress: handleUploadFile,
+      },
+    ],
+    [handleUploadFile]
+  );
+
+  // 设置标题栏菜单按钮
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => <TopRightMenu items={menuItems} />,
+    });
+  }, [navigation, menuItems]);
+
   // 页面加载时加载配置、启动剪贴板监听
   useEffect(() => {
     const initialize = async () => {
@@ -854,6 +974,25 @@ export function HomeScreen() {
 
       {/* 消息提示 */}
       <MessageToast message={message} onMessageShown={handleMessageShown} />
+
+      {uploadingFile && (
+        <View style={[styles.uploadOverlay, { backgroundColor: theme.colors.backdrop }]}>
+          <View style={[styles.uploadOverlayCard, { backgroundColor: theme.colors.surface }]}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={[styles.uploadOverlayTitle, { color: theme.colors.text }]}>
+              文件上传中...
+            </Text>
+            <TouchableOpacity
+              style={[styles.uploadCancelButton, { backgroundColor: theme.colors.error }]}
+              onPress={handleCancelUpload}
+            >
+              <Text style={[styles.uploadCancelButtonText, { color: theme.colors.white }]}>
+                取消上传
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -896,6 +1035,38 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 15,
+  },
+  uploadOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  uploadOverlayCard: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  uploadOverlayTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  uploadCancelButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  uploadCancelButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   emptyState: {
     marginTop: 16,

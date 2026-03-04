@@ -5,23 +5,45 @@
 
 import * as Crypto from 'expo-crypto';
 import { sha256 } from 'js-sha256';
+import type { ClipboardContent } from '@/types';
+
+function createAbortError(): Error {
+  const error = new Error('Operation was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+}
 
 /**
  * 计算字符串的 SHA256 hash
+ * 使用 js-sha256 在主线程计算
  * @param text 要计算 hash 的文本
  * @returns SHA256 hash 字符串（大写十六进制）
  */
-export async function calculateTextHash(text: string): Promise<string> {
+export async function calculateTextHash(text: string, signal?: AbortSignal): Promise<string> {
   if (!text) {
     return '';
   }
 
   try {
-    const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, text, {
-      encoding: Crypto.CryptoEncoding.HEX,
-    });
-    return hash.toUpperCase();
+    throwIfAborted(signal);
+
+    // 使用 js-sha256 计算（因为支持增量更新）
+    const hasher = sha256.create();
+    hasher.update(text);
+    const hash = hasher.hex().toUpperCase();
+
+    throwIfAborted(signal);
+    return hash;
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
     console.error('[HashUtils] Failed to calculate text hash:', error);
     throw new Error('Failed to calculate text hash');
   }
@@ -33,18 +55,26 @@ export async function calculateTextHash(text: string): Promise<string> {
  * @param base64Data base64 编码的数据
  * @returns SHA256 hash 字符串（大写十六进制）
  */
-export async function calculateBase64Hash(base64Data: string): Promise<string> {
+export async function calculateBase64Hash(
+  base64Data: string,
+  signal?: AbortSignal
+): Promise<string> {
   if (!base64Data) {
     return '';
   }
 
   try {
+    throwIfAborted(signal);
     // 直接对 base64 字符串计算 hash（用于快速比较）
     const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, base64Data, {
       encoding: Crypto.CryptoEncoding.HEX,
     });
+    throwIfAborted(signal);
     return hash.toUpperCase();
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
     console.error('[HashUtils] Failed to calculate base64 hash:', error);
     throw new Error('Failed to calculate base64 hash');
   }
@@ -56,12 +86,17 @@ export async function calculateBase64Hash(base64Data: string): Promise<string> {
  * @param base64Data base64 编码的数据
  * @returns SHA256 hash 字符串（大写十六进制）
  */
-export async function calculateBase64ContentHash(base64Data: string): Promise<string> {
+export async function calculateBase64ContentHash(
+  base64Data: string,
+  signal?: AbortSignal
+): Promise<string> {
   if (!base64Data) {
     return '';
   }
 
   try {
+    throwIfAborted(signal);
+
     // 将 base64 解码为二进制字符串
     const binaryString = atob(base64Data);
 
@@ -71,11 +106,15 @@ export async function calculateBase64ContentHash(base64Data: string): Promise<st
       bytes[i] = binaryString.charCodeAt(i);
     }
 
-    // 使用 js-sha256 计算 SHA256（它可以正确处理 Uint8Array）
+    // 使用 js-sha256 计算 SHA256
     const hash = sha256(bytes);
 
+    throwIfAborted(signal);
     return hash.toUpperCase();
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
     console.error('[HashUtils] Failed to calculate base64 content hash:', error);
     throw new Error('Failed to calculate base64 content hash');
   }
@@ -83,22 +122,129 @@ export async function calculateBase64ContentHash(base64Data: string): Promise<st
 
 /**
  * 计算文件的 SHA256 hash
+ * 流式读取文件，分块计算哈希，周期性 yield 保持 UI 响应
  * @param fileUri 文件 URI
  * @returns SHA256 hash 字符串（大写十六进制）
  */
-export async function calculateFileHash(fileUri: string): Promise<string> {
+export async function calculateFileHash(fileUri: string, signal?: AbortSignal): Promise<string> {
   if (!fileUri) {
     return '';
   }
 
   try {
-    const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, fileUri, {
-      encoding: Crypto.CryptoEncoding.HEX,
-    });
-    return hash.toUpperCase();
+    throwIfAborted(signal);
+
+    // 使用 expo-file-system 分块读取文件内容，避免整文件读入内存
+    const { File } = await import('expo-file-system');
+    const file = new File(fileUri);
+
+    // 检查文件是否存在
+    const fileInfo = file.info();
+    if (!fileInfo.exists) {
+      throw new Error(`File not found: ${fileUri}`);
+    }
+
+    const fileHandle = file.open();
+    const hasher = sha256.create();
+    const chunkSize = 1024 * 1024; // 1MB 块
+    const yieldEveryChunks = 1; // 每 1 个块（1MB）让出一次事件循环
+
+    try {
+      const totalSize = fileInfo.size ?? 0;
+      let remainingBytes = totalSize;
+      let chunkCount = 0;
+
+      while (remainingBytes > 0) {
+        throwIfAborted(signal);
+
+        const bytesToRead = Math.min(chunkSize, remainingBytes);
+        const chunk = fileHandle.readBytes(bytesToRead);
+
+        if (!chunk || chunk.length === 0) {
+          break;
+        }
+
+        hasher.update(chunk);
+        remainingBytes -= chunk.length;
+        chunkCount += 1;
+
+        // 周期性让出事件循环，保持 UI 响应（保证取消按钮可响应）
+        if (chunkCount % yieldEveryChunks === 0) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        }
+      }
+    } finally {
+      fileHandle.close();
+    }
+
+    return hasher.hex().toUpperCase();
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
     console.error('[HashUtils] Failed to calculate file hash:', error);
     throw new Error('Failed to calculate file hash');
+  }
+}
+
+/**
+ * 计算文件的 profileHash（按照服务器规则）
+ * 规则：profileHash = SHA256(fileHashName + "|" + fileHash.ToUpper())
+ *
+ * @param fileUri 文件 URI
+ * @param fileName 文件名（可选，为空时从 fileUri 提取）
+ * @returns profileHash 字符串
+ */
+export async function calculateFileProfileHash(
+  fileUri: string,
+  fileName?: string,
+  signal?: AbortSignal
+): Promise<string> {
+  throwIfAborted(signal);
+  // 1. 计算文件内容的 hash
+  const fileHash = await calculateFileHash(fileUri, signal);
+
+  // 2. 获取文件名：如果没有传入，则从 fileUri 提取
+  let fileHashName = fileName;
+  if (!fileHashName) {
+    // 从 URI 中提取文件名（支持 / 和 \ 分隔符）
+    const parts = fileUri.split(/[/\\]/);
+    fileHashName = parts[parts.length - 1] || 'unknown';
+  }
+
+  // 3. 按照服务器规则计算 profileHash = SHA256(fileName + "|" + fileHash)
+  const combinedString = `${fileHashName}|${fileHash.toUpperCase()}`;
+  const profileHash = await calculateTextHash(combinedString, signal);
+
+  return profileHash;
+}
+
+/**
+ * 计算剪贴板内容的 profileHash
+ * 根据内容类型选择合适的 hash 计算方法
+ *
+ * @param content 剪贴板内容
+ * @returns profileHash 字符串，如果无法计算则返回 undefined
+ */
+export async function calculateContentHash(
+  content: ClipboardContent,
+  signal?: AbortSignal
+): Promise<string | undefined> {
+  throwIfAborted(signal);
+  const { type, text, fileUri, fileName } = content;
+
+  switch (type) {
+    case 'Text':
+      return text ? await calculateTextHash(text, signal) : undefined;
+
+    case 'Image':
+    case 'File':
+      return fileUri ? await calculateFileProfileHash(fileUri, fileName, signal) : undefined;
+
+    case 'Group':
+      return '';
+    default:
+      return undefined;
   }
 }
 

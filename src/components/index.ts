@@ -11,3 +11,5 @@ export { QuickActionsBar } from './QuickActionsBar';
 export { HistoryListItem } from './HistoryListItem';
 export { MessageToast } from './MessageToast';
 export type { MessageType } from './MessageToast';
+export { TopRightMenu } from './TopRightMenu';
+export type { MenuItemConfig } from './TopRightMenu';

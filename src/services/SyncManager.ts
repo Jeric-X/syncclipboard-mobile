@@ -4,7 +4,6 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
 import { SyncClipboardAPI, ISyncClipboardAPI } from './SyncClipboardAPI';
 import { WebDAVClient } from './WebDAVClient';
 import { AuthService } from './AuthService';
@@ -33,6 +32,13 @@ const STORAGE_KEY_CONFIG = '@syncclipboard:sync:config';
 const STORAGE_KEY_STATS = '@syncclipboard:sync:stats';
 const STORAGE_KEY_QUEUE = '@syncclipboard:sync:queue';
 const STORAGE_KEY_LAST_PROFILE_HASH = '@syncclipboard:sync:last_hash';
+
+/**
+ * 扩展的错误接口，包含网络错误标志
+ */
+interface ExtendedError extends Error {
+  isNetworkError?: boolean;
+}
 
 /**
  * 默认同步配置
@@ -322,116 +328,10 @@ export class SyncManager {
         fileSize: localContent.fileSize,
       });
 
-      // 如果有文件数据，先上传文件
-      if (profile.dataName && profile.hasData) {
-        console.log('[SyncManager] Preparing to upload file:', profile.dataName);
+      // 使用 putContent 统一处理：先上传数据（如果有），再上传配置
+      await this.apiClient.putContent(localContent);
 
-        // 优先使用文件 URI 直接上传（避免加载到内存）
-        const fileUri = localContent.fileUri;
-
-        if (!fileUri && !localContent.fileData) {
-          // hasData为true但没有fileUri和fileData，说明存在逻辑错误
-          throw new Error(
-            `[SyncManager] hasData is true but no fileUri or fileData available for type: ${profile.type}, dataName: ${profile.dataName}`
-          );
-        }
-
-        if (fileUri) {
-          console.log('[SyncManager] Uploading file from URI:', fileUri);
-          try {
-            const { File } = FileSystem;
-            const file = new File(fileUri);
-
-            if (!file.exists) {
-              throw new Error(`File not found: ${fileUri}`);
-            }
-
-            console.log('[SyncManager] File exists, size:', file.size);
-
-            console.log(
-              '[SyncManager] Calling putFile with:',
-              profile.dataName,
-              'fileUri:',
-              fileUri
-            );
-            await this.apiClient.putFile(profile.dataName, fileUri);
-            console.log('[SyncManager] File uploaded successfully:', profile.dataName);
-          } catch (uploadError) {
-            console.error('[SyncManager] Failed to upload file:', uploadError);
-            console.error('[SyncManager] Upload error details:', {
-              message: uploadError instanceof Error ? uploadError.message : String(uploadError),
-              stack: uploadError instanceof Error ? uploadError.stack : undefined,
-            });
-            throw uploadError;
-          }
-        } else if (localContent.fileData) {
-          // 如果有 fileData 但没有 URI，需要先保存到文件再上传
-          console.log('[SyncManager] No file URI, trying to upload from fileData');
-          try {
-            // 创建临时文件目录
-            const baseDir = new FileSystem.Directory(FileSystem.Paths.cache, 'temp-uploads');
-            const tempFile = new FileSystem.File(baseDir, `${profile.hash}.tmp`);
-
-            // 确保目录存在
-            if (!baseDir.exists) {
-              baseDir.create();
-            }
-
-            // 将 ArrayBuffer 转换为 Uint8Array 并写入临时文件
-            const uint8Array = new Uint8Array(localContent.fileData);
-            tempFile.write(uint8Array);
-            console.log('[SyncManager] Temporary file created:', tempFile.uri);
-
-            // 使用文件 URI 上传
-            await this.apiClient.putFile(profile.dataName, tempFile.uri);
-            console.log('[SyncManager] File uploaded successfully:', profile.dataName);
-
-            // 清理临时文件
-            tempFile.delete();
-          } catch (fileDataError) {
-            console.error('[SyncManager] Failed to upload from fileData:', fileDataError);
-            throw fileDataError;
-          }
-        } else {
-          console.warn('[SyncManager] No file URI or fileData available for upload');
-          // 如果没有文件数据，标记为不包含数据
-          profile.hasData = false;
-          profile.dataName = undefined;
-        }
-      } else {
-        console.log(
-          '[SyncManager] Skipping file upload - hasData:',
-          profile.hasData,
-          'dataName:',
-          profile.dataName
-        );
-      }
-
-      // 清理 profile 数据，移除 undefined 字段（某些服务器不接受）
-      const cleanProfile: ProfileDto = {
-        type: profile.type,
-        text: profile.text || '',
-        hasData: profile.hasData,
-      };
-
-      if (profile.hash) {
-        cleanProfile.hash = profile.hash;
-      }
-
-      if (profile.hasData && profile.dataName) {
-        cleanProfile.dataName = profile.dataName;
-        if (profile.size !== undefined) {
-          cleanProfile.size = profile.size;
-        }
-      }
-
-      // 上传配置
-      console.log('[SyncManager] Uploading profile configuration');
-      console.log('[SyncManager] Profile before upload:', JSON.stringify(cleanProfile, null, 2));
-
-      await this.apiClient.putClipboard(cleanProfile);
-
-      console.log('[SyncManager] Profile uploaded successfully');
+      console.log('[SyncManager] Content uploaded successfully');
 
       // 更新最后上传的 profileHash
       this.lastLocalProfileHash = currentProfileHash || null;
@@ -453,48 +353,14 @@ export class SyncManager {
         name: error instanceof Error ? error.name : undefined,
       });
 
-      // 构建详细的错误信息
-      let errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      // 使用已经处理好的错误信息
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-      // 检查是否有statusCode和response字段（APIError及其子类）
-      const hasStatusCode = error && typeof error === 'object' && 'statusCode' in error;
-      const hasResponse = error && typeof error === 'object' && 'response' in error;
-
-      if (hasStatusCode) {
-        const errorObj = error as Record<string, unknown>;
-        const statusCode = errorObj.statusCode;
-        console.error('[SyncManager] Status code:', statusCode);
-
-        if (hasResponse) {
-          const response = errorObj.response;
-          console.error('[SyncManager] Server response body:', JSON.stringify(response, null, 2));
-
-          // 构建包含状态码和响应体的完整错误信息
-          const responseText =
-            typeof response === 'string' ? response : JSON.stringify(response, null, 2);
-
-          errorMessage = `服务器返回错误 (HTTP ${statusCode}):\n\n${responseText}`;
-        } else {
-          errorMessage = `服务器返回错误 (HTTP ${statusCode}): ${errorMessage}`;
-        }
-      } else if (hasResponse) {
-        // 有response但没有statusCode（可能是Axios原始错误）
-        const errorObj = error as Record<string, unknown>;
-        const response = errorObj.response as Record<string, unknown> | undefined;
-        console.error('[SyncManager] Server response body:', JSON.stringify(response, null, 2));
-
-        if (response?.data) {
-          const responseText =
-            typeof response.data === 'string'
-              ? response.data
-              : JSON.stringify(response.data, null, 2);
-          const status = response.status as number | undefined;
-          errorMessage = `服务器返回错误 (HTTP ${status || 'unknown'}):\n\n${responseText}`;
-        }
-      }
+      // 检查是否是网络错误（已由 putContent 处理）
+      const isNetworkError = (error as ExtendedError)?.isNetworkError || false;
 
       // 如果启用离线队列且是网络错误，添加到队列
-      if (this.config.enableOfflineQueue && this.isNetworkError(error)) {
+      if (this.config.enableOfflineQueue && isNetworkError) {
         const content = await this.clipboardManager.getClipboardContent(false);
         if (content) {
           const task: SyncTask = {

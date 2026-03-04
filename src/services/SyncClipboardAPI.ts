@@ -3,8 +3,10 @@
  * Implements SyncClipboard server API operations
  */
 
-import { APIClient, APIClientConfig } from './APIClient';
+import { fetch } from 'expo/fetch';
+import { APIClient, APIClientConfig, PutContentOptions } from './APIClient';
 import { ProfileDto, ServerInfo } from '../types/api';
+import type { ClipboardContent } from '../types/clipboard';
 import { ValidationError } from './errors';
 
 /**
@@ -15,7 +17,7 @@ export interface ISyncClipboardAPI {
   getClipboard(): Promise<ProfileDto>;
 
   /** 上传剪贴板配置 */
-  putClipboard(profile: ProfileDto): Promise<void>;
+  putClipboard(profile: ProfileDto, signal?: AbortSignal): Promise<void>;
 
   /** 获取文件数据（加载到内存） */
   getFile(fileName: string): Promise<ArrayBuffer>;
@@ -24,7 +26,13 @@ export interface ISyncClipboardAPI {
   downloadFile(fileName: string, destinationUri: string): Promise<string>;
 
   /** 上传文件数据 */
-  putFile(fileName: string, fileUri: string): Promise<void>;
+  putFile(fileName: string, fileUri: string, signal?: AbortSignal): Promise<void>;
+
+  /**
+   * 上传剪贴板内容
+   * 先上传数据文件（如果有），再上传配置
+   */
+  putContent(content: ClipboardContent, options?: PutContentOptions): Promise<void>;
 
   /** 获取服务器时间 */
   getServerTime(): Promise<Date>;
@@ -67,7 +75,7 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
   /**
    * 上传剪贴板配置
    */
-  async putClipboard(profile: ProfileDto): Promise<void> {
+  async putClipboard(profile: ProfileDto, signal?: AbortSignal): Promise<void> {
     try {
       // 验证输入数据
       this.validateProfile(profile);
@@ -77,7 +85,7 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
         JSON.stringify(profile, null, 2)
       );
 
-      await this.put(SyncClipboardAPI.PROFILE_ENDPOINT, profile);
+      await this.put(SyncClipboardAPI.PROFILE_ENDPOINT, profile, signal ? { signal } : undefined);
 
       console.log('[SyncClipboardAPI] putClipboard - Upload successful');
     } catch (error) {
@@ -155,9 +163,9 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
   /**
    * 上传文件数据
    * @param fileName 服务器上的文件名
-   * @param fileUri 本地文件的 URI，避免将大文件加载到内存中
+   * @param fileUri 本地文件的 URI
    */
-  async putFile(fileName: string, fileUri: string): Promise<void> {
+  async putFile(fileName: string, fileUri: string, signal?: AbortSignal): Promise<void> {
     if (!fileName) {
       throw new ValidationError('File name is required');
     }
@@ -167,43 +175,33 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
     }
 
     try {
-      const FileSystem = await import('expo-file-system');
+      const { File } = await import('expo-file-system');
 
-      // 获取文件对象
-      const file = new FileSystem.File(fileUri);
-      console.log(`[SyncClipboardAPI] Checking file: ${fileUri}`);
+      // 创建文件对象
+      const file = new File(fileUri);
 
       // 检查文件是否存在
-      if (!file.exists) {
+      const fileInfo = file.info();
+      if (!fileInfo.exists) {
         throw new ValidationError(`File not found: ${fileUri}`);
       }
 
-      // 获取文件大小
-      console.log(`[SyncClipboardAPI] Uploading file: ${fileName}, size: ${file.size} bytes`);
+      const fileSize = fileInfo.size || 0;
+      const fileSizeMB = (fileSize / 1024 / 1024).toFixed(2);
+      console.log(`[SyncClipboardAPI] Uploading file: ${fileName}, size: ${fileSizeMB}MB`);
 
       const url = `${this.baseURL}${SyncClipboardAPI.FILE_ENDPOINT}${encodeURIComponent(fileName)}`;
-      console.log(`[SyncClipboardAPI] PUT request to: ${url}`);
 
       // 准备请求头
       const headers = await this.getHeaders();
       headers['Content-Type'] = 'application/octet-stream';
 
-      // 读取文件为 base64（expo-file-system 只支持 base64 或字符串格式）
-      const base64Data = await file.base64();
-      console.log(`[SyncClipboardAPI] File read as base64, length: ${base64Data.length} chars`);
-
-      // 将 base64 转为 Uint8Array（真正的二进制数据）
-      const binaryString = atob(base64Data);
-      const uint8Array = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        uint8Array[i] = binaryString.charCodeAt(i);
-      }
-
-      // 使用 fetch API 直接发送二进制数据
+      // 直接使用 File 对象作为 body，避免将大文件加载到内存
       const response = await fetch(url, {
         method: 'PUT',
         headers,
-        body: uint8Array,
+        body: file,
+        signal,
       });
 
       if (!response.ok) {

@@ -3,13 +3,15 @@
  * 历史记录列表项组件
  */
 
-import React, { useState, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useRef, forwardRef, useImperativeHandle } from 'react';
 import { View, Text, StyleSheet, TouchableHighlight, Image, TouchableOpacity } from 'react-native';
 import { Copy, Share, Trash2 } from 'react-native-feather';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Reanimated, {
   useAnimatedReaction,
   useAnimatedStyle,
+  interpolate,
+  Extrapolation,
   useSharedValue,
   withTiming,
   type SharedValue,
@@ -19,6 +21,10 @@ import { useTheme } from '@/hooks/useTheme';
 import { ClipboardItem } from '@/types/clipboard';
 import { useSettingsStore } from '@/stores';
 
+export interface HistoryListItemHandle {
+  startDelete: () => void;
+}
+
 interface HistoryListItemProps {
   item: ClipboardItem;
   onCopy: (item: ClipboardItem) => void;
@@ -26,10 +32,6 @@ interface HistoryListItemProps {
   onLongPress: (item: ClipboardItem) => void;
   onDelete?: (item: ClipboardItem) => void;
   showFullImage?: boolean;
-}
-
-export interface HistoryListItemHandle {
-  startDelete: () => void;
 }
 
 export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItemProps>(
@@ -49,42 +51,37 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
     );
     const isDeletingRef = useRef(false);
     const lastHintRef = useRef<'default' | 'continue' | 'release'>('default');
-    const deleteExitProgress = useSharedValue(0);
+    const deleteAnimProgress = useSharedValue(0);
 
-    // 飞出动画样式 - 向左滑出屏幕
-    const flyOutAnimStyle = useAnimatedStyle(() => {
-      return {
-        transform: [
-          { translateX: -1000 * deleteExitProgress.value }, // 向左飞出
-        ],
-        opacity: 1 - deleteExitProgress.value * 0.3, // 轻微淡出
-      };
-    });
-
-    const startDeleteWithTransition = useCallback(() => {
-      if (!onDelete || isDeletingRef.current) {
-        return;
-      }
-
-      isDeletingRef.current = true;
-
-      // 立即播放飞出动画（优先级高于Swipeable的关闭动画）
-      deleteExitProgress.value = withTiming(1, { duration: 200 });
-
-      // 同时开始删除记录（存储操作）
-      onDelete(item);
-    }, [deleteExitProgress, item, onDelete]);
-
-    // 暴露 startDelete 方法供外部调用（如长按菜单删除）
+    // 暴露 imperative handle
     useImperativeHandle(
       ref,
       () => ({
         startDelete: () => {
-          startDeleteWithTransition();
+          if (isDeletingRef.current) return;
+          isDeletingRef.current = true;
+          deleteAnimProgress.value = withTiming(1, { duration: 400 }, (finished) => {
+            if (finished && onDelete) {
+              scheduleOnRN(onDelete, item);
+            }
+          });
         },
       }),
-      [startDeleteWithTransition]
+      [item, onDelete]
     );
+
+    // 处理自动删除的函数
+    const handleAutoDelete = () => {
+      if (onDelete && shouldAutoDeleteRef.current && !isDeletingRef.current) {
+        isDeletingRef.current = true;
+        // 触发滑出动画
+        deleteAnimProgress.value = withTiming(1, { duration: 400 }, (finished) => {
+          if (finished) {
+            scheduleOnRN(onDelete, item);
+          }
+        });
+      }
+    };
 
     const getTypeIcon = (type: string): string => {
       switch (type) {
@@ -162,6 +159,21 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
       return '';
     };
 
+    // 卡片滑出动画样式
+    const cardDeleteAnimStyle = useAnimatedStyle(() => {
+      const translateX = interpolate(
+        deleteAnimProgress.value,
+        [0, 1],
+        [0, -500],
+        Extrapolation.CLAMP
+      );
+      const opacity = interpolate(deleteAnimProgress.value, [0, 1], [1, 0], Extrapolation.CLAMP);
+      return {
+        transform: [{ translateX }],
+        opacity,
+      };
+    });
+
     const previewText = getPreviewText();
 
     const updateSwipeDeleteState = (
@@ -182,9 +194,11 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
       return (
         <DeleteActionComponent
           progress={progress}
-          deleteExitProgress={deleteExitProgress}
+          onDelete={onDelete}
           swipeDeleteHint={swipeDeleteHint}
           theme={theme}
+          item={item}
+          deleteAnimProgress={deleteAnimProgress}
         />
       );
     };
@@ -193,22 +207,26 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
     const DeleteActionComponent = React.memo(
       ({
         progress,
-        deleteExitProgress,
+        onDelete,
         swipeDeleteHint,
         theme,
+        item,
+        deleteAnimProgress,
       }: {
         progress: SharedValue<number>;
-        deleteExitProgress: SharedValue<number>;
+        onDelete: (item: ClipboardItem) => void;
         swipeDeleteHint: 'default' | 'continue' | 'release';
         theme: ReturnType<typeof useTheme>['theme'];
+        item: ClipboardItem;
+        deleteAnimProgress: SharedValue<number>;
       }) => {
-        // 删除按钮隐藏动画 - 飞出时直接消失
+        // 删除按钮直接隐去：删除动画开始时立即隐藏
         const deleteButtonHideStyle = useAnimatedStyle(() => {
+          const opacity = deleteAnimProgress.value > 0 ? 0 : 1;
           return {
-            opacity: deleteExitProgress.value > 0 ? 0 : 1, // 直接消失
+            opacity,
           };
         });
-
         // 继续左滑时切换到“松手删除”，并标记松手后自动删除
         useAnimatedReaction(
           () => progress.value,
@@ -253,7 +271,12 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
               <TouchableOpacity
                 style={styles.deleteButtonContent}
                 onPress={() => {
-                  startDeleteWithTransition();
+                  // 触发滑出动画
+                  deleteAnimProgress.value = withTiming(1, { duration: 400 }, (finished) => {
+                    if (finished) {
+                      scheduleOnRN(onDelete, item);
+                    }
+                  });
                 }}
               >
                 <Trash2 color={theme.colors.white} width={20} height={20} />
@@ -274,15 +297,14 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
     // 完全滑开时检查是否应该自动删除
     const handleSwipeableWillOpen = () => {
       if (shouldAutoDeleteRef.current && onDelete) {
-        // 立即开始飞出动画和删除，不等待Swipeable打开完成
-        startDeleteWithTransition();
+        handleAutoDelete();
       }
     };
 
     // 打开后（用户松手后）再次检查是否需要删除，保证“松手删除”可触发
     const handleSwipeableOpen = () => {
-      if (shouldAutoDeleteRef.current && onDelete && !isDeletingRef.current) {
-        startDeleteWithTransition();
+      if (shouldAutoDeleteRef.current && onDelete) {
+        handleAutoDelete();
       }
     };
 
@@ -295,7 +317,7 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
     };
 
     return (
-      <Reanimated.View style={[styles.itemWrapper, flyOutAnimStyle]}>
+      <Reanimated.View style={[cardDeleteAnimStyle]}>
         <Swipeable
           ref={swipeableRef}
           renderRightActions={renderRightActions}
@@ -504,14 +526,13 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
   }
 );
 
+HistoryListItem.displayName = 'HistoryListItem';
+
 const styles = StyleSheet.create({
   touchable: {
-    borderRadius: 12,
-  },
-  itemWrapper: {
     marginHorizontal: 16,
     marginVertical: 4,
-    overflow: 'hidden',
+    borderRadius: 12,
   },
   container: {
     flexDirection: 'column',
@@ -637,8 +658,8 @@ const styles = StyleSheet.create({
   swipeActionsContainer: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    marginVertical: 0,
-    marginLeft: 8, // item 与删除按钮之间的间距
+    marginVertical: 4,
+    marginRight: 16,
   },
   deleteButton: {
     justifyContent: 'center',
