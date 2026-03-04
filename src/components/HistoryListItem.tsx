@@ -3,7 +3,7 @@
  * 历史记录列表项组件
  */
 
-import React, { useState, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useRef, forwardRef, useImperativeHandle, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableHighlight, Image, TouchableOpacity } from 'react-native';
 import { Copy, Share, Trash2 } from 'react-native-feather';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
@@ -52,6 +52,21 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
     const isDeletingRef = useRef(false);
     const lastHintRef = useRef<'default' | 'continue' | 'release'>('default');
     const deleteAnimProgress = useSharedValue(0);
+
+    // 当item改变时重置所有动画和状态（处理FlashList容器复用的情况）
+    useEffect(() => {
+      // 重置删除动画进度
+      deleteAnimProgress.value = 0;
+      // 重置删除标志
+      isDeletingRef.current = false;
+      shouldAutoDeleteRef.current = false;
+      lastHintRef.current = 'default';
+      setSwipeDeleteHint('default');
+      // 关闭Swipeable（如果打开）
+      if (swipeableRef.current) {
+        swipeableRef.current.close();
+      }
+    }, [item.profileHash, deleteAnimProgress]);
 
     // 暴露 imperative handle
     useImperativeHandle(
@@ -171,6 +186,7 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
       return {
         transform: [{ translateX }],
         opacity,
+        overflow: 'hidden',
       };
     });
 
@@ -317,7 +333,7 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
     };
 
     return (
-      <Reanimated.View style={[cardDeleteAnimStyle]}>
+      <Reanimated.View style={[cardDeleteAnimStyle]} renderToHardwareTextureAndroid={true}>
         <Swipeable
           ref={swipeableRef}
           renderRightActions={renderRightActions}
@@ -327,6 +343,8 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
           onSwipeableWillOpen={handleSwipeableWillOpen}
           onSwipeableOpen={handleSwipeableOpen}
           onSwipeableClose={handleSwipeableClose}
+          enabled={!isDeletingRef.current}
+          childrenContainerStyle={styles.swipeableChildrenContainer}
           /*
         新的交互流程：
         1. 用户左滑，在80px时显示删除按钮
@@ -660,6 +678,10 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     marginVertical: 4,
     marginRight: 16,
+  },
+  swipeableChildrenContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   deleteButton: {
     justifyContent: 'center',
