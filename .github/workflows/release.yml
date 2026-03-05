@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Expo prebuild
+        run: npx expo prebuild --no-install
+
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
 
