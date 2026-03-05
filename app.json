@@ -26,6 +26,10 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "./plugins/build/withQuickSettingsTileManifest.js",
+      "./plugins/build/withAndroidNativeCode.js"
+    ]
   }
 }
