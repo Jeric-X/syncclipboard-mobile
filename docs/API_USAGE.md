@@ -399,11 +399,7 @@ function ClipboardSync() {
 
   return (
     <View>
-      <Button
-        title="获取剪贴板"
-        onPress={fetchClipboard}
-        disabled={loading}
-      />
+      <Button title="获取剪贴板" onPress={fetchClipboard} disabled={loading} />
 
       {profile && (
         <View>

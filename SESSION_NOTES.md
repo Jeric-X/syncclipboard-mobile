@@ -16,18 +16,21 @@
 ### 完成内容
 
 1. ✅ 安装依赖
+
    - @shopify/flash-list 2.0.2（高性能列表库）
 
-2. ✅ 创建 HistoryListItem 组件（242行）
-   - 四种类型图标（📝文本、🖼️图片、📄文件、📦文件组）
+2. ✅ 创建 HistoryListItem 组件（242 行）
+
+   - 四种类型图标（📝 文本、🖼️ 图片、📄 文件、📦 文件组）
    - 内容预览文本
-   - 智能时间格式化（刚刚、X分钟前、X小时前、X天前）
+   - 智能时间格式化（刚刚、X 分钟前、X 小时前、X 天前）
    - 文件大小显示和格式化
    - 同步状态标记（✓ 已同步/未同步）
    - TouchableHighlight 触摸反馈
    - 完整主题适配
 
-3. ✅ 创建 HistoryScreen 页面（399行）
+3. ✅ 创建 HistoryScreen 页面（399 行）
+
    - FlashList 虚拟化列表渲染
    - 搜索栏（TextInput + 清空按钮）
    - 类型筛选器（全部/文本/图片/文件）
@@ -41,12 +44,14 @@
    - 完整错误处理
 
 4. ✅ 技术优化
+
    - 搜索防抖（300ms）
    - useMemo 过滤优化
    - useCallback 减少重渲染
    - FlashList 高性能列表（无 estimatedItemSize）
 
 5. ✅ 集成到项目
+
    - 更新 src/components/index.ts（导出 HistoryListItem）
    - 更新 src/screens/index.ts（导出 HistoryScreen）
    - 更新 AppNavigator.tsx（移除占位符，使用真实组件）
@@ -124,6 +129,7 @@ src/
 ### 完成内容
 
 1. ✅ 创建 HomeScreen 组件（src/screens/HomeScreen.tsx）
+
    - 远程/本地剪贴板双展示
    - 下拉刷新功能
    - 自动加载配置
@@ -131,6 +137,7 @@ src/
    - 初始化时机优化（修复"未配置服务器"闪现问题）
 
 2. ✅ 创建 CurrentClipboardCard 组件（src/components/CurrentClipboardCard.tsx）
+
    - 支持文本、图片、文件类型展示
    - 空状态提示
    - 快捷操作按钮（复制、分享、上传、下载）
@@ -139,24 +146,28 @@ src/
    - Hash 信息显示
 
 3. ✅ 创建 SyncStatusIndicator 组件（src/components/SyncStatusIndicator.tsx）
+
    - 同步状态显示（闲置、同步中、成功、失败、冲突）
    - 服务器连接状态
    - 最后同步时间
    - 动态颜色和图标
 
 4. ✅ 创建 QuickActionsBar 组件（src/components/QuickActionsBar.tsx）
+
    - 上传、下载、同步按钮
    - 加载状态指示
    - 禁用状态处理
    - 平台特定底部安全区域
 
 5. ✅ 优化用户交互体验
+
    - 移除全屏 Alert 对话框
    - 实现轻量级消息提示横幅（淡入淡出动画）
    - 消息提示显示在底部按钮上方
    - 颜色区分（成功、错误、提示）
 
 6. ✅ 实现远程文件下载逻辑
+
    - 检测是否需要下载额外文件
    - API 调用 getFile() 下载文件数据
    - 下载完成后更新本地状态
@@ -176,7 +187,7 @@ src/
 - **API 集成**: createAPIClient() + getClipboard() + getFile()
 - **状态管理**: Zustand stores（clipboardStore、syncStore、settingsStore）
 - **类型转换**: profileDtoToContent()（API DTO 转剪贴板内容）
-- **消息提示**: 自定义 Toast 实现（2.5秒自动消失）
+- **消息提示**: 自定义 Toast 实现（2.5 秒自动消失）
 
 ### 文件结构
 
@@ -228,10 +239,12 @@ src/
 ### 完成内容
 
 1. ✅ 安装依赖
+
    - expo-crypto（加密和 Hash 计算）
    - expo-file-system（文件系统访问）
 
 2. ✅ 实现 Hash 计算工具（src/utils/hash.ts）
+
    - calculateTextHash() - 文本 SHA256
    - calculateFileHash() - 文件 SHA256
    - calculateBlobHash() - Blob SHA256
@@ -239,6 +252,7 @@ src/
    - isValidHash() - Hash 验证
 
 3. ✅ 创建剪贴板类型定义（src/types/clipboard.ts）
+
    - ClipboardItem
    - ClipboardContent
    - ClipboardChangeCallback
@@ -247,6 +261,7 @@ src/
    - ClipboardHistoryQuery
 
 4. ✅ 实现 ClipboardManager（src/services/ClipboardManager.ts）
+
    - 获取/设置剪贴板内容
    - 文本/图片支持
    - 从相册选择图片
@@ -255,6 +270,7 @@ src/
    - 单例模式
 
 5. ✅ 实现类型转换工具（src/utils/clipboard.ts）
+
    - contentToProfileDto() - 转换为 API DTO
    - profileDtoToContent() - 转换为剪贴板内容
    - 文件大小格式化
@@ -263,15 +279,17 @@ src/
    - 辅助函数
 
 6. ✅ 实现 ClipboardMonitor（src/services/ClipboardMonitor.ts）
+
    - 开始/停止监听
    - 回调管理
-   - iOS 轮询监听（1秒）
+   - iOS 轮询监听（1 秒）
    - Android 轮询监听
    - 应用状态监听（前台/后台）
    - 防抖处理（300ms）
    - 单例模式
 
 7. ✅ 更新服务和工具导出
+
    - src/services/index.ts
    - src/utils/index.ts
 
@@ -353,11 +371,13 @@ API 客户端: ✅ 完成
 ### 完成内容
 
 1. ✅ 创建 API 类型定义
+
    - ProfileDto（剪贴板配置 DTO）
    - ServerConfig（服务器配置）
    - SyncResult、ServerInfo 等
 
 2. ✅ 实现错误处理机制
+
    - APIError（基础错误类）
    - AuthenticationError（认证错误）
    - NetworkError（网络错误）
@@ -367,12 +387,14 @@ API 客户端: ✅ 完成
    - ValidationError（验证错误）
 
 3. ✅ 实现认证服务（AuthService）
+
    - Basic Auth 编码
    - 凭证管理（设置、获取、清除）
    - AsyncStorage 持久化
    - 从存储加载/保存/删除凭证
 
 4. ✅ 实现 API 客户端基类（APIClient）
+
    - Axios 实例封装
    - 请求拦截器（添加认证头、日志）
    - 响应拦截器（统一错误处理）
@@ -380,6 +402,7 @@ API 客户端: ✅ 完成
    - 通用 HTTP 方法（GET、POST、PUT、DELETE、PATCH）
 
 5. ✅ 实现 SyncClipboardAPI
+
    - 实现 ISyncClipboardAPI 接口
    - getClipboard() - 获取剪贴板配置
    - putClipboard() - 上传剪贴板配置
@@ -392,6 +415,7 @@ API 客户端: ✅ 完成
    - 连接测试
 
 6. ✅ 实现 WebDAVClient
+
    - 继承 APIClient 基类
    - 实现 ISyncClipboardAPI 接口
    - WebDAV 特定方法（PROPFIND、MKCOL）
@@ -400,6 +424,7 @@ API 客户端: ✅ 完成
    - 列出目录内容（listDirectory）
 
 7. ✅ 创建服务导出
+
    - 导出所有错误类
    - 导出所有服务类
    - 创建 API 客户端工厂函数（createAPIClient）
@@ -485,6 +510,7 @@ API 客户端: ✅ 完成
 ### 完成内容
 
 1. ✅ 实现完整主题系统
+
    - 创建亮色/暗色颜色定义（src/theme/colors.ts）
    - 实现主题配置和类型（src/theme/index.ts）
    - 创建 ThemeContext 和 ThemeProvider（src/contexts/ThemeContext.tsx）
@@ -493,12 +519,14 @@ API 客户端: ✅ 完成
    - 自动跟随系统主题变化
 
 2. ✅ 创建设置页面
+
    - 完整的设置页面 UI（src/screens/SettingsScreen.tsx）
    - 主题切换界面（跟随系统/浅色/深色）
    - 精美的卡片式设计
    - 应用信息展示
 
 3. ✅ 集成主题到应用
+
    - 更新 App.tsx 使用 ThemeProvider
    - 更新 AppNavigator 适配主题
    - StatusBar 自动适配亮暗色
@@ -578,21 +606,25 @@ src/
 ### 完成内容
 
 1. ✅ 初始化 Expo TypeScript 项目
+
    - 在 syncclipboard-mobile 子目录创建项目
    - 使用 blank-typescript 模板
    - 安装了 700+ 个依赖包
 
 2. ✅ 配置开发工具
+
    - ESLint（TypeScript、React、React Native 规则）
    - Prettier（代码格式化）
    - 添加 lint、format、type-check 脚本
 
 3. ✅ 搭建项目架构
+
    - 创建 10 个核心目录（components、screens、services 等）
    - 配置路径别名（@/ 和各模块别名）
    - 创建基础类型、常量、工具函数
 
 4. ✅ 安装核心依赖
+
    - React Navigation（导航系统）
    - Zustand（状态管理）
    - AsyncStorage（本地存储）
@@ -600,6 +632,7 @@ src/
    - Expo Clipboard & ImagePicker
 
 5. ✅ 实现基础导航
+
    - 底部 Tab 导航（首页、历史、设置）
    - 简单的占位页面
    - 导航样式配置
@@ -672,12 +705,14 @@ syncclipboard-mobile/
 ### 完成内容
 
 1. ✅ 深入分析了 SyncClipboard 桌面端项目
+
    - 理解了剪贴板同步机制
    - 分析了服务器 API 接口
    - 研究了数据结构（ProfileDto）
    - 了解了 Hash 计算方法
 
 2. ✅ 创建了详细的开发规划文档
+
    - 12 个章节，涵盖架构、功能、UI、安全、性能等
    - 4 阶段 14 周的开发路线图
    - 完整的技术栈选择和理由

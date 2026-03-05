@@ -244,9 +244,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <SyncContext.Provider value={{ manager, status, stats, sync }}>
-      {children}
-    </SyncContext.Provider>
+    <SyncContext.Provider value={{ manager, status, stats, sync }}>{children}</SyncContext.Provider>
   );
 }
 

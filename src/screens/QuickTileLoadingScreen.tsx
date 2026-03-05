@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text, ToastAndroid } from 'react-native';
 import { SyncDirection } from '@/types/sync';
 import { SyncManager } from '@/services/SyncManager';
+import { useTheme } from '@/hooks/useTheme';
 
 interface QuickTileLoadingScreenProps {
   direction: SyncDirection;
@@ -14,6 +15,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
   direction,
   onLoadingComplete,
 }) => {
+  const { theme } = useTheme();
   const [syncState, setSyncState] = useState<SyncState>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -47,8 +49,8 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
           err instanceof Error
             ? err.message
             : isUpload
-              ? '上传失败，请检查配置'
-              : '同步失败，请检查配置';
+            ? '上传失败，请检查配置'
+            : '同步失败，请检查配置';
         setErrorMessage(message);
         setSyncState('error');
         setTimeout(onLoadingComplete, 2000);
@@ -56,30 +58,38 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
     };
 
     runSync();
-  }, [direction, onLoadingComplete]);
+  }, [direction, onLoadingComplete, isUpload]);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
       <View style={styles.content}>
         {syncState === 'loading' && (
           <>
-            <ActivityIndicator size="large" color="#007AFF" />
-            <Text style={styles.statusText}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={[styles.statusText, { color: theme.colors.text }]}>
               {isUpload ? '正在上传剪贴板...' : '正在下载剪贴板...'}
             </Text>
           </>
         )}
         {syncState === 'success' && (
           <>
-            <Text style={styles.successIcon}>✓</Text>
-            <Text style={styles.statusText}>{isUpload ? '上传成功！' : '同步成功！'}</Text>
+            <Text style={[styles.successIcon, { color: theme.colors.success }]}>✓</Text>
+            <Text style={[styles.statusText, { color: theme.colors.text }]}>
+              {isUpload ? '上传成功！' : '同步成功！'}
+            </Text>
           </>
         )}
         {syncState === 'error' && (
           <>
-            <Text style={styles.errorIcon}>✗</Text>
-            <Text style={styles.statusText}>{isUpload ? '上传失败' : '同步失败'}</Text>
-            {errorMessage && <Text style={styles.errorDetailText}>{errorMessage}</Text>}
+            <Text style={[styles.errorIcon, { color: theme.colors.error }]}>✗</Text>
+            <Text style={[styles.statusText, { color: theme.colors.text }]}>
+              {isUpload ? '上传失败' : '同步失败'}
+            </Text>
+            {errorMessage && (
+              <Text style={[styles.errorDetailText, { color: theme.colors.textTertiary }]}>
+                {errorMessage}
+              </Text>
+            )}
           </>
         )}
       </View>
@@ -92,7 +102,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
   },
   content: {
     alignItems: 'center',
@@ -100,19 +109,15 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 16,
-    color: '#333',
   },
   successIcon: {
     fontSize: 48,
-    color: '#34C759',
   },
   errorIcon: {
     fontSize: 48,
-    color: '#FF3B30',
   },
   errorDetailText: {
     fontSize: 14,
-    color: '#666',
     textAlign: 'center',
     maxWidth: 280,
   },

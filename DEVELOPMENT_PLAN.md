@@ -1,7 +1,7 @@
 # SyncClipboard Mobile - React Native 开发规划文档
 
 > **项目版本**: v1.0.0  
-> **文档日期**: 2026年2月12日  
+> **文档日期**: 2026 年 2 月 12 日  
 > **技术栈**: React Native + Expo
 
 ---
@@ -59,23 +59,27 @@ SyncClipboard 是一个跨平台的剪贴板同步工具，目前已支持 Windo
 基于对 SyncClipboard 项目的分析，桌面端主要功能包括：
 
 1. **剪贴板同步**
+
    - 实时监听本地剪贴板变化
    - 自动上传到服务器
    - 自动从服务器下载并更新本地剪贴板
 
 2. **剪贴板类型支持**
+
    - Text (文本)
    - Image (图片)
    - File (文件)
    - Group (多文件/文件夹)
 
 3. **剪贴板历史记录**
+
    - 历史记录存储
    - 历史记录查看
    - 历史记录搜索
    - 从历史记录恢复
 
 4. **图片优化**
+
    - 从浏览器下载原图
    - 图片格式转换 (webp/heic → gif/jpg)
    - 图片文件与剪贴板互转
@@ -387,23 +391,27 @@ interface ServerConfig {
 #### 5.3.2 设置项
 
 - **服务器设置**
+
   - 服务器类型选择
   - URL 配置
   - 用户名/密码
   - 连接测试
 
 - **同步设置**
+
   - 自动同步开关
   - 同步间隔
   - 仅 WiFi 同步
   - 后台同步（Android）
 
 - **通知设置**
+
   - 同步成功通知
   - 同步失败通知
   - 新内容提醒
 
 - **历史记录设置**
+
   - 历史记录保留天数
   - 自动清理
   - 最大存储数量
@@ -839,13 +847,16 @@ const HistoryScreen = lazy(() => import('./screens/HistoryScreen'));
 import { FlashList } from '@shopify/flash-list';
 
 // 优化列表项渲染
-const HistoryItem = memo(({ item }: { item: HistoryItem }) => {
-  // 使用 memo 避免不必要的重渲染
-  return <HistoryItemCard item={item} />;
-}, (prevProps, nextProps) => {
-  // 自定义比较函数
-  return prevProps.item.id === nextProps.item.id;
-});
+const HistoryItem = memo(
+  ({ item }: { item: HistoryItem }) => {
+    // 使用 memo 避免不必要的重渲染
+    return <HistoryItemCard item={item} />;
+  },
+  (prevProps, nextProps) => {
+    // 自定义比较函数
+    return prevProps.item.id === nextProps.item.id;
+  }
+);
 
 // 稳定的 callback 引用
 const handleItemPress = useCallback((item: HistoryItem) => {
@@ -859,12 +870,7 @@ const handleItemPress = useCallback((item: HistoryItem) => {
 // 使用 expo-image 优化图片加载
 import { Image } from 'expo-image';
 
-<Image
-  source={{ uri: imageUrl }}
-  contentFit="cover"
-  transition={200}
-  cachePolicy="memory-disk"
-/>
+<Image source={{ uri: imageUrl }} contentFit="cover" transition={200} cachePolicy="memory-disk" />;
 ```
 
 ### 9.4 网络性能
@@ -1323,9 +1329,7 @@ describe('CurrentClipboardCard', () => {
   });
 
   it('应该渲染空状态', () => {
-    const { getByText } = render(
-      <CurrentClipboardCard clipboard={null} title="本地剪贴板" />
-    );
+    const { getByText } = render(<CurrentClipboardCard clipboard={null} title="本地剪贴板" />);
 
     expect(getByText('暂无内容')).toBeTruthy();
   });
@@ -1795,8 +1799,8 @@ jobs:
 - [ ] 验证历史列表正确加载
 - [ ] 验证列表项显示正确信息：
   - [ ] 类型图标（📝 文本 / 🖼️ 图片 / 📄 文件）
-  - [ ] 内容预览（文本前50字符）
-  - [ ] 时间显示（刚刚 / X分钟前 / X小时前 / X天前）
+  - [ ] 内容预览（文本前 50 字符）
+  - [ ] 时间显示（刚刚 / X 分钟前 / X 小时前 / X 天前）
   - [ ] 同步状态（已同步 / 未同步）
 - [ ] 滚动列表，验证性能流畅（使用 FlashList）
 

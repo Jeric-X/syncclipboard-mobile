@@ -84,12 +84,14 @@
 ## 📊 代码统计
 
 - **新增文件**: 3 个
+
   - `src/components/ServerConfigModal.tsx` (542 行)
   - `src/components/ServerListItem.tsx` (154 行)
   - `src/components/index.ts` (5 行)
   - `docs/SERVER_CONFIG_GUIDE.md` (文档)
 
 - **更新文件**: 4 个
+
   - `src/screens/SettingsScreen.tsx` (大幅更新)
   - `PROJECT_STATUS.md` (进度更新)
   - `TODO.md` (任务更新)
@@ -193,10 +195,12 @@ await client.testConnection();
 以下功能暂未实现（将在后续版本添加）：
 
 1. **批量操作**
+
    - 批量导入/导出服务器配置
    - 批量删除服务器
 
 2. **高级功能**
+
    - 服务器分组管理
    - 服务器标签和备注
    - 服务器使用统计
@@ -241,17 +245,20 @@ await client.testConnection();
 ## 🚀 下一步工作
 
 1. **首页开发** (优先)
+
    - 显示当前剪贴板内容
    - 显示同步状态
    - 快速操作按钮（同步、复制、分享）
    - 下拉刷新
 
 2. **历史记录页面**
+
    - FlashList 高性能列表
    - 搜索和筛选功能
    - 长按操作菜单
 
 3. **同步功能集成**
+
    - 连接首页、设置和服务层
    - 实现完整同步流程
    - 后台同步（Android）

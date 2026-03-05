@@ -121,7 +121,10 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       await clipboardManager.setClipboardContent(content);
 
       console.log(
-        `[clipboardManager] new content set: type=${content.type}, text=${content.text?.substring(0, 20)}, profileHash=${content.profileHash?.substring(0, 8)}, timestamp=${content.timestamp}`
+        `[clipboardManager] new content set: type=${content.type}, text=${content.text?.substring(
+          0,
+          20
+        )}, profileHash=${content.profileHash?.substring(0, 8)}, timestamp=${content.timestamp}`
       );
       set({ currentContent: content, isLoading: false });
 
