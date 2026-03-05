@@ -1,63 +1,49 @@
-import {
-  ConfigPlugin,
-  withDangerousMod,
-  createRunOncePlugin,
-} from 'expo/config-plugins';
-import * as fs from 'fs';
-import * as path from 'path';
+import { ConfigPlugin, withAppBuildGradle, createRunOncePlugin } from 'expo/config-plugins';
 
 /**
- * Copies all native Android code from src/android directory to android directory
- * Recursively copies the entire directory structure and replaces PACKAGE_NAME placeholders
+ * Configures gradle to include native Android code from src/android directory
+ * Adds sourceSets configuration to build.gradle to compile in-place
  */
 const withAndroidNativeCode: ConfigPlugin = (config) => {
-  return withDangerousMod(config, [
-    'android',
-    async (config) => {
-      const projectRoot = config.modRequest.projectRoot || process.cwd();
-      const packageName =
-        config.android?.package || 'com.jericx.syncclipboardmobile';
+  // Modify build.gradle to add sourceSets configuration
+  config = withAppBuildGradle(config, (config) => {
+    const srcAndroidPath = '../../src/android';
 
-      const srcAndroidDir = path.join(projectRoot, 'src', 'android');
-      const destAndroidDir = path.join(projectRoot, 'android');
+    // Build the sourceSets configuration with proper Gradle syntax
+    const sourceSetConfig = `
 
-      if (!fs.existsSync(srcAndroidDir)) {
-        throw new Error(`Source directory not found: ${srcAndroidDir}`);
+    // Native code source sets
+    sourceSets {
+      main {
+        java.srcDirs += '${srcAndroidPath}/app/src/main/java'
+        res.srcDirs += '${srcAndroidPath}/app/src/main/res'
+        assets.srcDirs += '${srcAndroidPath}/app/src/main/assets'
       }
+    }
+`;
 
-      function copyFilesRecursive(sourceDir: string, destDir: string): void {
-        if (!fs.existsSync(destDir)) {
-          fs.mkdirSync(destDir, { recursive: true });
-        }
+    // Check if sourceSets already exists
+    if (!config.modResults.contents.includes('sourceSets {')) {
+      // Find the closing brace of android block and insert before it
+      const androidBlockMatch = config.modResults.contents.match(/^android\s*\{[\s\S]*?\n\}/m);
 
-        const files = fs.readdirSync(sourceDir);
-
-        files.forEach((file) => {
-          const sourcePath = path.join(sourceDir, file);
-          const destPath = path.join(destDir, file);
-          const stat = fs.statSync(sourcePath);
-
-          if (stat.isDirectory()) {
-            copyFilesRecursive(sourcePath, destPath);
-          } else {
-            let content = fs.readFileSync(sourcePath, 'utf8');
-            content = content.replace(/PACKAGE_NAME/g, packageName);
-            fs.writeFileSync(destPath, content, 'utf8');
-            console.log(`✓ Copied: ${path.relative(srcAndroidDir, sourcePath)}`);
-          }
-        });
+      if (androidBlockMatch) {
+        const androidBlock = androidBlockMatch[0];
+        const modifiedBlock = androidBlock.replace(/\n\}$/, sourceSetConfig + '\n}');
+        config.modResults.contents = config.modResults.contents.replace(
+          androidBlock,
+          modifiedBlock
+        );
+        console.log('✓ Added sourceSets configuration to build.gradle');
       }
+    } else {
+      console.log('ℹ sourceSets already configured in build.gradle');
+    }
 
-      copyFilesRecursive(srcAndroidDir, destAndroidDir);
-      console.log('✓ Android native code copied successfully');
+    return config;
+  });
 
-      return config;
-    },
-  ]);
+  return config;
 };
 
-export default createRunOncePlugin(
-  withAndroidNativeCode,
-  'withAndroidNativeCode',
-  '1.0.0'
-);
+export default createRunOncePlugin(withAndroidNativeCode, 'withAndroidNativeCode', '1.0.0');

@@ -102,3 +102,4 @@ coverage/
 # VS Code
 syncclipboard-mobile.code-workspace
 tmpclaude-*-cwd
+/android/

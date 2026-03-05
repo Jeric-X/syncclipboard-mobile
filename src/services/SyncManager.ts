@@ -343,6 +343,7 @@ export class SyncManager {
         success: true,
         direction: SyncDirection.Upload,
         profileHash: currentProfileHash,
+        content: localContent,
       };
     } catch (error) {
       console.error('[SyncManager] Upload failed with error:', error);
@@ -487,6 +488,7 @@ export class SyncManager {
         success: true,
         direction: SyncDirection.Download,
         profileHash: remoteProfileHash,
+        content,
       };
     } catch (error) {
       throw error;

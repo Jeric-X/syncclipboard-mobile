@@ -140,6 +140,9 @@ export interface SyncResult {
   /** 是否有冲突 */
   hasConflict?: boolean;
 
+  /** 本次同步的剪贴板内容（仅下载成功且有实际内容时填充） */
+  content?: ClipboardContent;
+
   /** 同步耗时（毫秒） */
   duration?: number;
 }

@@ -8,10 +8,10 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
 
-class DownloadTileService : TileService() {
+class UploadTileService : TileService() {
 
     companion object {
-        private const val TAG = "DownloadTileService"
+        private const val TAG = "UploadTileService"
     }
 
     override fun onStartListening() {
@@ -30,13 +30,10 @@ class DownloadTileService : TileService() {
         super.onClick()
         Log.d(TAG, "Quick Settings Tile clicked")
         try {
-            // Pulling down the notification shade does NOT pause the activity,
-            // so IMPORTANCE_FOREGROUND reliably indicates the app was the active app
-            // when the user opened the shade.
             val url = if (isOwnAppInForeground())
-                "syncclipboard://quick-tile?fg=1"
+                "syncclipboard://quick-tile-upload?fg=1"
             else
-                "syncclipboard://quick-tile"
+                "syncclipboard://quick-tile-upload"
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -63,4 +60,3 @@ class DownloadTileService : TileService() {
         super.onTileRemoved()
     }
 }
-

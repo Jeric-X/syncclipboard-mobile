@@ -14,29 +14,34 @@ function addQuickSettingsTileService(androidManifest) {
     if (!application.service) {
         application.service = [];
     }
-    const tileService = {
-        $: {
-            'android:name': '.quicksettings.DownloadTileService',
-            'android:exported': 'true',
-            'android:icon': '@mipmap/ic_launcher',
-            'android:label': '@string/tile_download_label',
-            'android:permission': 'android.permission.BIND_QUICK_SETTINGS_TILE',
-        },
-        'intent-filter': [
-            {
-                action: [
-                    {
-                        $: {
-                            'android:name': 'android.service.quicksettings.action.QS_TILE',
-                        },
-                    },
-                ],
+    const services = [
+        {
+            $: {
+                'android:name': '.quicksettings.DownloadTileService',
+                'android:exported': 'true',
+                'android:icon': '@mipmap/ic_launcher',
+                'android:label': '@string/tile_download_label',
+                'android:permission': 'android.permission.BIND_QUICK_SETTINGS_TILE',
             },
-        ],
-    };
-    const existingService = application.service.find((service) => service.$['android:name'] === '.quicksettings.DownloadTileService');
-    if (!existingService) {
-        application.service.push(tileService);
+            'intent-filter': [{ action: [{ $: { 'android:name': 'android.service.quicksettings.action.QS_TILE' } }] }],
+        },
+        {
+            $: {
+                'android:name': '.quicksettings.UploadTileService',
+                'android:exported': 'true',
+                'android:icon': '@mipmap/ic_launcher',
+                'android:label': '@string/tile_upload_label',
+                'android:permission': 'android.permission.BIND_QUICK_SETTINGS_TILE',
+            },
+            'intent-filter': [{ action: [{ $: { 'android:name': 'android.service.quicksettings.action.QS_TILE' } }] }],
+        },
+    ];
+    for (const service of services) {
+        const name = service.$['android:name'];
+        const exists = application.service.find((s) => s.$['android:name'] === name);
+        if (!exists) {
+            application.service.push(service);
+        }
     }
     return androidManifest;
 }

@@ -41,34 +41,39 @@ function addQuickSettingsTileService(
     application.service = [];
   }
 
-  const tileService: ServiceConfig = {
-    $: {
-      'android:name': '.quicksettings.DownloadTileService',
-      'android:exported': 'true',
-      'android:icon': '@mipmap/ic_launcher',
-      'android:label': '@string/tile_download_label',
-      'android:permission': 'android.permission.BIND_QUICK_SETTINGS_TILE',
-    },
-    'intent-filter': [
-      {
-        action: [
-          {
-            $: {
-              'android:name': 'android.service.quicksettings.action.QS_TILE',
-            },
-          },
-        ],
+  const services: ServiceConfig[] = [
+    {
+      $: {
+        'android:name': '.quicksettings.DownloadTileService',
+        'android:exported': 'true',
+        'android:icon': '@mipmap/ic_launcher',
+        'android:label': '@string/tile_download_label',
+        'android:permission': 'android.permission.BIND_QUICK_SETTINGS_TILE',
       },
-    ],
-  };
+      'intent-filter': [
+        { action: [{ $: { 'android:name': 'android.service.quicksettings.action.QS_TILE' } }] },
+      ],
+    },
+    {
+      $: {
+        'android:name': '.quicksettings.UploadTileService',
+        'android:exported': 'true',
+        'android:icon': '@mipmap/ic_launcher',
+        'android:label': '@string/tile_upload_label',
+        'android:permission': 'android.permission.BIND_QUICK_SETTINGS_TILE',
+      },
+      'intent-filter': [
+        { action: [{ $: { 'android:name': 'android.service.quicksettings.action.QS_TILE' } }] },
+      ],
+    },
+  ];
 
-  const existingService = application.service.find(
-    (service: any) =>
-      service.$['android:name'] === '.quicksettings.DownloadTileService'
-  );
-
-  if (!existingService) {
-    application.service.push(tileService as any);
+  for (const service of services) {
+    const name = service.$['android:name'];
+    const exists = application.service.find((s: any) => s.$['android:name'] === name);
+    if (!exists) {
+      application.service.push(service as any);
+    }
   }
 
   return androidManifest;
