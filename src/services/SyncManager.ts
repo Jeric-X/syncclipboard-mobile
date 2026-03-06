@@ -458,24 +458,11 @@ export class SyncManager {
       const { profileDtoToContent } = await import('../utils/clipboard');
       const content = profileDtoToContent(profile);
 
-      // 如果有文件数据，下载文件
+      // 如果有文件数据，优先从历史记录读取缓存，否则下载并保存到历史记录
       if (profile.hasData && profile.dataName) {
-        try {
-          const fileData = await this.apiClient.getFile(profile.dataName);
-          content.fileData = fileData;
-
-          // 保存到历史记录文件目录
-          const { saveHistoryFile } = await import('../utils/fileStorage');
-          content.fileUri = await saveHistoryFile(
-            profile.type,
-            profile.hash!,
-            profile.dataName,
-            fileData
-          );
-        } catch (error) {
-          console.warn('Failed to download file data:', error);
-          // 继续处理，即使文件下载失败
-        }
+        const { downloadAndAddToHistory } = await import('../utils/remoteClipboard');
+        const updatedContent = await downloadAndAddToHistory(content, this.apiClient, true);
+        content.fileUri = updatedContent.fileUri;
       }
 
       // 设置到本地剪贴板

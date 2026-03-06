@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { Paths, Directory } from 'expo-file-system';
 import { calculateDirectorySize, clearDirectory } from '@/utils/fileStorage';
-import { CLIPBOARD_TEMP_DIR } from '@/services/ClipboardManager';
+import { CLIPBOARD_TEMP_DIR } from '@/utils/fileStorage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import type { ThemeMode } from '@/theme';

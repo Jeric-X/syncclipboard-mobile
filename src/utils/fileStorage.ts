@@ -19,6 +19,9 @@ const IMAGE_DIR = new Directory(BASE_DIR, 'images');
 const FILE_DIR = new Directory(BASE_DIR, 'files');
 export const HISTORY_BASE_DIR = new Directory(BASE_DIR, 'history');
 
+// 临时剪贴板文件存储目录（供 ClipboardManager 和 SyncManager 共用）
+export const CLIPBOARD_TEMP_DIR = new Directory(Paths.cache, 'temp_files');
+
 /**
  * 初始化文件存储目录
  */
@@ -133,6 +136,42 @@ export async function getHistoryFileUri(
     console.error('[FileStorage] Failed to get history file URI:', error);
     return null;
   }
+}
+
+/**
+ * 准备临时文件路径（确保目录存在并返回目标 URI）
+ * @param fileName 文件名
+ * @returns 目标文件URI
+ */
+export function prepareTempFilePath(fileName: string): string {
+  if (!CLIPBOARD_TEMP_DIR.exists) {
+    CLIPBOARD_TEMP_DIR.create();
+  }
+  return new File(CLIPBOARD_TEMP_DIR, fileName).uri;
+}
+
+/**
+ * 准备历史记录文件的目标URI（创建目录但不要求文件已存在）
+ * 用于 downloadFile 调用，传入目标路径后直接由下载接口写入文件
+ * @param type 文件类型
+ * @param profileHash profileHash值
+ * @param fileName 文件名
+ * @returns 目标文件URI
+ */
+export async function prepareHistoryFileUri(
+  type: string,
+  profileHash: string,
+  fileName: string
+): Promise<string> {
+  // 确保基础目录存在
+  await initFileStorage();
+
+  const historyDir = getHistoryFileDir(type, profileHash);
+  if (!historyDir.exists) {
+    historyDir.create();
+  }
+
+  return new File(historyDir, fileName).uri;
 }
 
 /**

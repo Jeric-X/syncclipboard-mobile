@@ -33,6 +33,7 @@ import { HistoryListItem, type HistoryListItemHandle } from '@/components/Histor
 import { MessageToast } from '@/components/MessageToast';
 import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
 import { copyToLocalClipboard } from '@/utils/clipboard';
+import { openFile } from '@/utils/fileActions';
 import { useMessageToast } from '@/hooks/useMessageToast';
 import { calculateTextHash } from '@/utils/hash';
 
@@ -264,6 +265,20 @@ export function HistoryScreen() {
     [showMessage]
   );
 
+  // 打开文件
+  const handleOpen = useCallback(
+    async (item: ClipboardItem) => {
+      if (!item.fileUri) return;
+      try {
+        await openFile(item.fileUri);
+      } catch (error) {
+        console.error('[HistoryScreen] Failed to open file:', error);
+        showMessage('打开失败', 'error');
+      }
+    },
+    [showMessage]
+  );
+
   // 长按列表项 - 显示操作菜单
   const handleItemLongPress = useCallback(
     (item: ClipboardItem) => {
@@ -426,6 +441,7 @@ export function HistoryScreen() {
           item={item}
           onCopy={handleItemPress}
           onShare={handleShare}
+          onOpen={handleOpen}
           onLongPress={handleItemLongPress}
           onDelete={performDelete}
           showFullImage={showFullImage}
@@ -436,6 +452,7 @@ export function HistoryScreen() {
       getOrCreateItemRef,
       handleItemPress,
       handleShare,
+      handleOpen,
       handleItemLongPress,
       performDelete,
       showFullImage,
@@ -554,10 +571,10 @@ export function HistoryScreen() {
               {type === 'all'
                 ? '全部'
                 : type === 'Text'
-                ? '文本'
-                : type === 'Image'
-                ? '图片'
-                : '文件'}
+                  ? '文本'
+                  : type === 'Image'
+                    ? '图片'
+                    : '文件'}
             </Text>
           </TouchableOpacity>
         ))}

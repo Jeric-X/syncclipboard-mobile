@@ -14,6 +14,7 @@ export default [
       '.expo/**',
       'dist/**',
       'build/**',
+      'plugins/build/**',
       '*.config.js',
       'babel.config.js',
     ],

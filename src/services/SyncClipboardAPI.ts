@@ -149,8 +149,11 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
 
       console.log(`[SyncClipboardAPI] Downloading file ${fileName} to ${destinationUri}`);
 
-      // 使用新的 File API 静态方法下载
+      // 使用新的 File API 静态方法下载（目标存在时先删除，避免冲突）
       const file = new File(destinationUri);
+      if (file.exists) {
+        file.delete();
+      }
       await File.downloadFileAsync(url, file, { headers });
 
       return destinationUri;

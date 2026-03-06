@@ -123,16 +123,16 @@ export class HistoryStorage {
             // 创建目标文件
             const targetFile = new File(historyDir, processedItem.dataName);
             if (!targetFile.exists) {
-              sourceFile.copy(targetFile);
+              sourceFile.move(targetFile);
             }
 
             // 更新 fileUri 为新的路径
             processedItem.fileUri = targetFile.uri;
-            console.log('[HistoryStorage] File copied to history directory:', targetFile.uri);
+            console.log('[HistoryStorage] File moved to history directory:', targetFile.uri);
           }
         }
       } catch (error) {
-        console.error('[HistoryStorage] Failed to copy file to history directory:', error);
+        console.error('[HistoryStorage] Failed to move file to history directory:', error);
         // 继续执行，不阻止历史记录添加
       }
     }

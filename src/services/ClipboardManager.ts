@@ -6,13 +6,10 @@
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import { Paths, Directory } from 'expo-file-system';
 import { ClipboardContent } from '@/types';
 import { calculateTextHash, calculateBase64Hash, calculateBase64ContentHash } from '@/utils/hash';
 import { historyStorage } from './HistoryStorage';
-
-// 临时剪贴板图片存储目录
-export const CLIPBOARD_TEMP_DIR = new Directory(Paths.cache, 'clipboard_images');
+import { prepareTempFilePath } from '@/utils/fileStorage';
 
 /**
  * 剪贴板管理器类
@@ -114,14 +111,9 @@ export class ClipboardManager {
     // 如果文本长度超过阈值，保存为文件
     if (text.length > TEXT_STORAGE_THRESHOLD) {
       try {
-        // 确保临时目录存在
-        if (!CLIPBOARD_TEMP_DIR.exists) {
-          CLIPBOARD_TEMP_DIR.create();
-        }
-
         // 生成文件名
         const fileName = `${profileHash}.txt`;
-        const tempFile = new FileSystem.File(CLIPBOARD_TEMP_DIR, fileName);
+        const tempFile = new FileSystem.File(prepareTempFilePath(fileName));
 
         // 检查文件是否已存在
         if (!tempFile.exists) {
@@ -187,17 +179,6 @@ export class ClipboardManager {
 
       // 使用 File API 创建文件
       const { File } = FileSystem;
-
-      // 确保临时目录存在（使用更稳妥的方式）
-      try {
-        if (!CLIPBOARD_TEMP_DIR.exists) {
-          CLIPBOARD_TEMP_DIR.create();
-        }
-      } catch (dirError) {
-        console.error('[ClipboardManager] Failed to create directory:', dirError);
-        // 如果目录创建失败，尝试重新创建
-        CLIPBOARD_TEMP_DIR.create();
-      }
 
       // 清理 base64 字符串：移除可能的 data URI 前缀和空白字符
       let base64String = imageData.data;
@@ -283,12 +264,7 @@ export class ClipboardManager {
         // 步骤2: 先用本地 hash 创建临时文件名
         const tempFileName = `${localClipboardHash.substring(0, 16)}.png`;
 
-        // 再次确保目录存在（写入前双重检查）
-        if (!CLIPBOARD_TEMP_DIR.exists) {
-          CLIPBOARD_TEMP_DIR.create();
-        }
-
-        const tempFile = new File(CLIPBOARD_TEMP_DIR, tempFileName);
+        const tempFile = new File(prepareTempFilePath(tempFileName));
 
         // 检查文件是否已存在
         if (tempFile.exists) {
@@ -326,7 +302,6 @@ export class ClipboardManager {
           } catch (writeError) {
             console.error('[ClipboardManager] Failed to write file:', writeError);
             console.error('[ClipboardManager] File path:', tempFile.uri);
-            console.error('[ClipboardManager] Directory exists:', CLIPBOARD_TEMP_DIR.exists);
             throw writeError;
           }
         }

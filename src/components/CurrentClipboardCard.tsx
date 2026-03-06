@@ -5,10 +5,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, Share, Image } from 'react-native';
-import * as Sharing from 'expo-sharing';
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardContent } from '@/types/clipboard';
 import { useSettingsStore } from '@/stores';
+import { openFile, shareFile } from '@/utils/fileActions';
 
 interface CurrentClipboardCardProps {
   clipboard: ClipboardContent | null;
@@ -57,28 +57,11 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   // 分享内容
   const handleShare = async () => {
     if (!clipboard) return;
-
     try {
       if (clipboard.type === 'Text' && clipboard.text) {
-        // 文本内容使用 React Native Share
         await Share.share({ message: clipboard.text });
-      } else if (clipboard.type === 'Image' && clipboard.fileUri) {
-        // 图片文件使用 expo-sharing 避免 file:// URI 问题
-        const isAvailable = await Sharing.isAvailableAsync();
-        if (isAvailable) {
-          await Sharing.shareAsync(clipboard.fileUri, {
-            mimeType: 'image/*',
-            dialogTitle: clipboard.fileName || '分享图片',
-          });
-        }
-      } else if (clipboard.type === 'File' && clipboard.fileUri) {
-        // 其他文件使用 expo-sharing 避免 file:// URI 问题
-        const isAvailable = await Sharing.isAvailableAsync();
-        if (isAvailable) {
-          await Sharing.shareAsync(clipboard.fileUri, {
-            dialogTitle: clipboard.fileName || '分享文件',
-          });
-        }
+      } else if (clipboard.fileUri) {
+        await shareFile(clipboard.fileUri, clipboard.fileName);
       }
     } catch (error) {
       console.error('[CurrentClipboardCard] Failed to share:', error);
@@ -212,6 +195,19 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
       willShowCopyButton: !showDownloadButton,
     });
   }
+
+  // 可以"打开"的非文本类型（有 fileUri）
+  const canOpenFile = clipboard.type !== 'Text' && !!clipboard.fileUri;
+
+  // 打开文件
+  const handleOpenFile = async () => {
+    if (!clipboard.fileUri) return;
+    try {
+      await openFile(clipboard.fileUri);
+    } catch (error) {
+      console.error('[CurrentClipboardCard] Failed to open file:', error);
+    }
+  };
 
   // 判断是否显示分享按钮（非Text类型且有文件URI）
   const canShowShareButton = (() => {
@@ -349,6 +345,20 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             onPress={() => onCopy(clipboard)}
           >
             <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>复制</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* 非文本且有文件：打开按钮 */}
+        {canOpenFile && (
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              { backgroundColor: theme.colors.primary },
+              !canShowShareButton && !onUpload && !showDownloadButton && styles.actionButtonLast,
+            ]}
+            onPress={handleOpenFile}
+          >
+            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>打开</Text>
           </TouchableOpacity>
         )}
 

@@ -46,7 +46,7 @@ function addQuickSettingsTileService(
       $: {
         'android:name': '.quicksettings.DownloadTileService',
         'android:exported': 'true',
-        'android:icon': '@mipmap/ic_launcher',
+        'android:icon': '@drawable/ic_tile_download',
         'android:label': '@string/tile_download_label',
         'android:permission': 'android.permission.BIND_QUICK_SETTINGS_TILE',
       },
@@ -58,7 +58,7 @@ function addQuickSettingsTileService(
       $: {
         'android:name': '.quicksettings.UploadTileService',
         'android:exported': 'true',
-        'android:icon': '@mipmap/ic_launcher',
+        'android:icon': '@drawable/ic_tile_upload',
         'android:label': '@string/tile_upload_label',
         'android:permission': 'android.permission.BIND_QUICK_SETTINGS_TILE',
       },
@@ -70,9 +70,15 @@ function addQuickSettingsTileService(
 
   for (const service of services) {
     const name = service.$['android:name'];
-    const exists = application.service.find((s: any) => s.$['android:name'] === name);
-    if (!exists) {
-      application.service.push(service as any);
+    type ManifestService = (typeof application.service)[0];
+    const existingIndex = application.service.findIndex(
+      (s) => (s as ServiceConfig).$['android:name'] === name
+    );
+    if (existingIndex >= 0) {
+      // Update existing service attributes to ensure correctness
+      application.service[existingIndex] = service as unknown as ManifestService;
+    } else {
+      application.service.push(service as unknown as ManifestService);
     }
   }
 

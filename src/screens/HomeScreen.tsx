@@ -30,8 +30,8 @@ import { MessageToast } from '@/components/MessageToast';
 import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
 import { createAPIClient, getSignalRClient, historyStorage } from '@/services';
 import type { RemoteClipboardChangedCallback } from '@/services';
-import { initFileStorage } from '@/utils/fileStorage';
 import { copyToLocalClipboard } from '@/utils/clipboard';
+import { downloadAndAddToHistory } from '@/utils/remoteClipboard';
 import { useMessageToast } from '@/hooks/useMessageToast';
 
 export function HomeScreen() {
@@ -63,80 +63,6 @@ export function HomeScreen() {
 
   // 远程剪贴板轮询间隔（毫秒）
   const REMOTE_POLLING_INTERVAL = 3000; // 3秒
-
-  // 下载远程文件的公共逻辑
-  const downloadRemoteFileInternal = async (
-    content: ClipboardContent,
-    apiClient: ReturnType<typeof createAPIClient>,
-    hasData: boolean
-  ): Promise<ClipboardContent> => {
-    // 检查是否需要下载文件
-    const needsDownload = hasData && content.fileName && content.profileHash;
-
-    if (!needsDownload) {
-      return content;
-    }
-
-    // 初始化文件存储
-    await initFileStorage();
-
-    // 检查文件是否已存在
-    const { getHistoryFileUri, saveHistoryFile } = await import('@/utils/fileStorage');
-    let fileUri = await getHistoryFileUri(content.type, content.profileHash!, content.fileName!);
-
-    // 如果文件不存在，直接下载到文件系统
-    if (!fileUri) {
-      const fileData = await apiClient.getFile(content.fileName!);
-      fileUri = await saveHistoryFile(
-        content.type,
-        content.profileHash!,
-        content.fileName!,
-        fileData
-      );
-    }
-
-    // 返回更新后的内容，只设置fileUri，不读取文件内容到内存
-    // 文件内容仅在调用 copyToLocalClipboard 时才会读取
-    const updatedContent: ClipboardContent = {
-      ...content,
-      fileUri: fileUri,
-      // 对于Text类型，恢复到原始的预览文本（来自服务器的text字段）
-      // 完整文本只在复制时从文件读取
-    };
-
-    return updatedContent;
-  };
-
-  // 下载并添加到历史记录的公共逻辑
-  const downloadAndAddToHistory = async (
-    content: ClipboardContent,
-    hasData: boolean,
-    logPrefix: string = ''
-  ): Promise<ClipboardContent> => {
-    const apiClient = createAPIClient(activeServer!);
-    const updatedContent = await downloadRemoteFileInternal(content, apiClient, hasData);
-
-    // 添加到历史记录
-    try {
-      const historyItem: ClipboardItem = {
-        type: updatedContent.type,
-        text: updatedContent.text || '',
-        profileHash: updatedContent.profileHash || '',
-        hasData: hasData,
-        dataName: updatedContent.fileName,
-        size: updatedContent.fileSize,
-        timestamp: updatedContent.timestamp || Date.now(),
-        synced: true,
-        fileUri: updatedContent.fileUri,
-      };
-      await useHistoryStore.getState().addItem(historyItem);
-      console.log(`[HomeScreen] ${logPrefix}Added remote clipboard to history`);
-    } catch (error) {
-      console.error(`[HomeScreen] ${logPrefix}Failed to add remote clipboard to history:`, error);
-    }
-
-    return updatedContent;
-  };
 
   // 复制远程内容到本地剪贴板的公共函数
   const copyRemoteToLocal = async (content: ClipboardContent, logPrefix: string = '') => {
@@ -256,11 +182,7 @@ export function HomeScreen() {
             `[HomeScreen] ${logPrefix}Auto-downloading file (${content.fileSize} bytes, limit: ${autoDownloadMaxSize} bytes)`
           );
           try {
-            finalContent = await downloadAndAddToHistory(
-              content,
-              hasData,
-              `${logPrefix}Auto-download: `
-            );
+            finalContent = await downloadAndAddToHistory(content, apiClient, hasData);
             console.log(`[HomeScreen] ${logPrefix}Auto-download completed:`, finalContent.fileUri);
           } catch (downloadError) {
             console.error(`[HomeScreen] ${logPrefix}Auto-download failed:`, downloadError);
@@ -838,10 +760,11 @@ export function HomeScreen() {
     setDownloadingRemote(true);
     try {
       // 使用公共函数：下载并添加到历史记录
+      const apiClient = createAPIClient(activeServer);
       const updatedContent = await downloadAndAddToHistory(
         remoteContent,
-        remoteContent.hasData || false,
-        'Manual download: '
+        apiClient,
+        remoteContent.hasData || false
       );
       setRemoteContent(updatedContent);
       showMessage('文件已下载', 'success');

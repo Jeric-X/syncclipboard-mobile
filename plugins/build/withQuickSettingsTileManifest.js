@@ -19,27 +19,35 @@ function addQuickSettingsTileService(androidManifest) {
             $: {
                 'android:name': '.quicksettings.DownloadTileService',
                 'android:exported': 'true',
-                'android:icon': '@mipmap/ic_launcher',
+                'android:icon': '@drawable/ic_tile_download',
                 'android:label': '@string/tile_download_label',
                 'android:permission': 'android.permission.BIND_QUICK_SETTINGS_TILE',
             },
-            'intent-filter': [{ action: [{ $: { 'android:name': 'android.service.quicksettings.action.QS_TILE' } }] }],
+            'intent-filter': [
+                { action: [{ $: { 'android:name': 'android.service.quicksettings.action.QS_TILE' } }] },
+            ],
         },
         {
             $: {
                 'android:name': '.quicksettings.UploadTileService',
                 'android:exported': 'true',
-                'android:icon': '@mipmap/ic_launcher',
+                'android:icon': '@drawable/ic_tile_upload',
                 'android:label': '@string/tile_upload_label',
                 'android:permission': 'android.permission.BIND_QUICK_SETTINGS_TILE',
             },
-            'intent-filter': [{ action: [{ $: { 'android:name': 'android.service.quicksettings.action.QS_TILE' } }] }],
+            'intent-filter': [
+                { action: [{ $: { 'android:name': 'android.service.quicksettings.action.QS_TILE' } }] },
+            ],
         },
     ];
     for (const service of services) {
         const name = service.$['android:name'];
-        const exists = application.service.find((s) => s.$['android:name'] === name);
-        if (!exists) {
+        const existingIndex = application.service.findIndex((s) => s.$['android:name'] === name);
+        if (existingIndex >= 0) {
+            // Update existing service attributes to ensure correctness
+            application.service[existingIndex] = service;
+        }
+        else {
             application.service.push(service);
         }
     }

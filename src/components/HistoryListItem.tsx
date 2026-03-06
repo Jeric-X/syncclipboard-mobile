@@ -5,7 +5,7 @@
 
 import React, { useState, useRef, forwardRef, useImperativeHandle, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableHighlight, Image, TouchableOpacity } from 'react-native';
-import { Copy, Share, Trash2 } from 'react-native-feather';
+import { Copy, Share, Trash2, ExternalLink } from 'react-native-feather';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Reanimated, {
   useAnimatedReaction,
@@ -29,13 +29,14 @@ interface HistoryListItemProps {
   item: ClipboardItem;
   onCopy: (item: ClipboardItem) => void;
   onShare: (item: ClipboardItem) => void;
+  onOpen?: (item: ClipboardItem) => void;
   onLongPress: (item: ClipboardItem) => void;
   onDelete?: (item: ClipboardItem) => void;
   showFullImage?: boolean;
 }
 
 export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItemProps>(
-  ({ item, onCopy, onShare, onLongPress, onDelete, showFullImage = false }, ref) => {
+  ({ item, onCopy, onShare, onOpen, onLongPress, onDelete, showFullImage = false }, ref) => {
     const { theme } = useTheme();
     const { config } = useSettingsStore();
     const isDebugMode = config?.debugMode ?? false;
@@ -300,8 +301,8 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
                   {swipeDeleteHint === 'release'
                     ? '松手删除'
                     : swipeDeleteHint === 'continue'
-                    ? '继续滑动删除'
-                    : '删除'}
+                      ? '继续滑动删除'
+                      : '删除'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -473,6 +474,17 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
                   )}
                   {item.type === 'Image' && (
                     <>
+                      {item.fileUri && onOpen && (
+                        <TouchableOpacity
+                          style={styles.actionButton}
+                          onPress={() => onOpen(item)}
+                          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                        >
+                          <View style={{ transform: [{ scale: 0.6 }] }}>
+                            <ExternalLink color={theme.colors.primary} />
+                          </View>
+                        </TouchableOpacity>
+                      )}
                       <TouchableOpacity
                         style={styles.actionButton}
                         onPress={() => onShare(item)}
@@ -494,15 +506,28 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
                     </>
                   )}
                   {(item.type === 'File' || item.type === 'Group') && (
-                    <TouchableOpacity
-                      style={styles.actionButton}
-                      onPress={() => onShare(item)}
-                      hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-                    >
-                      <View style={{ transform: [{ scale: 0.6 }] }}>
-                        <Share color={theme.colors.primary} />
-                      </View>
-                    </TouchableOpacity>
+                    <>
+                      {item.fileUri && onOpen && (
+                        <TouchableOpacity
+                          style={styles.actionButton}
+                          onPress={() => onOpen(item)}
+                          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                        >
+                          <View style={{ transform: [{ scale: 0.6 }] }}>
+                            <ExternalLink color={theme.colors.primary} />
+                          </View>
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={() => onShare(item)}
+                        hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                      >
+                        <View style={{ transform: [{ scale: 0.6 }] }}>
+                          <Share color={theme.colors.primary} />
+                        </View>
+                      </TouchableOpacity>
+                    </>
                   )}
                 </View>
               </View>

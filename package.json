@@ -31,6 +31,7 @@
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "^19.0.21",
     "expo-image-picker": "^17.0.10",
+    "expo-intent-launcher": "~13.0.8",
     "expo-module-scripts": "^55.0.2",
     "expo-sharing": "~14.0.8",
     "expo-status-bar": "~3.0.9",
