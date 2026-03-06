@@ -24,6 +24,7 @@ import { useSettingsStore } from '@/stores';
 import { ServerConfigModal, ServerListItem, MessageToast } from '@/components';
 import { ServerConfig } from '@/types/api';
 import { useMessageToast } from '@/hooks/useMessageToast';
+import { ShortcutService } from '@/services';
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
@@ -274,6 +275,24 @@ export const SettingsScreen = () => {
     );
   };
 
+  // 处理添加下载快捷方式
+  const handleAddDownloadShortcut = async () => {
+    try {
+      await ShortcutService.addDownloadShortcut();
+    } catch (error: unknown) {
+      showMessage(error instanceof Error ? error.message : '添加失败', 'error');
+    }
+  };
+
+  // 处理添加上传快捷方式
+  const handleAddUploadShortcut = async () => {
+    try {
+      await ShortcutService.addUploadShortcut();
+    } catch (error: unknown) {
+      showMessage(error instanceof Error ? error.message : '添加失败', 'error');
+    }
+  };
+
   // 格式化文件大小
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 B';
@@ -374,6 +393,43 @@ export const SettingsScreen = () => {
                 />
                 <Text style={[styles.unitLabel, { color: theme.colors.textSecondary }]}>MB</Text>
               </View>
+            </View>
+          </View>
+        </View>
+
+        {/* 快捷操作部分 */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderBase}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>快捷操作</Text>
+          </View>
+
+          <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                  添加桌面快捷方式：下载
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
+                onPress={handleAddDownloadShortcut}
+              >
+                <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>添加</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                  添加桌面快捷方式：上传
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
+                onPress={handleAddUploadShortcut}
+              >
+                <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>添加</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -713,6 +769,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   refreshButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  actionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  actionButtonText: {
     fontSize: 14,
     fontWeight: '600',
   },

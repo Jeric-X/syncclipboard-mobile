@@ -31,6 +31,9 @@ export { HistoryStorage, historyStorage } from './HistoryStorage';
 export { CacheManager, cacheManager } from './CacheManager';
 export { SecureStorage, secureStorage } from './SecureStorage';
 
+// Shortcut Service
+export { ShortcutService } from './ShortcutService';
+
 // Factory function to create appropriate API client
 import { SyncClipboardAPI } from './SyncClipboardAPI';
 import { WebDAVClient } from './WebDAVClient';

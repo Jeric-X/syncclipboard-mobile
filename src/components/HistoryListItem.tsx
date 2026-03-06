@@ -301,8 +301,8 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
                   {swipeDeleteHint === 'release'
                     ? '松手删除'
                     : swipeDeleteHint === 'continue'
-                      ? '继续滑动删除'
-                      : '删除'}
+                    ? '继续滑动删除'
+                    : '删除'}
                 </Text>
               </TouchableOpacity>
             </View>

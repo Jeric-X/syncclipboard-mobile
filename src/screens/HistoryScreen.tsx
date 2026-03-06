@@ -571,10 +571,10 @@ export function HistoryScreen() {
               {type === 'all'
                 ? '全部'
                 : type === 'Text'
-                  ? '文本'
-                  : type === 'Image'
-                    ? '图片'
-                    : '文件'}
+                ? '文本'
+                : type === 'Image'
+                ? '图片'
+                : '文件'}
             </Text>
           </TouchableOpacity>
         ))}

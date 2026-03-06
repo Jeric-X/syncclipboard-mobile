@@ -77,8 +77,8 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
         err instanceof Error
           ? err.message
           : isUpload
-            ? '上传失败，请检查配置'
-            : '同步失败，请检查配置';
+          ? '上传失败，请检查配置'
+          : '同步失败，请检查配置';
       setErrorMessage(message);
       setSyncState('error');
     }
