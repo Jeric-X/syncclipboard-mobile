@@ -6,6 +6,10 @@
 import * as Crypto from 'expo-crypto';
 import { sha256 } from 'js-sha256';
 import type { ClipboardContent } from '@/types';
+import {
+  isNativeHashModuleAvailable,
+  nativeCalculateFileHash,
+} from '@/nativeModules/NativeHashModule';
 
 function createAbortError(): Error {
   const error = new Error('Operation was aborted');
@@ -121,12 +125,68 @@ export async function calculateBase64ContentHash(
 }
 
 /**
+ * [内部] JS 实现的文件哈希（降级备用）
+ * 流式读取文件，分块计算，周期性 yield 保持 UI 响应
+ */
+async function calculateFileHashJS(fileUri: string, signal?: AbortSignal): Promise<string> {
+  const { File } = await import('expo-file-system');
+  const file = new File(fileUri);
+
+  const fileInfo = file.info();
+  if (!fileInfo.exists) {
+    throw new Error(`File not found: ${fileUri}`);
+  }
+
+  const fileHandle = file.open();
+  const hasher = sha256.create();
+  const chunkSize = 1024 * 1024; // 1MB 块
+
+  try {
+    const totalSize = fileInfo.size ?? 0;
+    let remainingBytes = totalSize;
+    let chunkCount = 0;
+
+    while (remainingBytes > 0) {
+      throwIfAborted(signal);
+
+      const bytesToRead = Math.min(chunkSize, remainingBytes);
+      const chunk = fileHandle.readBytes(bytesToRead);
+
+      if (!chunk || chunk.length === 0) {
+        break;
+      }
+
+      hasher.update(chunk);
+      remainingBytes -= chunk.length;
+      chunkCount += 1;
+
+      // 周期性让出事件循环，保持 UI 响应
+      if (chunkCount % 1 === 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      }
+    }
+  } finally {
+    fileHandle.close();
+  }
+
+  return hasher.hex().toUpperCase();
+}
+
+/**
  * 计算文件的 SHA256 hash
- * 流式读取文件，分块计算哈希，周期性 yield 保持 UI 响应
- * @param fileUri 文件 URI
+ * 在 Android 上优先使用原生模块（异步 IO 线程，不阻塞 JS），
+ * 其他平台或原生模块不可用时自动降级为 JS 实现。
+ *
+ * @param fileUri 文件 URI（支持 file:// 格式）
+ * @param signal  可选的 AbortSignal，用于取消计算
+ * @param onProgress 可选的进度回调，范围 0~1（仅原生路径支持）
  * @returns SHA256 hash 字符串（大写十六进制）
  */
-export async function calculateFileHash(fileUri: string, signal?: AbortSignal): Promise<string> {
+export async function calculateFileHash(
+  fileUri: string,
+  signal?: AbortSignal,
+  onProgress?: (progress: number) => void
+): Promise<string> {
   if (!fileUri) {
     return '';
   }
@@ -134,50 +194,24 @@ export async function calculateFileHash(fileUri: string, signal?: AbortSignal): 
   try {
     throwIfAborted(signal);
 
-    // 使用 expo-file-system 分块读取文件内容，避免整文件读入内存
-    const { File } = await import('expo-file-system');
-    const file = new File(fileUri);
+    const tag = isNativeHashModuleAvailable ? 'native' : 'js';
+    console.log(`[HashUtils] calculateFileHash start (${tag}):`, fileUri);
+    const startTime = Date.now();
 
-    // 检查文件是否存在
-    const fileInfo = file.info();
-    if (!fileInfo.exists) {
-      throw new Error(`File not found: ${fileUri}`);
+    let hash: string;
+    if (isNativeHashModuleAvailable) {
+      // Android：使用原生模块，IO 线程异步执行，不阻塞 JS
+      hash = await nativeCalculateFileHash(fileUri, signal, onProgress);
+    } else {
+      // 降级：JS 实现（expo-file-system 分块读取）
+      hash = await calculateFileHashJS(fileUri, signal);
     }
 
-    const fileHandle = file.open();
-    const hasher = sha256.create();
-    const chunkSize = 1024 * 1024; // 1MB 块
-    const yieldEveryChunks = 1; // 每 1 个块（1MB）让出一次事件循环
-
-    try {
-      const totalSize = fileInfo.size ?? 0;
-      let remainingBytes = totalSize;
-      let chunkCount = 0;
-
-      while (remainingBytes > 0) {
-        throwIfAborted(signal);
-
-        const bytesToRead = Math.min(chunkSize, remainingBytes);
-        const chunk = fileHandle.readBytes(bytesToRead);
-
-        if (!chunk || chunk.length === 0) {
-          break;
-        }
-
-        hasher.update(chunk);
-        remainingBytes -= chunk.length;
-        chunkCount += 1;
-
-        // 周期性让出事件循环，保持 UI 响应（保证取消按钮可响应）
-        if (chunkCount % yieldEveryChunks === 0) {
-          await new Promise<void>((resolve) => setTimeout(resolve, 0));
-        }
-      }
-    } finally {
-      fileHandle.close();
-    }
-
-    return hasher.hex().toUpperCase();
+    console.log(
+      `[HashUtils] calculateFileHash done (${tag}) in ${Date.now() - startTime}ms:`,
+      hash
+    );
+    return hash;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;

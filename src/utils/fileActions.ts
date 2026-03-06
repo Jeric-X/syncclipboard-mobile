@@ -4,6 +4,8 @@
  */
 
 import * as Sharing from 'expo-sharing';
+import { NativeModules, Platform } from 'react-native';
+import { nativeCopyFile } from '@/nativeModules/NativeFileModule';
 
 const APP_PACKAGE = 'com.jericx.syncclipboardmobile';
 
@@ -56,6 +58,52 @@ export async function openFile(fileUri: string): Promise<void> {
       } catch {}
     }
     throw error;
+  }
+}
+
+/**
+ * 将文件储存到用户选择的目录（Android SAF）
+ * 会弹出系统文件夹选择器，将文件复制到所选位置。
+ */
+export async function saveFile(fileUri: string, fileName?: string): Promise<void> {
+  const FileSystem = await import('expo-file-system/legacy');
+  const { StorageAccessFramework } = FileSystem;
+
+  const permissions = await StorageAccessFramework.requestDirectoryPermissionsAsync();
+  if (!permissions.granted) {
+    throw new Error('Storage permission denied');
+  }
+
+  const name = fileName || fileUri.split('/').pop() || 'file';
+  const mimeType = getMimeTypeFromUri(fileUri);
+
+  const destUri = await StorageAccessFramework.createFileAsync(
+    permissions.directoryUri,
+    name,
+    mimeType === '*/*' ? 'application/octet-stream' : mimeType
+  );
+
+  // 运行时检查，避免模块顶层静态求值时 NativeModules 尚未注入的问题
+  const hashModule = Platform.OS === 'android' ? (NativeModules.NativeUtilModule ?? null) : null;
+  console.log(
+    '[saveFile] NativeModules.NativeUtilModule:',
+    hashModule,
+    'keys:',
+    hashModule ? Object.keys(hashModule) : 'N/A'
+  );
+
+  if (hashModule?.copyFile) {
+    // 原生流式拷贝：FileChannel.transferTo，不把文件读入 JS/Java 堆
+    await nativeCopyFile(fileUri, destUri);
+  } else {
+    console.warn('[saveFile] falling back to base64, hashModule:', hashModule);
+    // 降级：base64 读写（非 Android 或原生模块未加载时）
+    const content = await FileSystem.readAsStringAsync(fileUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    await FileSystem.writeAsStringAsync(destUri, content, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
   }
 }
 

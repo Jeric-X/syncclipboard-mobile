@@ -33,7 +33,7 @@ import { HistoryListItem, type HistoryListItemHandle } from '@/components/Histor
 import { MessageToast } from '@/components/MessageToast';
 import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
 import { copyToLocalClipboard } from '@/utils/clipboard';
-import { openFile } from '@/utils/fileActions';
+import { openFile, saveFile } from '@/utils/fileActions';
 import { useMessageToast } from '@/hooks/useMessageToast';
 import { calculateTextHash } from '@/utils/hash';
 
@@ -265,6 +265,25 @@ export function HistoryScreen() {
     [showMessage]
   );
 
+  // 储存文件到设备
+  const handleSave = useCallback(
+    async (item: ClipboardItem) => {
+      if (!item.fileUri) return;
+      try {
+        await saveFile(item.fileUri, item.dataName);
+        showMessage('已储存到设备', 'success');
+      } catch (error) {
+        if (error instanceof Error && error.message === 'Storage permission denied') {
+          showMessage('已取消储存', 'info');
+          return;
+        }
+        console.error('[HistoryScreen] Failed to save file:', error);
+        showMessage('储存失败', 'error');
+      }
+    },
+    [showMessage]
+  );
+
   // 打开文件
   const handleOpen = useCallback(
     async (item: ClipboardItem) => {
@@ -298,6 +317,13 @@ export function HistoryScreen() {
           actions.push(() => handleShare(item));
         }
 
+        if (item.type === 'Image' || item.type === 'File' || item.type === 'Group') {
+          if (item.fileUri) {
+            options.push('储存到设备');
+            actions.push(() => handleSave(item));
+          }
+        }
+
         if (item.type === 'Text' || item.type === 'Image') {
           options.push('复制');
           actions.push(() => handleCopyItem(item));
@@ -322,7 +348,7 @@ export function HistoryScreen() {
         openActionSheet();
       }
     },
-    [handleCopyItem, handleShare, handleDeleteFromMenu, openActionSheet]
+    [handleCopyItem, handleShare, handleSave, handleDeleteFromMenu, openActionSheet]
   );
 
   // 清空所有历史记录
@@ -441,6 +467,7 @@ export function HistoryScreen() {
           item={item}
           onCopy={handleItemPress}
           onShare={handleShare}
+          onSave={handleSave}
           onOpen={handleOpen}
           onLongPress={handleItemLongPress}
           onDelete={performDelete}
@@ -571,10 +598,10 @@ export function HistoryScreen() {
               {type === 'all'
                 ? '全部'
                 : type === 'Text'
-                ? '文本'
-                : type === 'Image'
-                ? '图片'
-                : '文件'}
+                  ? '文本'
+                  : type === 'Image'
+                    ? '图片'
+                    : '文件'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -614,6 +641,52 @@ export function HistoryScreen() {
                 },
               ]}
             >
+              {/* 储存按钮 - Image/File/Group 且有本地文件时显示 */}
+              {selectedItem &&
+                (selectedItem.type === 'Image' ||
+                  selectedItem.type === 'File' ||
+                  selectedItem.type === 'Group') &&
+                selectedItem.fileUri && (
+                  <>
+                    <TouchableOpacity
+                      style={styles.actionSheetButton}
+                      onPress={() => {
+                        closeActionSheet(() => selectedItem && handleSave(selectedItem));
+                      }}
+                    >
+                      <Text style={[styles.actionSheetButtonText, { color: theme.colors.text }]}>
+                        储存到设备
+                      </Text>
+                    </TouchableOpacity>
+                    <View
+                      style={[styles.actionSheetDivider, { backgroundColor: theme.colors.border }]}
+                    />
+                  </>
+                )}
+
+              {/* 储存按钮 - Image/File/Group 且有本地文件时显示 */}
+              {selectedItem &&
+                (selectedItem.type === 'Image' ||
+                  selectedItem.type === 'File' ||
+                  selectedItem.type === 'Group') &&
+                selectedItem.fileUri && (
+                  <>
+                    <TouchableOpacity
+                      style={styles.actionSheetButton}
+                      onPress={() => {
+                        closeActionSheet(() => selectedItem && handleSave(selectedItem));
+                      }}
+                    >
+                      <Text style={[styles.actionSheetButtonText, { color: theme.colors.text }]}>
+                        储存到设备
+                      </Text>
+                    </TouchableOpacity>
+                    <View
+                      style={[styles.actionSheetDivider, { backgroundColor: theme.colors.border }]}
+                    />
+                  </>
+                )}
+
               {/* 分享按钮 - Image/File/Group 类型显示 */}
               {selectedItem &&
                 (selectedItem.type === 'Image' ||

@@ -5,7 +5,7 @@
 
 import React, { useState, useRef, forwardRef, useImperativeHandle, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableHighlight, Image, TouchableOpacity } from 'react-native';
-import { Copy, Share, Trash2, ExternalLink } from 'react-native-feather';
+import { Copy, Download, Share, Trash2, ExternalLink } from 'react-native-feather';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Reanimated, {
   useAnimatedReaction,
@@ -29,6 +29,7 @@ interface HistoryListItemProps {
   item: ClipboardItem;
   onCopy: (item: ClipboardItem) => void;
   onShare: (item: ClipboardItem) => void;
+  onSave?: (item: ClipboardItem) => void;
   onOpen?: (item: ClipboardItem) => void;
   onLongPress: (item: ClipboardItem) => void;
   onDelete?: (item: ClipboardItem) => void;
@@ -36,7 +37,10 @@ interface HistoryListItemProps {
 }
 
 export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItemProps>(
-  ({ item, onCopy, onShare, onOpen, onLongPress, onDelete, showFullImage = false }, ref) => {
+  (
+    { item, onCopy, onShare, onSave, onOpen, onLongPress, onDelete, showFullImage = false },
+    ref
+  ) => {
     const { theme } = useTheme();
     const { config } = useSettingsStore();
     const isDebugMode = config?.debugMode ?? false;
@@ -301,8 +305,8 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
                   {swipeDeleteHint === 'release'
                     ? '松手删除'
                     : swipeDeleteHint === 'continue'
-                    ? '继续滑动删除'
-                    : '删除'}
+                      ? '继续滑动删除'
+                      : '删除'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -485,6 +489,17 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
                           </View>
                         </TouchableOpacity>
                       )}
+                      {item.fileUri && onSave && (
+                        <TouchableOpacity
+                          style={styles.actionButton}
+                          onPress={() => onSave(item)}
+                          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                        >
+                          <View style={{ transform: [{ scale: 0.6 }] }}>
+                            <Download color={theme.colors.primary} />
+                          </View>
+                        </TouchableOpacity>
+                      )}
                       <TouchableOpacity
                         style={styles.actionButton}
                         onPress={() => onShare(item)}
@@ -515,6 +530,17 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
                         >
                           <View style={{ transform: [{ scale: 0.6 }] }}>
                             <ExternalLink color={theme.colors.primary} />
+                          </View>
+                        </TouchableOpacity>
+                      )}
+                      {item.fileUri && onSave && (
+                        <TouchableOpacity
+                          style={styles.actionButton}
+                          onPress={() => onSave(item)}
+                          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                        >
+                          <View style={{ transform: [{ scale: 0.6 }] }}>
+                            <Download color={theme.colors.primary} />
                           </View>
                         </TouchableOpacity>
                       )}

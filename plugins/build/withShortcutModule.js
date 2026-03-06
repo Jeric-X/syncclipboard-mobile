@@ -14,7 +14,7 @@ const withShortcutModule = (config) => {
             // Insert before the first expo import (stable anchor point)
             contents = contents.replace('import expo.modules.ApplicationLifecycleDispatcher', `${importLine}\nimport expo.modules.ApplicationLifecycleDispatcher`);
             // Register the package inside getPackages().apply { … }
-            contents = contents.replace('// Packages that cannot be autolinked yet can be added manually here, for example:\n              // add(MyReactNativePackage())', '// Packages that cannot be autolinked yet can be added manually here, for example:\n              // add(MyReactNativePackage())\n              add(ShortcutPackage())');
+            contents = contents.replace('// add(MyReactNativePackage())', '// add(MyReactNativePackage())\n              add(ShortcutPackage())');
             console.log('✓ Registered ShortcutPackage in MainApplication.kt');
         }
         else {

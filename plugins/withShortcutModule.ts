@@ -20,8 +20,8 @@ const withShortcutModule: ConfigPlugin = (config) => {
 
       // Register the package inside getPackages().apply { … }
       contents = contents.replace(
-        '// Packages that cannot be autolinked yet can be added manually here, for example:\n              // add(MyReactNativePackage())',
-        '// Packages that cannot be autolinked yet can be added manually here, for example:\n              // add(MyReactNativePackage())\n              add(ShortcutPackage())'
+        '// add(MyReactNativePackage())',
+        '// add(MyReactNativePackage())\n              add(ShortcutPackage())'
       );
 
       console.log('✓ Registered ShortcutPackage in MainApplication.kt');
