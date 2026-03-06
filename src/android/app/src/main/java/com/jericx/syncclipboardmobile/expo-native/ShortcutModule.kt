@@ -87,24 +87,26 @@ class ShortcutModule(reactContext: ReactApplicationContext) :
      */
     private fun buildIcon(iconResName: String, bgColorHex: String): Icon {
         val density = reactApplicationContext.resources.displayMetrics.density
-        // 48 dp → pixels (standard launcher icon size)
-        val size = (48 * density + 0.5f).toInt()
+        // Adaptive icon spec: 108 dp total, 72 dp safe zone (18 dp bleed on each side)
+        val size = (108 * density + 0.5f).toInt()
 
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        // 1) Colored circle background
+        // 1) Colored circle background filling the full adaptive canvas
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = try {
                 Color.parseColor(bgColorHex)
             } catch (_: IllegalArgumentException) {
-                Color.parseColor("#1976D2")
+                Color.parseColor("#007AFF")
             }
         }
         val radius = size / 2f
         canvas.drawCircle(radius, radius, radius, bgPaint)
 
-        // 2) Foreground icon (white), inset to ~30 % padding on each side
+        // 2) Foreground icon (white), confined to the 72 dp safe zone
+        //    Safe zone starts at 18/108 ≈ 16.67 % from each edge; add extra
+        //    padding so the icon doesn't touch the safe-zone boundary.
         val iconResId = reactApplicationContext.resources.getIdentifier(
             iconResName, "drawable", reactApplicationContext.packageName
         )
@@ -113,14 +115,15 @@ class ShortcutModule(reactContext: ReactApplicationContext) :
                 reactApplicationContext.resources, iconResId, null
             )
             drawable?.let {
-                val pad = (size * 0.22f).toInt()
+                // 33 % total pad keeps the icon well within the 72 dp safe zone
+                val pad = (size * 0.33f).toInt()
                 it.setBounds(pad, pad, size - pad, size - pad)
                 it.setTint(Color.WHITE)
                 it.draw(canvas)
             }
         }
 
-        return Icon.createWithBitmap(bitmap)
+        return Icon.createWithAdaptiveBitmap(bitmap)
     }
 }
 

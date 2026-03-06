@@ -9,6 +9,7 @@
  */
 
 import { NativeModules, Platform } from 'react-native';
+import { lightColors } from '../theme';
 
 interface NativeShortcutModule {
   requestPinShortcut(
@@ -39,7 +40,7 @@ export const ShortcutService = {
       '下载剪贴板',
       'syncclipboard://quick-tile',
       'ic_tile_download',
-      '#1976D2'
+      lightColors.primary
     );
   },
 
@@ -59,7 +60,7 @@ export const ShortcutService = {
       '上传剪贴板',
       'syncclipboard://quick-tile-upload',
       'ic_tile_upload',
-      '#388E3C'
+      lightColors.primary
     );
   },
 };

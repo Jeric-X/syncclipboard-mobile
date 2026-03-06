@@ -50,7 +50,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
 
       if (result.success) {
         const content = result.content;
-        let toastMessage = isUpload ? '上传成功' : '同步成功';
+        let toastMessage = isUpload ? '上传成功' : '下载成功';
         if (content) {
           if (content.type === 'Text' && content.text) {
             const preview = content.text.trim().replace(/\s+/g, ' ');

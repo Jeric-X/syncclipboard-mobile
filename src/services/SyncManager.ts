@@ -269,7 +269,12 @@ export class SyncManager {
 
     try {
       // 获取本地剪贴板内容
-      const localContent = await this.clipboardManager.getClipboardContent(false);
+      let localContent = await this.clipboardManager.getClipboardContent(false);
+
+      if (!localContent) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        localContent = await this.clipboardManager.getClipboardContent(false);
+      }
 
       if (!localContent) {
         return {
