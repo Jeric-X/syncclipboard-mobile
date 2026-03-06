@@ -10,8 +10,8 @@
     "web": "expo start --web",
     "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
     "lint:fix": "eslint . --ext .ts,.tsx,.js,.jsx --fix",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format": "prettier --write \"**/*.{json,md}\"",
+    "format:check": "prettier --check \"**/*.{json,md}\"",
     "type-check": "tsc --noEmit",
     "build:apk": "cd android && gradlew assembleRelease",
     "plugin:build": "cd plugins && tsc -p tsconfig.json"
