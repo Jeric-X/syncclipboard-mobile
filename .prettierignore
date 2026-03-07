@@ -10,3 +10,5 @@ coverage/
 # Documentation folders (external skills)
 .claude/
 .ai/
+
+CHANGES.md

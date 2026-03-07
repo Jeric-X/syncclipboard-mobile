@@ -1,0 +1,11 @@
+name: build-pr
+
+on:
+  pull_request:
+
+jobs:
+  code-style:
+    uses: ./.github/workflows/code-style.yml
+
+  android-build:
+    uses: ./.github/workflows/android-build.yml

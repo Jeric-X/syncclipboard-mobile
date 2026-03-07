@@ -23,6 +23,9 @@ SyncClipboard 的官方 React Native 移动客户端，支持 Android 和 iOS。
 - 前后台切换时自动恢复/暂停同步
 - 本地存储管理（缓存清理、占用空间查看）
 - 深色/浅色/跟随系统主题
+- 快捷设置磁贴（Android 通知栏下拉磁贴，一键触发同步）
+- 桌面快捷方式（长按 App 图标快速触发同步）
+- 接收其他 App 的文件分享，直接上传到服务器
 
 ## 快速开始
 
@@ -32,10 +35,10 @@ SyncClipboard 的官方 React Native 移动客户端，支持 Android 和 iOS。
 npm install
 ```
 
-### 运行开发服务器
+### 生成原生项目
 
 ```bash
-npm start
+npm run prebuild
 ```
 
 ### 在特定平台运行
@@ -56,10 +59,6 @@ npm run ios
 npm run build:apk
 ```
 
-### CI/CD 自动构建
-
-推送代码或手动触发 GitHub Actions 工作流 (`Build Release APK`) 即可自动构建 APK，产物会以 Artifact 形式上传。
-
 ## 项目结构
 
 ```
@@ -69,16 +68,20 @@ syncclipboard-mobile/
 │   ├── constants/       # 常量定义
 │   ├── contexts/        # React Context（主题等）
 │   ├── hooks/           # 自定义 Hooks
+│   ├── nativeModules/   # 原生模块封装
 │   ├── navigation/      # 导航配置
 │   ├── screens/         # 页面组件
-│   │   ├── HomeScreen   # 主页（本地/远程剪贴板）
-│   │   ├── HistoryScreen# 历史记录
-│   │   └── SettingsScreen# 设置
+│   │   ├── HomeScreen             # 主页（本地/远程剪贴板）
+│   │   ├── HistoryScreen          # 历史记录
+│   │   ├── SettingsScreen         # 设置
+│   │   ├── QuickTileLoadingScreen # 快捷磁贴触发页
+│   │   └── ShareReceiveScreen     # 接收其他 App 的分享
 │   ├── services/        # API 客户端与业务逻辑
 │   ├── stores/          # Zustand 状态管理
 │   ├── theme/           # 主题颜色定义
 │   ├── types/           # TypeScript 类型定义
 │   └── utils/           # 工具函数
+├── plugins/             # Expo 原生配置插件
 ├── App.tsx              # 应用入口
 ├── app.json             # Expo 配置
 └── package.json
@@ -90,6 +93,8 @@ syncclipboard-mobile/
 - **语言**: TypeScript
 - **状态管理**: Zustand
 - **导航**: React Navigation
+- **列表渲染**: FlashList (@shopify/flash-list)
+- **动画**: React Native Reanimated
 - **HTTP 客户端**: Axios
 - **实时通信**: SignalR (@microsoft/signalr)
 - **本地存储**: AsyncStorage
@@ -107,17 +112,12 @@ npm run lint
 # 自动修复代码问题
 npm run lint:fix
 
-# 格式化代码
-npm run format
+# 格式化文档（JSON/Markdown）
+npm run format-docs
 
-# 检查代码格式
-npm run format:check
+# 检查文档格式
+npm run format-docs:check
+
+# 构建 Expo 原生插件
+npm run plugin:build
 ```
-
-## 技术文档
-
-- [API 客户端使用](docs/API_USAGE.md)
-- [Hash 计算说明](docs/HASH_CALCULATION.md)
-- [服务器配置指南](docs/SERVER_CONFIG_GUIDE.md)
-- [同步管理器使用](docs/SYNC_MANAGER_USAGE.md)
-- [手动测试清单](docs/MANUAL_TEST_CHECKLIST.md)

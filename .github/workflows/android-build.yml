@@ -1,0 +1,68 @@
+name: android-build
+
+on:
+  workflow_call:
+    outputs:
+      version:
+        description: "App version from package.json"
+        value: ${{ jobs.build.outputs.version }}
+
+jobs:
+  build:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Expo prebuild
+        run: npx expo prebuild --no-install
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x android/gradlew
+
+      - name: Build Release APK
+        run: cd android && ./gradlew assembleRelease
+
+      - name: Get version name
+        id: version
+        run: |
+          VERSION=$(node -p "require('./app.json').expo.version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Rename APKs
+        run: |
+          cd android/app/build/outputs/apk/release
+          VERSION=${{ steps.version.outputs.version }}
+          for ABI in arm64-v8a armeabi-v7a x86_64 universal; do
+            SRC="app-${ABI}-release.apk"
+            if [ -f "$SRC" ]; then
+              mv "$SRC" "SyncClipboard-${VERSION}-${ABI}.apk"
+            fi
+          done
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: android/app/build/outputs/apk/release/SyncClipboard-*.apk
