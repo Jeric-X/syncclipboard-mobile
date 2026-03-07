@@ -1,14 +1,13 @@
 # SyncClipboard Mobile
 
-SyncClipboard 的官方 React Native 移动客户端，支持 Android 和 iOS。
+SyncClipboard 的官方 React Native 移动客户端，暂时仅支持 Android
 
 ## 功能特性
 
 ### 剪贴板同步
 
-- 本地剪贴板实时监听（1 秒轮询）
-- 支持文本、图片、文件同步
-- 手动上传/下载，支持自动复制模式
+- 支持前台模式下文本、图片、文件同步
+- 通过通知栏快捷方式、桌面快捷方式、分享菜单手动调用
 
 ### 服务器支持
 

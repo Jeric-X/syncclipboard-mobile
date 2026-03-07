@@ -25,7 +25,7 @@ interface ThemeProviderProps {
 }
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children, initialMode = 'auto' }) => {
-  const systemColorScheme = useColorScheme() ?? 'light';
+  const systemColorScheme = (useColorScheme() ?? 'light') === 'dark' ? 'dark' : 'light';
   const [themeMode, setThemeModeState] = useState<ThemeMode>(initialMode);
   const [theme, setTheme] = useState<Theme>(() => createTheme(initialMode, systemColorScheme));
 

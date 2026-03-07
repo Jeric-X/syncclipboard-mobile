@@ -7,7 +7,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -22,7 +21,6 @@
         "backgroundColor": "#ffffff"
       },
       "versionCode": 1,
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.jericx.syncclipboardmobile",
       "permissions": ["android.permission.REQUEST_INSTALL_PACKAGES"]

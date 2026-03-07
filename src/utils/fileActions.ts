@@ -3,7 +3,7 @@
  * 文件操作公共函数 - 打开、分享文件
  */
 
-import { NativeModules, Platform, Share } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 import { nativeCopyFile } from '@/nativeModules/NativeUtilModule';
 
 const APP_PACKAGE = 'com.jericx.syncclipboardmobile';
@@ -110,8 +110,11 @@ export async function saveFile(fileUri: string, fileName?: string): Promise<void
  * 通过系统分享对话框分享文件
  */
 export async function shareFile(fileUri: string, fileName?: string): Promise<void> {
-  await Share.share({
-    url: fileUri,
-    title: fileName || '分享文件',
+  const Sharing = await import('expo-sharing');
+  const mimeType = getMimeTypeFromUri(fileUri);
+  await Sharing.shareAsync(fileUri, {
+    mimeType,
+    dialogTitle: fileName || '分享文件',
+    UTI: mimeType,
   });
 }

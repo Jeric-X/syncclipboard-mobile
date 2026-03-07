@@ -953,7 +953,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   uploadOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
