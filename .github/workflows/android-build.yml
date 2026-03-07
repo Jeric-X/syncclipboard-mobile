@@ -33,7 +33,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Expo prebuild
         run: npx expo prebuild --no-install
