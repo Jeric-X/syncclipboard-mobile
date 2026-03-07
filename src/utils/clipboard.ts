@@ -278,11 +278,6 @@ export async function copyClipboardItem(
       return { success: true, message: '已复制到剪贴板' };
     }
 
-    if (item.type === 'Image' && item.fileUri) {
-      await clipboardManager.setImageContent(item.fileUri);
-      return { success: true, message: '图片已复制到剪贴板' };
-    }
-
     return { success: false, message: '暂不支持此类型的快速复制' };
   } catch (error) {
     console.error('[copyClipboardItem] Failed to copy:', error);
@@ -309,30 +304,6 @@ export async function copyClipboardItem(
 }
 
 /**
- * 图片写入系统剪贴板后的监听器同步操作
- *
- * 回读剪贴板以获取经系统实际存储后的 localClipboardHash，然后：
- * 1. 更新 clipboardMonitor.lastContent，使监听器下次轮询时认为内容未变，
- *    避免将此次"程序内复制"误判为"用户新复制"而产生重复历史记录
- * 2. 将 localClipboardHash 写回历史记录，使 ClipboardManager.getImageContent
- *    下次通过 getItemByLocalHash 命中缓存，避免重编码
- */
-export async function syncAfterImageCopy(profileHash: string): Promise<void> {
-  const { clipboardManager, clipboardMonitor, historyStorage } = await import('@/services');
-  const readBack = await clipboardManager.getClipboardContent(false);
-  if (readBack?.type === 'Image' && readBack.localClipboardHash) {
-    clipboardMonitor.setLastContent(readBack);
-    const histItem = await historyStorage.getItem(profileHash);
-    if (histItem) {
-      await historyStorage.updateItem(profileHash, {
-        ...histItem,
-        localClipboardHash: readBack.localClipboardHash,
-      });
-    }
-  }
-}
-
-/**
  * 将内容写入系统剪贴板并更新本地剪贴板卡片显示，不添加历史记录。
  *
  * 统一的"复制到本地"操作：
@@ -340,8 +311,7 @@ export async function syncAfterImageCopy(profileHash: string): Promise<void> {
  * 2. 对于Text类型且有文件的情况，从文件读取完整文本
  * 3. 写入系统剪贴板
  * 4. 更新 Store 中的 currentContent，刷新本地剪贴板卡片
- * 5. 图片类型额外执行 syncAfterImageCopy，同步 localClipboardHash
- * 6. 恢复轮询
+ * 5. 恢复轮询
  */
 export async function copyToLocalClipboard(content: ClipboardContent): Promise<CopyResult> {
   const { clipboardManager, clipboardMonitor } = await import('@/services');
@@ -375,13 +345,6 @@ export async function copyToLocalClipboard(content: ClipboardContent): Promise<C
     const result = await copyClipboardItem(contentToCopy, clipboardManager);
     if (result.success) {
       useClipboardStore.getState().setCurrentContentDisplay(contentToCopy);
-      if (contentToCopy.type === 'Image' && contentToCopy.profileHash) {
-        try {
-          await syncAfterImageCopy(contentToCopy.profileHash);
-        } catch (syncError) {
-          console.error('[copyToLocalClipboard] Failed to sync after image copy:', syncError);
-        }
-      }
     }
     return result;
   } catch (error) {

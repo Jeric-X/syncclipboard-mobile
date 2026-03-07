@@ -509,15 +509,6 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
                           <Share color={theme.colors.primary} />
                         </View>
                       </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => onCopy(item)}
-                        hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-                      >
-                        <View style={{ transform: [{ scale: 0.6 }] }}>
-                          <Copy color={theme.colors.primary} />
-                        </View>
-                      </TouchableOpacity>
                     </>
                   )}
                   {(item.type === 'File' || item.type === 'Group') && (

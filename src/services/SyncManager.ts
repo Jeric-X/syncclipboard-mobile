@@ -470,8 +470,10 @@ export class SyncManager {
         content.fileUri = updatedContent.fileUri;
       }
 
-      // 设置到本地剪贴板
-      await this.clipboardManager.setClipboardContent(content);
+      // 设置到本地剪贴板（仅 Text 类型，图片和文件不写入系统剪贴板）
+      if (content.type === 'Text') {
+        await this.clipboardManager.setClipboardContent(content);
+      }
 
       // 更新最后下载的 profileHash
       this.lastRemoteProfileHash = remoteProfileHash;

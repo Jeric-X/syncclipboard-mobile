@@ -334,20 +334,6 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
           </TouchableOpacity>
         )}
 
-        {/* Image 类型：复制按钮 */}
-        {clipboard.type === 'Image' && clipboard.fileUri && (
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              { backgroundColor: theme.colors.primary },
-              !canShowShareButton && !onUpload && !showDownloadButton && styles.actionButtonLast,
-            ]}
-            onPress={() => onCopy(clipboard)}
-          >
-            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>复制</Text>
-          </TouchableOpacity>
-        )}
-
         {/* 非文本且有文件：打开按钮 */}
         {canOpenFile && (
           <TouchableOpacity

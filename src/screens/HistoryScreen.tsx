@@ -312,6 +312,11 @@ export function HistoryScreen() {
         // Image: 分享、复制、删除
         // File/Group: 分享、删除
 
+        if ((item.type === 'Image' || item.type === 'File' || item.type === 'Group') && item.fileUri) {
+          options.push('打开');
+          actions.push(() => handleOpen(item));
+        }
+
         if (item.type === 'Image' || item.type === 'File' || item.type === 'Group') {
           options.push('分享');
           actions.push(() => handleShare(item));
@@ -324,7 +329,7 @@ export function HistoryScreen() {
           }
         }
 
-        if (item.type === 'Text' || item.type === 'Image') {
+        if (item.type === 'Text') {
           options.push('复制');
           actions.push(() => handleCopyItem(item));
         }
@@ -348,7 +353,7 @@ export function HistoryScreen() {
         openActionSheet();
       }
     },
-    [handleCopyItem, handleShare, handleSave, handleDeleteFromMenu, openActionSheet]
+    [handleCopyItem, handleOpen, handleShare, handleSave, handleDeleteFromMenu, openActionSheet]
   );
 
   // 清空所有历史记录
@@ -641,7 +646,7 @@ export function HistoryScreen() {
                 },
               ]}
             >
-              {/* 储存按钮 - Image/File/Group 且有本地文件时显示 */}
+              {/* 打开按钮 - Image/File/Group 且有本地文件时显示 */}
               {selectedItem &&
                 (selectedItem.type === 'Image' ||
                   selectedItem.type === 'File' ||
@@ -651,11 +656,11 @@ export function HistoryScreen() {
                     <TouchableOpacity
                       style={styles.actionSheetButton}
                       onPress={() => {
-                        closeActionSheet(() => selectedItem && handleSave(selectedItem));
+                        closeActionSheet(() => selectedItem && handleOpen(selectedItem));
                       }}
                     >
                       <Text style={[styles.actionSheetButtonText, { color: theme.colors.text }]}>
-                        储存到设备
+                        打开
                       </Text>
                     </TouchableOpacity>
                     <View
@@ -707,8 +712,8 @@ export function HistoryScreen() {
                   </>
                 )}
 
-              {/* 复制按钮 - Text/Image 类型显示 */}
-              {selectedItem && (selectedItem.type === 'Text' || selectedItem.type === 'Image') && (
+              {/* 复制按钮 - 仅 Text 类型显示 */}
+              {selectedItem && selectedItem.type === 'Text' && (
                 <>
                   <TouchableOpacity
                     style={styles.actionSheetButton}

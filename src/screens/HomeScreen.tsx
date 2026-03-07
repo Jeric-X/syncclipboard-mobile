@@ -232,13 +232,14 @@ export function HomeScreen() {
         }
       }
 
-      // 如果启用了自动同步，自动复制远程内容到本地剪贴板
+      // 如果启用了自动同步，自动复制远程内容到本地剪贴板（仅 Text 类型）
       const autoSyncEnabled = config?.autoSync ?? false;
       if (
         autoSyncEnabled &&
         activeServer &&
         !isAutoSyncing.current &&
-        !skipAutoCopyDueToLargeFile
+        !skipAutoCopyDueToLargeFile &&
+        finalContent.type === 'Text'
       ) {
         console.log(`[HomeScreen] ${logPrefix}Auto-copying remote changes to local clipboard`);
         isAutoSyncing.current = true;
