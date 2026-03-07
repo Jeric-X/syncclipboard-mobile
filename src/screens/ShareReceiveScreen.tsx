@@ -35,6 +35,7 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
   // 挂载时同步读取原始 payload，避免 hook 异步初始化导致误判"没有内容"
   const [hasShareContent] = useState(() => getSharedPayloads().length > 0);
   const activeServer = useSettingsStore((s) => s.getActiveServer());
+  const [loadingText, setLoadingText] = useState('正在处理文件…');
 
   // 挂载时若根本没有分享内容，直接返回
   useEffect(() => {
@@ -64,7 +65,8 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
       fileName,
       contentMime,
       undefined,
-      activeServer
+      activeServer,
+      { onProgress: setLoadingText }
     );
     clearSharedPayloads();
   }, [resolvedSharedPayloads, activeServer, resolveError]);
@@ -87,7 +89,7 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
   return (
     <QuickLoadingPage
       task={task}
-      loadingText="正在处理文件…"
+      loadingText={loadingText}
       successText="接收并上传成功"
       failureText="处理失败"
       onComplete={onComplete}

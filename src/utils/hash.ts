@@ -9,7 +9,7 @@ import type { ClipboardContent } from '@/types';
 import {
   isNativeHashModuleAvailable,
   nativeCalculateFileHash,
-} from '@/nativeModules/NativeHashModule';
+} from '@/nativeModules/NativeUtilModule';
 
 function createAbortError(): Error {
   const error = new Error('Operation was aborted');

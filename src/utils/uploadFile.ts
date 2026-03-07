@@ -5,7 +5,7 @@
  */
 
 import { File } from 'expo-file-system';
-import { nativeCopyFile } from '@/nativeModules/NativeFileModule';
+import { nativeCopyFile } from '@/nativeModules/NativeUtilModule';
 import { calculateFileProfileHash } from '@/utils/hash';
 import { prepareTempFilePath } from '@/utils/fileStorage';
 import { useHistoryStore } from '@/stores/historyStore';
@@ -22,6 +22,8 @@ function guessContentType(mimeType: string | null | undefined): ClipboardContent
 
 export interface UploadFileOptions {
   signal?: AbortSignal;
+  /** 各阶段进度文字回调，供 UI 动态更新 loading 文本 */
+  onProgress?: (stage: string) => void;
 }
 
 /**
@@ -43,8 +45,10 @@ export async function uploadFileAndAddToHistory(
   const contentType: ClipboardContentType = guessContentType(mimeType);
   const tempPath = prepareTempFilePath(fileName);
   var sourceFile = new File(sourceUri);
+  options?.onProgress?.('正在复制文件…');
   await nativeCopyFile(sourceFile.uri, tempPath);
 
+  options?.onProgress?.('正在计算哈希…');
   const profileHash = await calculateFileProfileHash(tempPath, fileName);
   const resolvedSize = fileSize ?? sourceFile.size;
 
@@ -76,6 +80,7 @@ export async function uploadFileAndAddToHistory(
   content.fileUri = savedItem.fileUri ?? tempPath;
 
   const apiClient = createAPIClient(activeServer);
+  options?.onProgress?.('正在上传文件…');
   await apiClient.putContent(content, options);
 
   await useHistoryStore.getState().updateItem(profileHash, { synced: true });

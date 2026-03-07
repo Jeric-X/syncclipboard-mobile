@@ -33,7 +33,7 @@ import { HistoryListItem, type HistoryListItemHandle } from '@/components/Histor
 import { MessageToast } from '@/components/MessageToast';
 import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
 import { copyToLocalClipboard } from '@/utils/clipboard';
-import { openFile, saveFile } from '@/utils/fileActions';
+import { openFile, saveFile, shareFile } from '@/utils/fileActions';
 import { useMessageToast } from '@/hooks/useMessageToast';
 import { calculateTextHash } from '@/utils/hash';
 
@@ -244,16 +244,8 @@ export function HistoryScreen() {
             message: item.text,
             title: '分享文本',
           });
-        } else if (item.type === 'Image' && item.fileUri) {
-          await Share.share({
-            url: item.fileUri,
-            title: '分享图片',
-          });
-        } else if ((item.type === 'File' || item.type === 'Group') && item.fileUri) {
-          await Share.share({
-            url: item.fileUri,
-            title: '分享文件',
-          });
+        } else if (item.fileUri) {
+          await shareFile(item.fileUri, item.dataName);
         } else {
           showMessage('暂不支持分享此类型的内容', 'info');
         }

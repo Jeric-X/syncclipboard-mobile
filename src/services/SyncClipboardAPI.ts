@@ -3,7 +3,7 @@
  * Implements SyncClipboard server API operations
  */
 
-import { fetch } from 'expo/fetch';
+import { nativeUploadFile } from '../nativeModules/NativeUtilModule';
 import { APIClient, APIClientConfig, PutContentOptions } from './APIClient';
 import { ProfileDto, ServerInfo } from '../types/api';
 import type { ClipboardContent } from '../types/clipboard';
@@ -177,40 +177,17 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
       throw new ValidationError('File URI is required');
     }
 
+    console.log(`[SyncClipboardAPI] Uploading file: ${fileName}`);
+
+    const url = `${this.baseURL}${SyncClipboardAPI.FILE_ENDPOINT}${encodeURIComponent(fileName)}`;
+
+    // 准备请求头
+    const headers = await this.getHeaders();
+    headers['Content-Type'] = 'application/octet-stream';
+
     try {
-      const { File } = await import('expo-file-system');
-
-      // 创建文件对象
-      const file = new File(fileUri);
-
-      // 检查文件是否存在
-      const fileInfo = file.info();
-      if (!fileInfo.exists) {
-        throw new ValidationError(`File not found: ${fileUri}`);
-      }
-
-      const fileSize = fileInfo.size || 0;
-      const fileSizeMB = (fileSize / 1024 / 1024).toFixed(2);
-      console.log(`[SyncClipboardAPI] Uploading file: ${fileName}, size: ${fileSizeMB}MB`);
-
-      const url = `${this.baseURL}${SyncClipboardAPI.FILE_ENDPOINT}${encodeURIComponent(fileName)}`;
-
-      // 准备请求头
-      const headers = await this.getHeaders();
-      headers['Content-Type'] = 'application/octet-stream';
-
-      // 直接使用 File 对象作为 body，避免将大文件加载到内存
-      const response = await fetch(url, {
-        method: 'PUT',
-        headers,
-        body: file,
-        signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
+      // 使用原生 HttpURLConnection 流式上传，每次仅持有 8KB 缓冲，避免将文件读入内存
+      await nativeUploadFile(url, headers, fileUri, signal);
       console.log(`[SyncClipboardAPI] File uploaded successfully: ${fileName}`);
     } catch (error) {
       console.error(`[SyncClipboardAPI] Failed to put file ${fileName}:`, error);

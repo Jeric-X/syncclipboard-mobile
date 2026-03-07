@@ -2,6 +2,7 @@ package com.jericx.syncclipboardmobile.nativeutil
 
 import android.net.Uri
 import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -9,6 +10,8 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableNativeMap
 import java.io.File
 import java.io.FileInputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.nio.channels.Channels
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
@@ -20,6 +23,7 @@ class NativeUtilModule(reactContext: ReactApplicationContext) :
 
     companion object {
         private const val CHUNK_SIZE = 4 * 1024 * 1024 // 4 MB
+        private const val UPLOAD_BUFFER_SIZE = 8 * 1024 // 8 KB
         private const val EVENT_HASH_PROGRESS = "HashProgress"
         private const val EVENT_HASH_CANCELLED = "HashCancelled"
     }
@@ -33,7 +37,7 @@ class NativeUtilModule(reactContext: ReactApplicationContext) :
      * 计算文件的 SHA-256 哈希，在 IO 线程异步执行，不阻塞 JS 线程。
      *
      * @param fileUri  文件路径，支持 "file://" URI 或裸路径
-     * @param jobId    本次计算的唯一 ID，用于取消和进度事件关联
+     * @param jobId    本次计算的唯一 ID，由 JS 侧生成，用于取消和进度事件关联
      * @param promise  计算完毕后 resolve 大写十六进制 hash 字符串；异常时 reject
      */
     @ReactMethod
@@ -60,7 +64,6 @@ class NativeUtilModule(reactContext: ReactApplicationContext) :
                 FileInputStream(file).use { stream ->
                     var read: Int
                     while (stream.read(buffer).also { read = it } != -1) {
-                        // 检查取消标志
                         if (cancelFlag.get()) {
                             cancelFlags.remove(jobId)
                             emitEvent(EVENT_HASH_CANCELLED, jobId, null)
@@ -71,7 +74,6 @@ class NativeUtilModule(reactContext: ReactApplicationContext) :
                         digest.update(buffer, 0, read)
                         bytesRead += read
 
-                        // 每个 chunk 发送一次进度事件
                         if (totalBytes > 0) {
                             val progress = bytesRead.toDouble() / totalBytes.toDouble()
                             emitProgress(jobId, progress, bytesRead, totalBytes)
@@ -81,7 +83,6 @@ class NativeUtilModule(reactContext: ReactApplicationContext) :
 
                 cancelFlags.remove(jobId)
 
-                // 最后检查一次取消（文件读完但还没 resolve 时）
                 if (cancelFlag.get()) {
                     emitEvent(EVENT_HASH_CANCELLED, jobId, null)
                     promise.reject("CANCELLED", "Hash calculation was cancelled")
@@ -165,6 +166,95 @@ class NativeUtilModule(reactContext: ReactApplicationContext) :
                 promise.reject("COPY_ERROR", e.message ?: "Unknown error", e)
             }
         }
+    }
+
+    /**
+     * 流式 PUT 上传文件到 HTTP/HTTPS 端点，不将文件内容读入 JVM 堆内存。
+     *
+     * 通过 setFixedLengthStreamingMode 告知 HttpURLConnection 请求体长度已知，
+     * JVM 不会缓冲 request body，而是直接以 UPLOAD_BUFFER_SIZE 大小的缓冲区
+     * 逐块写入 socket 发送缓冲区，内存占用为 O(bufferSize)，与文件大小无关。
+     *
+     * @param url     上传目标 URL（http:// 或 https://）
+     * @param headers 请求头键值对（含 Authorization、Content-Type 等）
+     * @param fileUri 本地文件路径（file:// URI 或裸路径）
+     * @param jobId   用于取消的唯一 ID，由 JS 侧生成，调用 cancelUpload(jobId) 可中断上传
+     * @param promise resolve: null  |  reject: 错误码 + 信息
+     */
+    @ReactMethod
+    fun uploadFile(url: String, headers: ReadableMap, fileUri: String, jobId: String, promise: Promise) {
+        val cancelFlag = AtomicBoolean(false)
+        cancelFlags[jobId] = cancelFlag
+
+        executor.submit {
+            var connection: HttpURLConnection? = null
+            try {
+                val path = resolveFilePath(fileUri)
+                val file = File(path)
+
+                if (!file.exists()) {
+                    cancelFlags.remove(jobId)
+                    promise.reject("FILE_NOT_FOUND", "File not found: $path")
+                    return@submit
+                }
+
+                connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "PUT"
+                    doOutput = true
+                    connectTimeout = 30_000
+                    readTimeout = 0  // 上传大文件时不设读超时
+
+                    setFixedLengthStreamingMode(file.length())
+
+                    val iter = headers.keySetIterator()
+                    while (iter.hasNextKey()) {
+                        val key = iter.nextKey()
+                        setRequestProperty(key, headers.getString(key))
+                    }
+                }
+
+                connection.outputStream.use { output ->
+                    FileInputStream(file).use { input ->
+                        val buffer = ByteArray(UPLOAD_BUFFER_SIZE)
+                        var read: Int
+                        while (input.read(buffer).also { read = it } != -1) {
+                            if (cancelFlag.get()) {
+                                cancelFlags.remove(jobId)
+                                promise.reject("CANCELLED", "Upload was cancelled")
+                                return@submit
+                            }
+                            output.write(buffer, 0, read)
+                        }
+                        output.flush()
+                    }
+                }
+
+                val responseCode = connection.responseCode
+                cancelFlags.remove(jobId)
+
+                if (responseCode in 200..299) {
+                    promise.resolve(null)
+                } else {
+                    val body = try {
+                        connection.errorStream?.bufferedReader()?.readText() ?: ""
+                    } catch (_: Exception) { "" }
+                    promise.reject("HTTP_ERROR", "HTTP $responseCode: $body")
+                }
+            } catch (e: Exception) {
+                cancelFlags.remove(jobId)
+                promise.reject("UPLOAD_ERROR", e.message ?: "Unknown error", e)
+            } finally {
+                connection?.disconnect()
+            }
+        }
+    }
+
+    /**
+     * 取消指定 jobId 的上传任务。
+     */
+    @ReactMethod
+    fun cancelUpload(jobId: String) {
+        cancelFlags[jobId]?.set(true)
     }
 
     // -------------------------------------------------------------------------
