@@ -87,7 +87,7 @@ export class HistoryStorage {
   /**
    * 添加历史记录
    */
-  public async addItem(item: ClipboardItem): Promise<void> {
+  public async addItem(item: ClipboardItem): Promise<ClipboardItem> {
     if (!this.initialized) {
       await this.initialize();
     }
@@ -163,6 +163,7 @@ export class HistoryStorage {
     }
 
     await this.saveHistory();
+    return processedItem;
   }
 
   /**

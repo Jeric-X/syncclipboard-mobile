@@ -34,7 +34,16 @@
       "./plugins/build/withQuickSettingsTileManifest.js",
       "./plugins/build/withAndroidNativeCode.js",
       "./plugins/build/withShortcutModule.js",
-      "./plugins/build/withNativeUtilModule.js"
+      "./plugins/build/withNativeUtilModule.js",
+      [
+        "expo-sharing",
+        {
+          "android": {
+            "enabled": true,
+            "singleShareMimeTypes": ["*/*"]
+          }
+        }
+      ]
     ]
   }
 }

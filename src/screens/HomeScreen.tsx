@@ -32,6 +32,7 @@ import { createAPIClient, getSignalRClient, historyStorage } from '@/services';
 import type { RemoteClipboardChangedCallback } from '@/services';
 import { copyToLocalClipboard } from '@/utils/clipboard';
 import { downloadAndAddToHistory } from '@/utils/remoteClipboard';
+import { uploadFileAndAddToHistory } from '@/utils/uploadFile';
 import { useMessageToast } from '@/hooks/useMessageToast';
 
 export function HomeScreen() {
@@ -427,25 +428,9 @@ export function HomeScreen() {
         return;
       }
 
-      showMessage('开始上传文件...', 'info');
-
       const fileName = asset.name || 'file';
-      const fileUri = asset.uri;
 
-      console.log('[HomeScreen] Uploading file with putContent:', { fileName, fileUri });
-
-      // 构建 ClipboardContent
-      const content: ClipboardContent = {
-        type: 'File',
-        text: fileName,
-        fileUri: fileUri,
-        fileName: fileName,
-        fileSize: asset.size,
-        hasData: true,
-      };
-
-      // 使用 putContent 上传文件
-      const apiClient = createAPIClient(activeServer);
+      showMessage('开始上传文件...', 'info');
       setUploadingFile(true);
       const abortController = new AbortController();
       uploadAbortControllerRef.current = abortController;
@@ -457,7 +442,14 @@ export function HomeScreen() {
         });
       });
 
-      await apiClient.putContent(content, { signal: abortController.signal });
+      await uploadFileAndAddToHistory(
+        asset.uri,
+        fileName,
+        asset.mimeType,
+        asset.size,
+        activeServer,
+        { signal: abortController.signal }
+      );
 
       showMessage(`文件 ${fileName} 上传成功`, 'success');
     } catch (error) {

@@ -51,7 +51,7 @@ interface HistoryState {
   searchItems: (filter?: HistoryFilter, sort?: HistorySort) => Promise<void>;
 
   /** 添加历史记录 */
-  addItem: (item: ClipboardItem) => Promise<void>;
+  addItem: (item: ClipboardItem) => Promise<ClipboardItem>;
 
   /** 批量添加历史记录 */
   addItems: (items: ClipboardItem[]) => Promise<void>;
@@ -184,16 +184,19 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ error: null });
 
     try {
-      await historyStorage.addItem(item);
+      const savedItem = await historyStorage.addItem(item);
 
       // 更新最后添加时间戳
       set({ lastAddedTimestamp: Date.now() });
 
       // 刷新当前页
       await get().refresh();
+
+      return savedItem;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to add item';
       set({ error: errorMessage });
+      return item;
     }
   },
 

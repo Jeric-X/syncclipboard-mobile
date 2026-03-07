@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { QuickTileLoadingScreen } from './src/screens/QuickTileLoadingScreen';
+import { ShareReceiveScreen } from './src/screens/ShareReceiveScreen';
 import { SyncDirection } from './src/types/sync';
 
 const QUICK_TILE_UPLOAD_URL = 'syncclipboard://quick-tile-upload';
@@ -24,7 +25,16 @@ function parseQuickTileUrl(url: string | null): {
   return { isQuickTile: false, fromForeground: false, direction: SyncDirection.Download };
 }
 
-type AppMode = 'home' | 'quick_tile_loading';
+function isShareIntentUrl(url: string | null): boolean {
+  if (!url) return false;
+  try {
+    return new URL(url).hostname === 'expo-sharing';
+  } catch {
+    return false;
+  }
+}
+
+type AppMode = 'home' | 'quick_tile_loading' | 'share_receive';
 
 export default function App() {
   const [appMode, setAppMode] = useState<AppMode>('home');
@@ -34,6 +44,10 @@ export default function App() {
   useEffect(() => {
     // Cold start: app launched via URL scheme
     Linking.getInitialURL().then((url) => {
+      if (isShareIntentUrl(url)) {
+        setAppMode('share_receive');
+        return;
+      }
       const { isQuickTile, fromForeground, direction } = parseQuickTileUrl(url);
       if (isQuickTile) {
         setShouldExitAfterSync(!fromForeground);
@@ -44,6 +58,10 @@ export default function App() {
 
     // Hot start: app already running, receives URL deep link event
     const urlSub = Linking.addEventListener('url', ({ url }) => {
+      if (isShareIntentUrl(url)) {
+        setAppMode('share_receive');
+        return;
+      }
       const { isQuickTile, fromForeground, direction } = parseQuickTileUrl(url);
       if (isQuickTile) {
         setShouldExitAfterSync(!fromForeground);
@@ -58,7 +76,14 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.container}>
       <ThemeProvider>
-        {appMode === 'quick_tile_loading' ? (
+        {appMode === 'share_receive' ? (
+          <ShareReceiveScreen
+            onComplete={() => {
+              setAppMode('home');
+              BackHandler.exitApp();
+            }}
+          />
+        ) : appMode === 'quick_tile_loading' ? (
           <QuickTileLoadingScreen
             direction={syncDirection}
             onLoadingComplete={() => {
