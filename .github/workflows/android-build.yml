@@ -61,8 +61,26 @@ jobs:
             fi
           done
 
-      - name: Upload APK artifact
+      - name: Upload arm64-v8a APK
         uses: actions/upload-artifact@v4
         with:
-          name: android-release
-          path: android/app/build/outputs/apk/release/SyncClipboard-*.apk
+          name: apk-arm64-v8a
+          path: android/app/build/outputs/apk/release/SyncClipboard-${{ steps.version.outputs.version }}-arm64-v8a.apk
+
+      - name: Upload armeabi-v7a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-armeabi-v7a
+          path: android/app/build/outputs/apk/release/SyncClipboard-${{ steps.version.outputs.version }}-armeabi-v7a.apk
+
+      - name: Upload x86_64 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-x86_64
+          path: android/app/build/outputs/apk/release/SyncClipboard-${{ steps.version.outputs.version }}-x86_64.apk
+
+      - name: Upload universal APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-universal
+          path: android/app/build/outputs/apk/release/SyncClipboard-${{ steps.version.outputs.version }}-universal.apk

@@ -32,11 +32,12 @@ jobs:
           awk 'NR==1{next} /^$/{exit} {print}' CHANGES.md > feature.txt
           cat feature.txt
 
-      - name: Download APK artifact
+      - name: Download APK artifacts
         uses: actions/download-artifact@v4
         with:
-          name: android-release
+          pattern: apk-*
           path: apk/
+          merge-multiple: true
 
       - name: Publish Release
         uses: ncipollo/release-action@v1
