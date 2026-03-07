@@ -13,7 +13,9 @@ import {
   Switch,
   TextInput,
   Alert,
+  Linking,
 } from 'react-native';
+import { APP_VERSION } from '@/constants';
 import { Paths, Directory } from 'expo-file-system';
 import { calculateDirectorySize, clearDirectory } from '@/utils/fileStorage';
 import { CLIPBOARD_TEMP_DIR } from '@/utils/fileStorage';
@@ -24,7 +26,8 @@ import { useSettingsStore } from '@/stores';
 import { ServerConfigModal, ServerListItem, MessageToast } from '@/components';
 import { ServerConfig } from '@/types/api';
 import { useMessageToast } from '@/hooks/useMessageToast';
-import { ShortcutService } from '@/services';
+import { ShortcutService, checkForUpdate } from '@/services';
+import { Plus, RefreshCw } from 'react-native-feather';
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
@@ -39,6 +42,9 @@ export const SettingsScreen = () => {
     setAutoSync,
     setAutoDownloadMaxSize,
     updateConfig,
+    setAutoCheckUpdate,
+    setLastUpdateCheckDate,
+    setUpdateToBeta,
   } = useSettingsStore();
 
   const [showServerModal, setShowServerModal] = useState(false);
@@ -48,6 +54,19 @@ export const SettingsScreen = () => {
   // 本地状态用于跟踪Switch的当前值，避免闪烁
   const [localAutoSyncEnabled, setLocalAutoSyncEnabled] = useState(config?.autoSync ?? false);
   const [localDebugModeEnabled, setLocalDebugModeEnabled] = useState(config?.debugMode ?? false);
+  const [localAutoCheckUpdateEnabled, setLocalAutoCheckUpdateEnabled] = useState(
+    config?.autoCheckUpdate ?? true
+  );
+  const [localUpdateToBetaEnabled, setLocalUpdateToBetaEnabled] = useState(
+    config?.updateToBeta ?? false
+  );
+
+  // 更新检查状态
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [latestVersion, setLatestVersion] = useState<string | null>(null);
+
+  const appVersion = APP_VERSION;
 
   // 加载配置
   useEffect(() => {
@@ -66,10 +85,28 @@ export const SettingsScreen = () => {
     setLocalDebugModeEnabled(config?.debugMode ?? false);
   }, [config?.debugMode]);
 
+  // 当配置中的autoCheckUpdate值变化时，更新本地状态
+  useEffect(() => {
+    setLocalAutoCheckUpdateEnabled(config?.autoCheckUpdate ?? true);
+  }, [config?.autoCheckUpdate]);
+
+  useEffect(() => {
+    setLocalUpdateToBetaEnabled(config?.updateToBeta ?? false);
+  }, [config?.updateToBeta]);
+
   // 计算存储大小
   useEffect(() => {
     calculateStorageSizes();
   }, []);
+
+  // 自动检查更新（每天一次）
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (!(config?.autoCheckUpdate ?? true)) return;
+    const today = new Date().toISOString().slice(0, 10);
+    if ((config?.lastUpdateCheckDate ?? '') === today) return;
+    runUpdateCheck(false, config?.updateToBeta ?? false);
+  }, [isLoaded]);
 
   const themeOptions: { label: string; value: ThemeMode }[] = [
     { label: '跟随系统', value: 'auto' },
@@ -231,6 +268,66 @@ export const SettingsScreen = () => {
     }
   };
 
+  // 处理切换自动检查更新
+  const handleToggleAutoCheckUpdate = async (enabled: boolean) => {
+    setLocalAutoCheckUpdateEnabled(enabled);
+    try {
+      await setAutoCheckUpdate(enabled);
+    } catch (error: unknown) {
+      setLocalAutoCheckUpdateEnabled(!enabled);
+      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+    }
+  };
+
+  // 处理切换更新到测试版
+  const handleToggleUpdateToBeta = async (enabled: boolean) => {
+    setLocalUpdateToBetaEnabled(enabled);
+    try {
+      await setUpdateToBeta(enabled);
+    } catch (error: unknown) {
+      setLocalUpdateToBetaEnabled(!enabled);
+      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+    }
+  };
+
+  // 执行更新检查逻辑
+  const runUpdateCheck = async (showNoUpdateToast: boolean, includeBeta?: boolean) => {
+    setIsCheckingUpdate(true);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      await setLastUpdateCheckDate(today);
+      const useBeta = includeBeta ?? config?.updateToBeta ?? false;
+      const result = await checkForUpdate(appVersion, useBeta);
+      if (result.hasUpdate) {
+        setUpdateAvailable(true);
+        setLatestVersion(result.latestVersion);
+        Alert.alert(
+          '发现新版本',
+          `最新版本：${result.latestVersion}\n当前版本：${appVersion}\n\n是否前往下载？`,
+          [
+            { text: '稍后再说', style: 'cancel' },
+            {
+              text: '立即更新',
+              onPress: () => Linking.openURL(result.releaseUrl),
+            },
+          ]
+        );
+      } else {
+        setUpdateAvailable(false);
+        setLatestVersion(null);
+        if (showNoUpdateToast) {
+          showMessage('当前已是最新版本', 'success');
+        }
+      }
+    } catch {
+      if (showNoUpdateToast) {
+        showMessage('检查更新失败，请检查网络连接', 'error');
+      }
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
   // 计算存储大小
   const calculateStorageSizes = async () => {
     setIsCalculating(true);
@@ -312,11 +409,8 @@ export const SettingsScreen = () => {
         <View style={styles.section}>
           <View style={[styles.sectionHeaderBase, styles.sectionHeaderRow]}>
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>服务器配置</Text>
-            <TouchableOpacity
-              style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
-              onPress={handleAddServer}
-            >
-              <Text style={[styles.addButtonText, { color: theme.colors.white }]}>＋ 添加</Text>
+            <TouchableOpacity style={styles.iconButton} onPress={handleAddServer}>
+              <Plus color={theme.colors.primary} width={20} height={20} />
             </TouchableOpacity>
           </View>
 
@@ -439,13 +533,11 @@ export const SettingsScreen = () => {
           <View style={[styles.sectionHeaderBase, styles.sectionHeaderRow]}>
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>存储</Text>
             <TouchableOpacity
-              style={[styles.refreshButton, { backgroundColor: theme.colors.primary }]}
+              style={styles.iconButton}
               onPress={calculateStorageSizes}
               disabled={isCalculating}
             >
-              <Text style={[styles.refreshButtonText, { color: theme.colors.white }]}>
-                {isCalculating ? '计算中...' : '重新计算'}
-              </Text>
+              <RefreshCw color={theme.colors.primary} width={16} height={16} />
             </TouchableOpacity>
           </View>
 
@@ -546,27 +638,79 @@ export const SettingsScreen = () => {
           </View>
 
           <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
-            <View style={[styles.infoRow, { borderBottomColor: theme.colors.divider }]}>
-              <Text style={[styles.infoLabel, { color: theme.colors.textSecondary }]}>版本</Text>
-              <Text style={[styles.infoValue, { color: theme.colors.text }]}>1.0.0 (Beta)</Text>
+            <View style={[styles.versionBlock, { borderBottomColor: theme.colors.divider }]}>
+              <View style={styles.versionTopRow}>
+                <View style={styles.versionLabelGroup}>
+                  <Text style={[styles.infoLabel, { color: theme.colors.textSecondary }]}>
+                    版本
+                  </Text>
+                  <Text style={[styles.infoValue, { color: theme.colors.text }]}>{appVersion}</Text>
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.updateButton,
+                    {
+                      backgroundColor: updateAvailable
+                        ? theme.colors.primary
+                        : theme.colors.surface,
+                      borderColor: theme.colors.primary,
+                    },
+                  ]}
+                  onPress={() =>
+                    updateAvailable
+                      ? Linking.openURL('https://github.com/Jeric-X/SyncClipboard/releases')
+                      : runUpdateCheck(true, localUpdateToBetaEnabled)
+                  }
+                  disabled={isCheckingUpdate}
+                >
+                  <Text
+                    style={[
+                      styles.updateButtonText,
+                      {
+                        color: updateAvailable ? theme.colors.white : theme.colors.primary,
+                      },
+                    ]}
+                  >
+                    {isCheckingUpdate
+                      ? '检查中...'
+                      : updateAvailable
+                        ? `更新 ${latestVersion}`
+                        : '检查更新'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
-            <View style={[styles.infoRow, { borderBottomColor: theme.colors.divider }]}>
-              <Text style={[styles.infoLabel, { color: theme.colors.textSecondary }]}>
-                当前主题
-              </Text>
-              <Text style={[styles.infoValue, { color: theme.colors.text }]}>
-                {theme.isDark ? '深色' : '浅色'}
-              </Text>
+            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                  自动检查更新
+                </Text>
+              </View>
+              <Switch
+                value={localAutoCheckUpdateEnabled}
+                onValueChange={handleToggleAutoCheckUpdate}
+                trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
+                thumbColor={
+                  localAutoCheckUpdateEnabled ? theme.colors.surface : theme.colors.textTertiary
+                }
+              />
             </View>
 
-            <View style={[styles.infoRow, { borderBottomColor: theme.colors.divider }]}>
-              <Text style={[styles.infoLabel, { color: theme.colors.textSecondary }]}>
-                服务器数量
-              </Text>
-              <Text style={[styles.infoValue, { color: theme.colors.text }]}>
-                {servers.length} 个
-              </Text>
+            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                  更新到测试版
+                </Text>
+              </View>
+              <Switch
+                value={localUpdateToBetaEnabled}
+                onValueChange={handleToggleUpdateToBeta}
+                trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
+                thumbColor={
+                  localUpdateToBetaEnabled ? theme.colors.surface : theme.colors.textTertiary
+                }
+              />
             </View>
 
             <View style={[styles.settingRow, styles.settingRowNoBorder]}>
@@ -627,6 +771,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  iconButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   addButton: {
     paddingHorizontal: 16,
@@ -753,6 +904,31 @@ const styles = StyleSheet.create({
   },
   settingRowNoBorder: {
     borderBottomWidth: 0,
+  },
+  versionBlock: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  versionTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  versionLabelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  updateButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  updateButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   clearButton: {
     paddingHorizontal: 16,

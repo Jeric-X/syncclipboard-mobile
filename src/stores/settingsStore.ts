@@ -94,6 +94,15 @@ interface SettingsState {
   /** 设置自动下载最大文件大小（字节） */
   setAutoDownloadMaxSize: (sizeInBytes: number) => Promise<void>;
 
+  /** 设置自动检查更新 */
+  setAutoCheckUpdate: (enabled: boolean) => Promise<void>;
+
+  /** 设置上次检查更新日期 */
+  setLastUpdateCheckDate: (date: string) => Promise<void>;
+
+  /** 设置是否更新到测试版 */
+  setUpdateToBeta: (enabled: boolean) => Promise<void>;
+
   // 导入/导出
   /** 导出配置 */
   exportConfig: () => Promise<string>;
@@ -273,6 +282,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setAutoDownloadMaxSize: async (sizeInBytes: number) => {
     await get().updateConfig({ autoDownloadMaxSize: sizeInBytes });
+  },
+
+  setAutoCheckUpdate: async (enabled: boolean) => {
+    await get().updateConfig({ autoCheckUpdate: enabled });
+  },
+
+  setLastUpdateCheckDate: async (date: string) => {
+    await get().updateConfig({ lastUpdateCheckDate: date });
+  },
+
+  setUpdateToBeta: async (enabled: boolean) => {
+    await get().updateConfig({ updateToBeta: enabled });
   },
 
   exportConfig: async () => {

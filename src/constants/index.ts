@@ -2,8 +2,10 @@
  * App Constants
  */
 
+import * as Application from 'expo-application';
+
 export const APP_NAME = 'SyncClipboard';
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = Application.nativeApplicationVersion ?? '1.0.0';
 
 // API Endpoints
 export const API_ENDPOINTS = {

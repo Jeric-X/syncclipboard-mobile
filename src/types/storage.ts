@@ -63,6 +63,15 @@ export interface AppConfig {
 
   /** 历史记录最大保留条数，默认 1000 */
   maxHistoryItems: number;
+
+  /** 是否自动检查更新（每天一次） */
+  autoCheckUpdate: boolean;
+
+  /** 上次检查更新的日期字符串（YYYY-MM-DD） */
+  lastUpdateCheckDate: string;
+
+  /** 是否更新到测试版（beta） */
+  updateToBeta: boolean;
 }
 
 /**
@@ -210,6 +219,9 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   autoDownloadMaxSize: 5 * 1024 * 1024, // 5MB
   debugMode: false,
   maxHistoryItems: 1000, // 默认 1000 条
+  autoCheckUpdate: true,
+  lastUpdateCheckDate: '',
+  updateToBeta: false,
 };
 
 /**

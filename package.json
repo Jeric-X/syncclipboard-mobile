@@ -26,6 +26,7 @@
     "@shopify/flash-list": "2.0.2",
     "axios": "^1.13.5",
     "expo": "~54.0.33",
+    "expo-application": "~7.0.8",
     "expo-clipboard": "^8.0.8",
     "expo-crypto": "^15.0.8",
     "expo-document-picker": "~14.0.8",

@@ -25,14 +25,18 @@ export type { RemoteClipboardChangedCallback, RemoteHistoryChangedCallback } fro
 // Sync Manager
 export { SyncManager } from './SyncManager';
 
+// Shortcut Service
+export { ShortcutService } from './ShortcutService';
+
+// Update Service
+export { checkForUpdate, parseVersion, compareVersions, versionToStr } from './UpdateService';
+export type { UpdateCheckResult, ParsedVersion } from './UpdateService';
+
 // Storage Services
 export { ConfigStorage, configStorage } from './ConfigStorage';
 export { HistoryStorage, historyStorage } from './HistoryStorage';
 export { CacheManager, cacheManager } from './CacheManager';
 export { SecureStorage, secureStorage } from './SecureStorage';
-
-// Shortcut Service
-export { ShortcutService } from './ShortcutService';
 
 // Factory function to create appropriate API client
 import { SyncClipboardAPI } from './SyncClipboardAPI';

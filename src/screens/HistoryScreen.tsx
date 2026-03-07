@@ -312,7 +312,10 @@ export function HistoryScreen() {
         // Image: 分享、复制、删除
         // File/Group: 分享、删除
 
-        if ((item.type === 'Image' || item.type === 'File' || item.type === 'Group') && item.fileUri) {
+        if (
+          (item.type === 'Image' || item.type === 'File' || item.type === 'Group') &&
+          item.fileUri
+        ) {
           options.push('打开');
           actions.push(() => handleOpen(item));
         }
