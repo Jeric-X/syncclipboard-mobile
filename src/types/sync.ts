@@ -131,8 +131,8 @@ export interface SyncResult {
   /** 错误信息 */
   error?: string;
 
-  /** 同步的内容 hash */
-  contentHash?: string;
+  /** 同步的 profile hash */
+  profileHash?: string;
 
   /** 是否跳过（内容未变化） */
   skipped?: boolean;

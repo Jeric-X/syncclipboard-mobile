@@ -32,7 +32,7 @@ import { ClipboardContent } from '../types/clipboard';
 const STORAGE_KEY_CONFIG = '@syncclipboard:sync:config';
 const STORAGE_KEY_STATS = '@syncclipboard:sync:stats';
 const STORAGE_KEY_QUEUE = '@syncclipboard:sync:queue';
-const STORAGE_KEY_LAST_HASH = '@syncclipboard:sync:last_hash';
+const STORAGE_KEY_LAST_PROFILE_HASH = '@syncclipboard:sync:last_hash';
 
 /**
  * 默认同步配置
@@ -74,8 +74,8 @@ export class SyncManager {
 
   private syncTimer: NodeJS.Timeout | null = null;
   private isSyncing = false;
-  private lastLocalHash: string | null = null;
-  private lastRemoteHash: string | null = null;
+  private lastLocalProfileHash: string | null = null;
+  private lastRemoteProfileHash: string | null = null;
   private offlineQueue: OfflineQueueItem[] = [];
 
   private constructor() {
@@ -273,20 +273,20 @@ export class SyncManager {
         };
       }
 
-      // 计算当前 hash
-      const currentHash = localContent.hash;
+      // 计算当前 profileHash
+      const currentProfileHash = localContent.profileHash;
 
       // 如果内容未变化，跳过上传（仅在自动同步时）
       if (
         isAuto &&
-        this.lastLocalHash &&
-        currentHash &&
-        compareHash(currentHash, this.lastLocalHash)
+        this.lastLocalProfileHash &&
+        currentProfileHash &&
+        compareHash(currentProfileHash, this.lastLocalProfileHash)
       ) {
         return {
           success: true,
           direction: SyncDirection.Upload,
-          contentHash: currentHash,
+          profileHash: currentProfileHash,
           skipped: true,
         };
       }
@@ -363,7 +363,7 @@ export class SyncManager {
           try {
             // 创建临时文件目录
             const baseDir = new FileSystem.Directory(FileSystem.Paths.cache, 'temp-uploads');
-            const tempFile = new FileSystem.File(baseDir, `${profile.hash}.tmp`);
+            const tempFile = new FileSystem.File(baseDir, `${profile.profileHash}.tmp`);
 
             // 确保目录存在
             if (!baseDir.exists) {
@@ -407,8 +407,8 @@ export class SyncManager {
         hasData: profile.hasData,
       };
 
-      if (profile.hash) {
-        cleanProfile.hash = profile.hash;
+      if (profile.profileHash) {
+        cleanProfile.profileHash = profile.profileHash;
       }
 
       if (profile.hasData && profile.dataName) {
@@ -426,16 +426,16 @@ export class SyncManager {
 
       console.log('[SyncManager] Profile uploaded successfully');
 
-      // 更新最后上传的 hash
-      this.lastLocalHash = currentHash || null;
-      if (currentHash) {
-        await AsyncStorage.setItem(STORAGE_KEY_LAST_HASH, currentHash);
+      // 更新最后上传的 profileHash
+      this.lastLocalProfileHash = currentProfileHash || null;
+      if (currentProfileHash) {
+        await AsyncStorage.setItem(STORAGE_KEY_LAST_PROFILE_HASH, currentProfileHash);
       }
 
       return {
         success: true,
         direction: SyncDirection.Upload,
-        contentHash: currentHash,
+        profileHash: currentProfileHash,
       };
     } catch (error) {
       console.error('[SyncManager] Upload failed with error:', error);
@@ -525,7 +525,7 @@ export class SyncManager {
       // 获取远程剪贴板配置
       const profile = await this.apiClient.getClipboard();
 
-      if (!profile || !profile.hash) {
+      if (!profile || !profile.profileHash) {
         return {
           success: true,
           direction: SyncDirection.Download,
@@ -533,14 +533,18 @@ export class SyncManager {
         };
       }
 
-      const remoteHash = profile.hash;
+      const remoteProfileHash = profile.profileHash;
 
       // 如果远程内容未变化，跳过下载（仅在自动同步时）
-      if (isAuto && this.lastRemoteHash && compareHash(remoteHash, this.lastRemoteHash)) {
+      if (
+        isAuto &&
+        this.lastRemoteProfileHash &&
+        compareHash(remoteProfileHash, this.lastRemoteProfileHash)
+      ) {
         return {
           success: true,
           direction: SyncDirection.Download,
-          contentHash: remoteHash,
+          profileHash: remoteProfileHash,
           skipped: true,
         };
       }
@@ -549,11 +553,11 @@ export class SyncManager {
       const localContent = await this.clipboardManager.getClipboardContent();
 
       // 检测冲突
-      if (localContent && localContent.hash) {
+      if (localContent && localContent.profileHash) {
         if (
-          !compareHash(localContent.hash, remoteHash) &&
-          this.lastLocalHash &&
-          !compareHash(localContent.hash, this.lastLocalHash)
+          !compareHash(localContent.profileHash, remoteProfileHash) &&
+          this.lastLocalProfileHash &&
+          !compareHash(localContent.profileHash, this.lastLocalProfileHash)
         ) {
           // 本地和远程都有修改，存在冲突
           const resolution = await this.resolveConflict(localContent, profile);
@@ -566,7 +570,7 @@ export class SyncManager {
             return {
               success: true,
               direction: SyncDirection.Download,
-              contentHash: remoteHash,
+              profileHash: remoteProfileHash,
               hasConflict: true,
               skipped: true,
             };
@@ -593,13 +597,13 @@ export class SyncManager {
       // 设置到本地剪贴板
       await this.clipboardManager.setClipboardContent(content);
 
-      // 更新最后下载的 hash
-      this.lastRemoteHash = remoteHash;
+      // 更新最后下载的 profileHash
+      this.lastRemoteProfileHash = remoteProfileHash;
 
       return {
         success: true,
         direction: SyncDirection.Download,
-        contentHash: remoteHash,
+        profileHash: remoteProfileHash,
       };
     } catch (error) {
       throw error;
@@ -862,8 +866,8 @@ export class SyncManager {
         this.offlineQueue = JSON.parse(queueJson);
       }
 
-      // 加载最后的 hash 值
-      this.lastLocalHash = await AsyncStorage.getItem(STORAGE_KEY_LAST_HASH);
+      // 加载最后的 profileHash 值
+      this.lastLocalProfileHash = await AsyncStorage.getItem(STORAGE_KEY_LAST_PROFILE_HASH);
     } catch (error) {
       console.error('Failed to load persisted data:', error);
     }
@@ -877,7 +881,7 @@ export class SyncManager {
       await AsyncStorage.multiSet([
         [STORAGE_KEY_STATS, JSON.stringify(this.stats)],
         [STORAGE_KEY_QUEUE, JSON.stringify(this.offlineQueue)],
-        [STORAGE_KEY_LAST_HASH, this.lastLocalHash || ''],
+        [STORAGE_KEY_LAST_PROFILE_HASH, this.lastLocalProfileHash || ''],
       ]);
     } catch (error) {
       console.error('Failed to save persisted data:', error);

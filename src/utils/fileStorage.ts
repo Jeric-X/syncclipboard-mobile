@@ -46,14 +46,14 @@ export async function initFileStorage(): Promise<void> {
 /**
  * 保存文件到本地存储
  * @param type 文件类型（Image 或 File）
- * @param hash 文件hash值
+ * @param fileHash 文件 hash 值
  * @param data 文件数据（ArrayBuffer）
  * @param extension 文件扩展名（可选，如 .jpg, .png, .pdf）
  * @returns 文件URI
  */
 export async function saveFile(
   type: 'Image' | 'File',
-  hash: string,
+  fileHash: string,
   data: ArrayBuffer,
   extension?: string
 ): Promise<string> {
@@ -65,7 +65,7 @@ export async function saveFile(
     const dir = type === 'Image' ? IMAGE_DIR : FILE_DIR;
 
     // 生成文件名：使用hash值，保留扩展名
-    const fileName = extension ? `${hash}${extension}` : hash;
+    const fileName = extension ? `${fileHash}${extension}` : fileHash;
 
     // 使用新的 File API
     const file = new File(dir, fileName);
@@ -93,18 +93,18 @@ export async function saveFile(
 /**
  * 根据 type 和 hash 获取文件URI
  * @param type 文件类型
- * @param hash 文件hash值
+ * @param fileHash 文件 hash 值
  * @param extension 文件扩展名（可选）
  * @returns 文件URI，如果文件不存在返回 null
  */
 export async function getFileUri(
   type: 'Image' | 'File',
-  hash: string,
+  fileHash: string,
   extension?: string
 ): Promise<string | null> {
   try {
     const dir = type === 'Image' ? IMAGE_DIR : FILE_DIR;
-    const fileName = extension ? `${hash}${extension}` : hash;
+    const fileName = extension ? `${fileHash}${extension}` : fileHash;
 
     // 使用新的 File API 检查文件是否存在
     const file = new File(dir, fileName);
@@ -119,17 +119,17 @@ export async function getFileUri(
 /**
  * 删除文件
  * @param type 文件类型
- * @param hash 文件hash值
+ * @param fileHash 文件 hash 值
  * @param extension 文件扩展名（可选）
  */
 export async function deleteFile(
   type: 'Image' | 'File',
-  hash: string,
+  fileHash: string,
   extension?: string
 ): Promise<void> {
   try {
     const dir = type === 'Image' ? IMAGE_DIR : FILE_DIR;
-    const fileName = extension ? `${hash}${extension}` : hash;
+    const fileName = extension ? `${fileHash}${extension}` : fileHash;
 
     // 使用新的 File API
     const file = new File(dir, fileName);
@@ -235,7 +235,7 @@ export async function getStorageStats(): Promise<{
 /**
  * 直接下载文件并保存到本地（优化内存占用）
  * @param type 文件类型（Image 或 File）
- * @param hash 文件hash值
+ * @param fileHash 文件 hash 值
  * @param downloadUrl 下载URL
  * @param headers 请求头（用于认证等）
  * @param extension 文件扩展名（可选，如 .jpg, .png, .pdf）
@@ -243,7 +243,7 @@ export async function getStorageStats(): Promise<{
  */
 export async function downloadAndSaveFile(
   type: 'Image' | 'File',
-  hash: string,
+  fileHash: string,
   downloadUrl: string,
   headers?: Record<string, string>,
   extension?: string
@@ -255,8 +255,8 @@ export async function downloadAndSaveFile(
     // 确定保存目录
     const dir = type === 'Image' ? IMAGE_DIR : FILE_DIR;
 
-    // 生成文件名：使用hash值，保留扩展名
-    const fileName = extension ? `${hash}${extension}` : hash;
+    // 生成文件名：使用 fileHash 值，保留扩展名
+    const fileName = extension ? `${fileHash}${extension}` : fileHash;
 
     // 使用新的 File API 检查文件是否已存在
     const file = new File(dir, fileName);

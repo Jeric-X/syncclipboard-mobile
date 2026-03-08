@@ -10,17 +10,17 @@ import { calculateTextHash } from '@/utils/hash';
  * 将 ClipboardContent 转换为 ProfileDto
  */
 export async function contentToProfileDto(content: ClipboardContent): Promise<ProfileDto> {
-  const { type, text = '', hash, fileName, fileSize } = content;
+  const { type, text = '', profileHash, fileName, fileSize } = content;
 
-  // 计算 hash（如果没有提供）
-  const calculatedHash = hash || (text ? await calculateTextHash(text) : undefined);
+  // 计算 profileHash（如果没有提供）
+  const calculatedProfileHash = profileHash || (text ? await calculateTextHash(text) : undefined);
 
   switch (type) {
     case 'Text':
       return {
         type: 'Text',
         text,
-        hash: calculatedHash,
+        profileHash: calculatedProfileHash,
         hasData: false,
       };
 
@@ -28,7 +28,7 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
       return {
         type: 'Image',
         text: text || '[图片]',
-        hash: calculatedHash,
+        profileHash: calculatedProfileHash,
         hasData: true,
         dataName: fileName,
         size: fileSize,
@@ -38,7 +38,7 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
       return {
         type: 'File',
         text: text || fileName || '[文件]',
-        hash: calculatedHash,
+        profileHash: calculatedProfileHash,
         hasData: true,
         dataName: fileName,
         size: fileSize,
@@ -48,7 +48,7 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
       return {
         type: 'Group',
         text: text || '[文件组]',
-        hash: calculatedHash,
+        profileHash: calculatedProfileHash,
         hasData: true,
         dataName: fileName,
         size: fileSize,
@@ -63,12 +63,12 @@ export async function contentToProfileDto(content: ClipboardContent): Promise<Pr
  * 将 ProfileDto 转换为 ClipboardContent
  */
 export function profileDtoToContent(profile: ProfileDto): ClipboardContent {
-  const { type, text, hash, hasData, dataName, size } = profile;
+  const { type, text, profileHash, hasData, dataName, size } = profile;
 
   const baseContent: ClipboardContent = {
     type: type as ClipboardContentType,
     text,
-    hash,
+    profileHash,
     timestamp: Date.now(), // 添加当前时间戳
   };
 

@@ -27,20 +27,23 @@ type FilterType = 'all' | 'Text' | 'Image' | 'File';
 
 export function HistoryScreen() {
   const { theme } = useTheme();
-  const { items, loadItems, searchItems, deleteItem, clearHistory, currentPage } =
-    useHistoryStore();
+  const {
+    items,
+    totalCount,
+    isLoading,
+    loadItems,
+    searchItems,
+    deleteItem,
+    clearHistory,
+    currentPage,
+  } = useHistoryStore();
 
   const [searchText, setSearchText] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [selectedItem, setSelectedItem] = useState<ClipboardItem | null>(null);
   const [showActionSheet, setShowActionSheet] = useState(false);
 
-  // 初始加载
-  useEffect(() => {
-    loadItems();
-  }, [loadItems]);
-
-  // 搜索防抖
+  // 搜索防抖（含初始加载）
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchText) {
@@ -68,7 +71,7 @@ export function HistoryScreen() {
         await clipboardManager.setClipboardContent({
           type: 'Text',
           text: item.text,
-          hash: item.hash,
+          profileHash: item.profileHash,
         });
         Alert.alert('成功', '已复制到剪贴板');
       } else {
@@ -111,7 +114,7 @@ export function HistoryScreen() {
         await clipboardManager.setClipboardContent({
           type: 'Text',
           text: item.text,
-          hash: item.hash,
+          profileHash: item.profileHash,
         });
         Alert.alert('成功', '已复制到剪贴板');
       }
@@ -164,6 +167,13 @@ export function HistoryScreen() {
       },
     ]);
   }, [clearHistory]);
+
+  // 加载更多（防止重复加载和越界）
+  const handleEndReached = useCallback(() => {
+    if (isLoading) return;
+    if (items.length >= totalCount) return;
+    loadItems(currentPage + 1);
+  }, [isLoading, items.length, totalCount, currentPage, loadItems]);
 
   // 切换筛选类型
   const handleFilterChange = useCallback((type: FilterType) => {
@@ -253,7 +263,8 @@ export function HistoryScreen() {
         data={filteredItems}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
-        onEndReached={() => loadItems(currentPage + 1)}
+        estimatedItemSize={72}
+        onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         ListEmptyComponent={renderEmptyComponent}
         contentContainerStyle={styles.listContent}

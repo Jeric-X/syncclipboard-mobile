@@ -132,7 +132,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     clipboardMonitor.addCallback(async (content) => {
       console.log('[ClipboardStore] Clipboard content updated:', {
         type: content.type,
-        contentHash: content.contentHash?.substring(0, 8),
+        localClipboardHash: content.localClipboardHash?.substring(0, 8),
         imageUri: content.imageUri,
         timestamp: content.timestamp,
       });

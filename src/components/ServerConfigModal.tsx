@@ -18,6 +18,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { ServerConfig } from '@/types/api';
 import { createAPIClient } from '@/services';
@@ -166,210 +167,97 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: theme.colors.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        {/* Header */}
-        <View style={[styles.header, { borderBottomColor: theme.colors.divider }]}>
-          <TouchableOpacity onPress={onClose} style={styles.headerButton}>
-            <Text style={[styles.headerButtonText, { color: theme.colors.primary }]}>取消</Text>
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-            {isEditing ? '编辑服务器' : '添加服务器'}
-          </Text>
-          <TouchableOpacity onPress={handleSave} style={styles.headerButton}>
-            <Text
-              style={[
-                styles.headerButtonText,
-                styles.headerButtonBold,
-                { color: theme.colors.primary },
-              ]}
-            >
-              保存
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          {/* Header */}
+          <View style={[styles.header, { borderBottomColor: theme.colors.divider }]}>
+            <TouchableOpacity onPress={onClose} style={styles.headerButton}>
+              <Text style={[styles.headerButtonText, { color: theme.colors.primary }]}>取消</Text>
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
+              {isEditing ? '编辑服务器' : '添加服务器'}
             </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Form */}
-        <ScrollView style={styles.scrollView}>
-          {/* 服务器类型 */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
-              服务器类型
-            </Text>
-            <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
-              <TouchableOpacity
+            <TouchableOpacity onPress={handleSave} style={styles.headerButton}>
+              <Text
                 style={[
-                  styles.typeOption,
-                  { borderBottomColor: theme.colors.divider },
-                  type === 'syncclipboard' && {
-                    backgroundColor: theme.colors.primary + '10',
-                  },
+                  styles.headerButtonText,
+                  styles.headerButtonBold,
+                  { color: theme.colors.primary },
                 ]}
-                onPress={() => setType('syncclipboard')}
               >
-                <View style={styles.typeContent}>
-                  <Text style={[styles.typeLabel, { color: theme.colors.text }]}>
-                    SyncClipboard 服务器
-                  </Text>
-                  <Text style={[styles.typeDescription, { color: theme.colors.textSecondary }]}>
-                    官方独立服务器或客户端内置服务器
-                  </Text>
-                </View>
-                {type === 'syncclipboard' && (
-                  <View style={[styles.checkmark, { backgroundColor: theme.colors.primary }]}>
-                    <Text style={[styles.checkmarkIcon, { color: theme.colors.white }]}>✓</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.typeOption,
-                  type === 'webdav' && { backgroundColor: theme.colors.primary + '10' },
-                ]}
-                onPress={() => setType('webdav')}
-              >
-                <View style={styles.typeContent}>
-                  <Text style={[styles.typeLabel, { color: theme.colors.text }]}>
-                    WebDAV 服务器
-                  </Text>
-                  <Text style={[styles.typeDescription, { color: theme.colors.textSecondary }]}>
-                    支持 WebDAV 协议的云存储服务
-                  </Text>
-                </View>
-                {type === 'webdav' && (
-                  <View style={[styles.checkmark, { backgroundColor: theme.colors.primary }]}>
-                    <Text style={[styles.checkmarkIcon, { color: theme.colors.white }]}>✓</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
+                保存
+              </Text>
+            </TouchableOpacity>
           </View>
 
-          {/* 服务器信息 */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
-              连接信息
-            </Text>
-            <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>服务器地址</Text>
-                <TextInput
+          {/* Form */}
+          <ScrollView style={styles.scrollView}>
+            {/* 服务器类型 */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
+                服务器类型
+              </Text>
+              <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+                <TouchableOpacity
                   style={[
-                    styles.input,
-                    {
-                      color: theme.colors.text,
-                      backgroundColor: theme.colors.background,
-                      borderColor: theme.colors.divider,
+                    styles.typeOption,
+                    { borderBottomColor: theme.colors.divider },
+                    type === 'syncclipboard' && {
+                      backgroundColor: theme.colors.primary + '10',
                     },
                   ]}
-                  placeholder=""
-                  placeholderTextColor={theme.colors.textTertiary}
-                  value={url}
-                  onChangeText={setUrl}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="url"
-                />
-              </View>
+                  onPress={() => setType('syncclipboard')}
+                >
+                  <View style={styles.typeContent}>
+                    <Text style={[styles.typeLabel, { color: theme.colors.text }]}>
+                      SyncClipboard 服务器
+                    </Text>
+                    <Text style={[styles.typeDescription, { color: theme.colors.textSecondary }]}>
+                      官方独立服务器或客户端内置服务器
+                    </Text>
+                  </View>
+                  {type === 'syncclipboard' && (
+                    <View style={[styles.checkmark, { backgroundColor: theme.colors.primary }]}>
+                      <Text style={[styles.checkmarkIcon, { color: theme.colors.white }]}>✓</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
 
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>用户名</Text>
-                <TextInput
+                <TouchableOpacity
                   style={[
-                    styles.input,
-                    {
-                      color: theme.colors.text,
-                      backgroundColor: theme.colors.background,
-                      borderColor: theme.colors.divider,
-                    },
+                    styles.typeOption,
+                    type === 'webdav' && { backgroundColor: theme.colors.primary + '10' },
                   ]}
-                  placeholder=""
-                  placeholderTextColor={theme.colors.textTertiary}
-                  value={username}
-                  onChangeText={setUsername}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
+                  onPress={() => setType('webdav')}
+                >
+                  <View style={styles.typeContent}>
+                    <Text style={[styles.typeLabel, { color: theme.colors.text }]}>
+                      WebDAV 服务器
+                    </Text>
+                    <Text style={[styles.typeDescription, { color: theme.colors.textSecondary }]}>
+                      支持 WebDAV 协议的云存储服务
+                    </Text>
+                  </View>
+                  {type === 'webdav' && (
+                    <View style={[styles.checkmark, { backgroundColor: theme.colors.primary }]}>
+                      <Text style={[styles.checkmarkIcon, { color: theme.colors.white }]}>✓</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
               </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>密码</Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      color: theme.colors.text,
-                      backgroundColor: theme.colors.background,
-                      borderColor: theme.colors.divider,
-                    },
-                  ]}
-                  placeholder=""
-                  placeholderTextColor={theme.colors.textTertiary}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-
-              {/* 测试连接按钮 */}
-              <TouchableOpacity
-                style={[
-                  styles.testButton,
-                  {
-                    backgroundColor: theme.colors.primary + '20',
-                    borderColor: theme.colors.primary,
-                  },
-                ]}
-                onPress={handleTestConnection}
-                disabled={isTesting}
-              >
-                {isTesting ? (
-                  <ActivityIndicator size="small" color={theme.colors.primary} />
-                ) : (
-                  <Text style={[styles.testButtonText, { color: theme.colors.primary }]}>
-                    测试连接
-                  </Text>
-                )}
-              </TouchableOpacity>
             </View>
-          </View>
 
-          {/* 同步设置 */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
-              同步设置
-            </Text>
-            <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
-              <View style={[styles.switchRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.switchLabel}>
-                  <Text style={[styles.switchLabelText, { color: theme.colors.text }]}>
-                    自动同步
-                  </Text>
-                  <Text style={[styles.switchDescription, { color: theme.colors.textSecondary }]}>
-                    在后台自动同步剪贴板内容
-                  </Text>
-                </View>
-                <Switch
-                  value={autoSync}
-                  onValueChange={setAutoSync}
-                  trackColor={{
-                    false: theme.colors.divider,
-                    true: theme.colors.primary,
-                  }}
-                  thumbColor={theme.colors.surface}
-                />
-              </View>
-
-              {autoSync && (
+            {/* 服务器信息 */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
+                连接信息
+              </Text>
+              <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
                 <View style={styles.inputGroup}>
-                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-                    同步间隔（秒）
-                  </Text>
+                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>服务器地址</Text>
                   <TextInput
                     style={[
                       styles.input,
@@ -379,49 +267,167 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                         borderColor: theme.colors.divider,
                       },
                     ]}
-                    placeholder="60"
+                    placeholder=""
                     placeholderTextColor={theme.colors.textTertiary}
-                    value={syncInterval}
-                    onChangeText={setSyncInterval}
-                    keyboardType="number-pad"
+                    value={url}
+                    onChangeText={setUrl}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="url"
                   />
-                  <Text style={[styles.inputHint, { color: theme.colors.textTertiary }]}>
-                    最小 10 秒，建议 60 秒
-                  </Text>
                 </View>
-              )}
 
-              <View style={styles.switchRow}>
-                <View style={styles.switchLabel}>
-                  <Text style={[styles.switchLabelText, { color: theme.colors.text }]}>
-                    同步通知
-                  </Text>
-                  <Text style={[styles.switchDescription, { color: theme.colors.textSecondary }]}>
-                    同步完成后显示通知
-                  </Text>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>用户名</Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        color: theme.colors.text,
+                        backgroundColor: theme.colors.background,
+                        borderColor: theme.colors.divider,
+                      },
+                    ]}
+                    placeholder=""
+                    placeholderTextColor={theme.colors.textTertiary}
+                    value={username}
+                    onChangeText={setUsername}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
                 </View>
-                <Switch
-                  value={notificationEnabled}
-                  onValueChange={setNotificationEnabled}
-                  trackColor={{
-                    false: theme.colors.divider,
-                    true: theme.colors.primary,
-                  }}
-                  thumbColor={theme.colors.surface}
-                />
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>密码</Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        color: theme.colors.text,
+                        backgroundColor: theme.colors.background,
+                        borderColor: theme.colors.divider,
+                      },
+                    ]}
+                    placeholder=""
+                    placeholderTextColor={theme.colors.textTertiary}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+
+                {/* 测试连接按钮 */}
+                <TouchableOpacity
+                  style={[
+                    styles.testButton,
+                    {
+                      backgroundColor: theme.colors.primary + '20',
+                      borderColor: theme.colors.primary,
+                    },
+                  ]}
+                  onPress={handleTestConnection}
+                  disabled={isTesting}
+                >
+                  {isTesting ? (
+                    <ActivityIndicator size="small" color={theme.colors.primary} />
+                  ) : (
+                    <Text style={[styles.testButtonText, { color: theme.colors.primary }]}>
+                      测试连接
+                    </Text>
+                  )}
+                </TouchableOpacity>
               </View>
             </View>
-          </View>
 
-          <View style={styles.bottomPadding} />
-        </ScrollView>
-      </KeyboardAvoidingView>
+            {/* 同步设置 */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
+                同步设置
+              </Text>
+              <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+                <View style={[styles.switchRow, { borderBottomColor: theme.colors.divider }]}>
+                  <View style={styles.switchLabel}>
+                    <Text style={[styles.switchLabelText, { color: theme.colors.text }]}>
+                      自动同步
+                    </Text>
+                    <Text style={[styles.switchDescription, { color: theme.colors.textSecondary }]}>
+                      在后台自动同步剪贴板内容
+                    </Text>
+                  </View>
+                  <Switch
+                    value={autoSync}
+                    onValueChange={setAutoSync}
+                    trackColor={{
+                      false: theme.colors.divider,
+                      true: theme.colors.primary,
+                    }}
+                    thumbColor={theme.colors.surface}
+                  />
+                </View>
+
+                {autoSync && (
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                      同步间隔（秒）
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        {
+                          color: theme.colors.text,
+                          backgroundColor: theme.colors.background,
+                          borderColor: theme.colors.divider,
+                        },
+                      ]}
+                      placeholder="60"
+                      placeholderTextColor={theme.colors.textTertiary}
+                      value={syncInterval}
+                      onChangeText={setSyncInterval}
+                      keyboardType="number-pad"
+                    />
+                    <Text style={[styles.inputHint, { color: theme.colors.textTertiary }]}>
+                      最小 10 秒，建议 60 秒
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.switchRow}>
+                  <View style={styles.switchLabel}>
+                    <Text style={[styles.switchLabelText, { color: theme.colors.text }]}>
+                      同步通知
+                    </Text>
+                    <Text style={[styles.switchDescription, { color: theme.colors.textSecondary }]}>
+                      同步完成后显示通知
+                    </Text>
+                  </View>
+                  <Switch
+                    value={notificationEnabled}
+                    onValueChange={setNotificationEnabled}
+                    trackColor={{
+                      false: theme.colors.divider,
+                      true: theme.colors.primary,
+                    }}
+                    thumbColor={theme.colors.surface}
+                  />
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.bottomPadding} />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  flex: {
     flex: 1,
   },
   header: {

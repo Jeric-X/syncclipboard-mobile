@@ -167,14 +167,14 @@ export class ClipboardMonitor {
       return true;
     }
 
-    // 优先使用 contentHash 比较（用于本地变化检测）
-    if (newContent.contentHash && this.lastContent.contentHash) {
-      return newContent.contentHash !== this.lastContent.contentHash;
+    // 优先使用 localClipboardHash 比较（用于本地变化检测）
+    if (newContent.localClipboardHash && this.lastContent.localClipboardHash) {
+      return newContent.localClipboardHash !== this.lastContent.localClipboardHash;
     }
 
     // 回退到 profileHash 比较
-    if (newContent.hash && this.lastContent.hash) {
-      return newContent.hash !== this.lastContent.hash;
+    if (newContent.profileHash && this.lastContent.profileHash) {
+      return newContent.profileHash !== this.lastContent.profileHash;
     }
 
     // 比较类型和文本
@@ -241,7 +241,7 @@ export class ClipboardMonitor {
    */
   reset(): void {
     this.lastContent = null;
-    this.clipboardManager.resetLastHash();
+    this.clipboardManager.resetLastProfileHash();
   }
 }
 

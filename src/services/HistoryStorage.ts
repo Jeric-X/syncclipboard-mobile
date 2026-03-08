@@ -80,7 +80,7 @@ export class HistoryStorage {
     }
 
     // 检查是否已存在相同 hash 的记录
-    const existingIndex = this.history.findIndex((h) => h.hash === item.hash);
+    const existingIndex = this.history.findIndex((h) => h.profileHash === item.profileHash);
 
     if (existingIndex >= 0) {
       // 更新现有记录

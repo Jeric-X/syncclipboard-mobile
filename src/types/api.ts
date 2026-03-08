@@ -15,8 +15,8 @@ export interface ProfileDto {
   /** 剪贴板内容类型 */
   type: ClipboardContentType;
 
-  /** SHA256 哈希值（用于去重和验证） */
-  hash?: string;
+  /** Profile SHA256 哈希值（遵循服务器规则，用于去重和验证） */
+  profileHash?: string;
 
   /** 预览文本或完整文本内容 */
   text: string;

@@ -18,8 +18,8 @@ export interface ClipboardItem {
   /** 文本内容（预览或完整） */
   text: string;
 
-  /** 内容 hash 值 */
-  hash: string;
+  /** Profile hash 值（遵循服务器规则） */
+  profileHash: string;
 
   /** 是否有额外数据 */
   hasData: boolean;
@@ -68,11 +68,11 @@ export interface ClipboardContent {
   /** 文件大小 */
   fileSize?: number;
 
-  /** 内容 hash（用于服务器上传，遵循服务器规则） */
-  hash?: string;
+  /** Profile hash（用于服务器上传，遵循服务器规则） */
+  profileHash?: string;
 
-  /** 内容 hash（用于本地变化检测和文件名，基于纯内容） */
-  contentHash?: string;
+  /** 本地剪贴板 hash（用于本地变化检测，基于 base64 内容） */
+  localClipboardHash?: string;
 
   /** 文件数据（二进制） */
   fileData?: ArrayBuffer;

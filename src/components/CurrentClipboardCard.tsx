@@ -39,16 +39,16 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
 
   // 监控 clipboard 变化并强制更新
   useEffect(() => {
-    if (clipboard?.contentHash) {
+    if (clipboard?.localClipboardHash) {
       console.log('[CurrentClipboardCard] ✓ Received clipboard update:', {
         type: clipboard.type,
-        contentHash: clipboard.contentHash.substring(0, 8),
+        contentHash: clipboard.localClipboardHash.substring(0, 8),
         imageUri: clipboard.imageUri?.substring(clipboard.imageUri.lastIndexOf('/') + 1),
         timestamp: clipboard.timestamp,
       });
       setUpdateTrigger((prev) => prev + 1);
     }
-  }, [clipboard?.contentHash, clipboard?.imageUri]);
+  }, [clipboard?.localClipboardHash, clipboard?.imageUri]);
 
   // 每 30 秒更新一次时间显示
   useEffect(() => {
@@ -267,9 +267,9 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             {clipboard.imageUri ? (
               <>
                 <Image
-                  key={`image-${clipboard.contentHash?.substring(0, 12)}-${clipboard.timestamp}`}
+                  key={`image-${clipboard.localClipboardHash?.substring(0, 12)}-${clipboard.timestamp}`}
                   source={{
-                    uri: `${clipboard.imageUri}?hash=${clipboard.contentHash?.substring(0, 12) || clipboard.timestamp || Date.now()}`,
+                    uri: `${clipboard.imageUri}?hash=${clipboard.localClipboardHash?.substring(0, 12) || clipboard.timestamp || Date.now()}`,
                     cache: 'reload',
                   }}
                   style={styles.imagePreview}
@@ -279,7 +279,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
                     console.error('[CurrentClipboardCard] Image URI:', clipboard.imageUri);
                     console.error(
                       '[CurrentClipboardCard] Content Hash:',
-                      clipboard.contentHash?.substring(0, 8)
+                      clipboard.localClipboardHash?.substring(0, 8)
                     );
                   }}
                   onLoad={() => {
@@ -287,7 +287,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
                       '[CurrentClipboardCard] Image loaded successfully:',
                       clipboard.imageUri,
                       'contentHash:',
-                      clipboard.contentHash?.substring(0, 8)
+                      clipboard.localClipboardHash?.substring(0, 8)
                     );
                   }}
                 />
@@ -412,10 +412,10 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
       </View>
 
       {/* Hash 信息 */}
-      {clipboard.hash && (
+      {clipboard.profileHash && (
         <View style={[styles.footer, { borderTopColor: theme.colors.divider }]}>
           <Text style={[styles.hashLabel, { color: theme.colors.textTertiary }]}>
-            Hash: {clipboard.hash.substring(0, 16)}...
+            Hash: {clipboard.profileHash.substring(0, 16)}...
           </Text>
         </View>
       )}

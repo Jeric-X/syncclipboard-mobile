@@ -40,8 +40,8 @@ export function HomeScreen() {
   const [fadeAnim] = useState(new Animated.Value(0));
   const appState = useRef(AppState.currentState);
   const remotePollingInterval = useRef<NodeJS.Timeout | null>(null);
-  const lastRemoteHash = useRef<string | null>(null);
-  const lastLocalHash = useRef<string | null>(null);
+  const lastRemoteProfileHash = useRef<string | null>(null);
+  const lastLocalProfileHash = useRef<string | null>(null);
   const isAutoSyncing = useRef(false);
   const signalRClient = useRef(getSignalRClient());
   const signalRConnected = useRef(false);
@@ -67,7 +67,7 @@ export function HomeScreen() {
       (content.type === 'Image' && content.fileName && !content.imageUri) ||
       (content.type === 'File' && content.fileName && !content.fileUri);
 
-    if (!needsDownload || !content.fileName || !content.hash) {
+    if (!needsDownload || !content.fileName || !content.profileHash) {
       return content;
     }
 
@@ -80,7 +80,7 @@ export function HomeScreen() {
     // 检查文件是否已存在
     let fileUri: string | null = null;
     if (content.type === 'Image' || content.type === 'File') {
-      fileUri = await getFileUri(content.type, content.hash, extension);
+      fileUri = await getFileUri(content.type, content.profileHash, extension);
     }
 
     // 如果文件不存在，直接下载到文件系统
@@ -91,7 +91,7 @@ export function HomeScreen() {
         content.type === 'Image'
           ? new Directory(baseDir, 'images')
           : new Directory(baseDir, 'files');
-      const fileName = extension ? `${content.hash}${extension}` : content.hash;
+      const fileName = extension ? `${content.profileHash}${extension}` : content.profileHash;
       const destinationFile = new File(dir, fileName);
 
       fileUri = await apiClient.downloadFile(content.fileName, destinationFile.uri);
@@ -141,14 +141,14 @@ export function HomeScreen() {
     apiClient: ReturnType<typeof createAPIClient>,
     logPrefix: string = ''
   ) => {
-    const previousHash = lastRemoteHash.current;
+    const previousHash = lastRemoteProfileHash.current;
 
     // 检查是否有变化
     if (previousHash === currentHash) {
       return; // 没有变化，不处理
     }
 
-    lastRemoteHash.current = currentHash;
+    lastRemoteProfileHash.current = currentHash;
 
     // 1. 先处理自动下载
     const autoDownloadMaxSize = config?.autoDownloadMaxSize ?? 5 * 1024 * 1024;
@@ -238,7 +238,7 @@ export function HomeScreen() {
           const { setContent } = useClipboardStore.getState();
           await setContent(finalContent);
           // 更新本地哈希，避免触发自动上传
-          lastLocalHash.current = currentHash;
+          lastLocalProfileHash.current = currentHash;
           console.log(`[HomeScreen] ${logPrefix}Auto-copy to local clipboard completed`);
         } catch (error) {
           console.error(`[HomeScreen] ${logPrefix}Auto-copy to local clipboard failed:`, error);
@@ -257,7 +257,7 @@ export function HomeScreen() {
   const fetchRemoteClipboard = async (silent: boolean = false) => {
     if (!activeServer) {
       setRemoteContent(null);
-      lastRemoteHash.current = null;
+      lastRemoteProfileHash.current = null;
       return;
     }
 
@@ -273,7 +273,7 @@ export function HomeScreen() {
         // 转换为 ClipboardContent
         const { profileDtoToContent } = await import('@/utils/clipboard');
         const content = profileDtoToContent(profile);
-        const currentHash = content.hash || content.text || '';
+        const currentHash = content.profileHash || content.text || '';
 
         // 使用公共处理函数
         await processRemoteClipboardContent(
@@ -285,13 +285,13 @@ export function HomeScreen() {
         );
       } else {
         setRemoteContent(null);
-        lastRemoteHash.current = null;
+        lastRemoteProfileHash.current = null;
       }
     } catch (error) {
       console.error('[HomeScreen] Failed to fetch remote clipboard:', error);
       if (!silent) {
         setRemoteContent(null);
-        lastRemoteHash.current = null;
+        lastRemoteProfileHash.current = null;
         // 显示连接错误
         const errorMessage = error instanceof Error ? error.message : '无法连接到服务器';
         setError({
@@ -355,7 +355,7 @@ export function HomeScreen() {
         // 转换为 ClipboardContent
         const { profileDtoToContent } = await import('@/utils/clipboard');
         const content = profileDtoToContent(profile);
-        const currentHash = content.hash || content.text || '';
+        const currentHash = content.profileHash || content.text || '';
 
         // 使用公共处理函数
         const apiClient = createAPIClient(activeServer);
@@ -417,18 +417,18 @@ export function HomeScreen() {
       return;
     }
 
-    const currentHash = currentContent.hash || currentContent.text || '';
+    const currentHash = currentContent.profileHash || currentContent.text || '';
 
     // 初始化时记录当前哈希，不触发同步
-    if (lastLocalHash.current === null) {
-      lastLocalHash.current = currentHash;
+    if (lastLocalProfileHash.current === null) {
+      lastLocalProfileHash.current = currentHash;
       return;
     }
 
     // 检查是否有变化
-    if (currentHash !== lastLocalHash.current) {
+    if (currentHash !== lastLocalProfileHash.current) {
       console.log('[HomeScreen] Local clipboard changed, auto-syncing to remote');
-      lastLocalHash.current = currentHash;
+      lastLocalProfileHash.current = currentHash;
 
       // 自动上传到远程
       if (!isAutoSyncing.current) {
@@ -457,7 +457,7 @@ export function HomeScreen() {
       // 先停止现有的连接
       stopRemotePolling();
       await disconnectSignalR();
-      lastRemoteHash.current = null;
+      lastRemoteProfileHash.current = null;
 
       if (activeServer) {
         // 销毁旧的 SyncManager 实例，然后重新初始化（这样才能使用新的服务器配置）
