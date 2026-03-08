@@ -3,7 +3,7 @@
     "name": "SyncClipboard",
     "slug": "syncclipboard-mobile",
     "scheme": "syncclipboard",
-    "version": "1.0.0-beta1",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,11 +16,11 @@
       "supportsTablet": true
     },
     "android": {
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "versionCode": 1,
       "predictiveBackGestureEnabled": false,
       "package": "com.jericx.syncclipboardmobile",
       "permissions": ["android.permission.REQUEST_INSTALL_PACKAGES"]
