@@ -19,6 +19,12 @@ import type { ClipboardContent } from '@/types/clipboard';
 
 type LoadingState = 'loading' | 'success' | 'error';
 
+export interface SuccessButtonConfig {
+  label: string;
+  onPress: () => void;
+  primary?: boolean;
+}
+
 export interface QuickLoadingPageProps {
   /** 要执行的异步任务。抛出异常则进入 error 状态。接收 AbortSignal 用于取消操作。 */
   task: (signal: AbortSignal) => Promise<void>;
@@ -35,7 +41,7 @@ export interface QuickLoadingPageProps {
    * 成功后与"返回"按钮并排显示的额外按钮（如打开、分享）。
    * 提供时禁用自动关闭，页面停留并显示按钮行等待用户操作。
    */
-  successButton?: React.ReactNode;
+  successButtons?: SuccessButtonConfig[];
 }
 
 export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
@@ -45,7 +51,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
   failureText,
   onComplete,
   successContent,
-  successButton,
+  successButtons,
 }) => {
   const { theme } = useTheme();
   const [state, setState] = useState<LoadingState>('loading');
@@ -95,14 +101,14 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
     onComplete();
   }, [onComplete]);
 
-  // 成功后：无 successContent 且无 successButton 时自动关闭
-  // 放在独立 useEffect 中，确保在 React 批处理完成、父组件更新 successButton prop 后再判断
+  // 成功后：无 successContent 且无 successButtons 时自动关闭
+  // 放在独立 useEffect 中，确保在 React 批处理完成、父组件更新 successButtons prop 后再判断
   useEffect(() => {
     if (state !== 'success') return;
-    if (successContent !== undefined || successButton !== undefined) return;
+    if (successContent !== undefined || (successButtons && successButtons.length > 0)) return;
     const timer = setTimeout(onComplete, 500);
     return () => clearTimeout(timer);
-  }, [state, successContent, successButton, onComplete]);
+  }, [state, successContent, successButtons, onComplete]);
 
   // 返回键：loading 时允许取消；error / success-with-content/extra 时允许离开
   useEffect(() => {
@@ -113,7 +119,8 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
       }
       if (
         state === 'error' ||
-        (state === 'success' && (successContent !== undefined || successButton !== undefined))
+        (state === 'success' &&
+          (successContent !== undefined || (successButtons && successButtons.length > 0)))
       ) {
         onComplete();
         return true;
@@ -121,7 +128,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
       return false;
     });
     return () => sub.remove();
-  }, [state, successContent, successButton, onComplete, handleCancel]);
+  }, [state, successContent, successButtons, onComplete, handleCancel]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
@@ -148,12 +155,40 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
             {successContent && <ContentPreview content={successContent} />}
             <Text style={[styles.successIcon, { color: theme.colors.success }]}>✓</Text>
             <Text style={[styles.statusText, { color: theme.colors.text }]}>{successText}</Text>
-            {(successContent !== undefined || successButton !== undefined) && (
-              <View style={styles.buttonRow}>
-                {successButton}
+            {(successContent !== undefined || (successButtons && successButtons.length > 0)) && (
+              <View style={styles.successButtonRow}>
+                {successButtons?.map((btn, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.button,
+                      styles.successButton,
+                      btn.primary
+                        ? { backgroundColor: theme.colors.primary }
+                        : [
+                            styles.buttonOutline,
+                            {
+                              backgroundColor: theme.colors.surface,
+                              borderColor: theme.colors.border,
+                            },
+                          ],
+                    ]}
+                    onPress={btn.onPress}
+                  >
+                    <Text
+                      style={[
+                        styles.buttonText,
+                        { color: btn.primary ? theme.colors.white : theme.colors.text },
+                      ]}
+                    >
+                      {btn.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
                 <TouchableOpacity
                   style={[
                     styles.button,
+                    styles.successButton,
                     styles.buttonOutline,
                     { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
                   ]}
@@ -286,6 +321,16 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 8,
   },
+  successButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+    width: '100%',
+  },
+  successButton: {
+    flex: 1,
+    paddingHorizontal: 0,
+  },
   button: {
     paddingHorizontal: 28,
     paddingVertical: 10,
@@ -294,6 +339,7 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 15,
     fontWeight: '600',
+    textAlign: 'center',
   },
   buttonOutline: {
     borderWidth: 1,

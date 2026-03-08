@@ -1,12 +1,11 @@
 import React, { useCallback, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, ToastAndroid } from 'react-native';
+import { ToastAndroid } from 'react-native';
 import { SyncDirection } from '@/types/sync';
 import { ClipboardContent } from '@/types/clipboard';
 import { SyncManager } from '@/services/SyncManager';
 import { useSyncStore } from '@/stores/syncStore';
-import { useTheme } from '@/hooks/useTheme';
 import { openFile, shareFile, saveFile } from '@/utils/fileActions';
-import { QuickLoadingPage } from '@/components/QuickLoadingPage';
+import { QuickLoadingPage, SuccessButtonConfig } from '@/components/QuickLoadingPage';
 
 interface QuickTileLoadingScreenProps {
   direction: SyncDirection;
@@ -17,10 +16,9 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
   direction,
   onLoadingComplete,
 }) => {
-  const { theme } = useTheme();
   const isUpload = direction === SyncDirection.Upload;
 
-  // 用 state 存储下载的文件内容，触发重渲染以更新 successButton prop
+  // 用 state 存储下载的文件内容，触发重渲染以更新 successButtons prop
   const [fileContent, setFileContent] = useState<ClipboardContent | null>(null);
 
   const task = useCallback(
@@ -51,7 +49,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
       }
       ToastAndroid.show(toastMessage, ToastAndroid.SHORT);
 
-      // 下载了非文本文件时，存入 state，触发重渲染更新 successButton
+      // 下载了非文本文件时，存入 state，触发重渲染更新 successButtons
       if (!isUpload && content && content.type !== 'Text' && content.fileUri) {
         setFileContent(content);
       }
@@ -59,40 +57,35 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
     [direction, isUpload]
   );
 
-  const successButton = fileContent ? (
-    <>
-      <TouchableOpacity
-        style={[styles.button, { backgroundColor: theme.colors.primary }]}
-        onPress={async () => {
-          try {
-            await openFile(fileContent.fileUri!);
-          } catch {}
-        }}
-      >
-        <Text style={[styles.buttonText, { color: theme.colors.white }]}>打开</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.button, { backgroundColor: theme.colors.primary }]}
-        onPress={async () => {
-          try {
-            await saveFile(fileContent.fileUri!, fileContent.fileName);
-          } catch {}
-        }}
-      >
-        <Text style={[styles.buttonText, { color: theme.colors.white }]}>保存</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.button, { backgroundColor: theme.colors.primary }]}
-        onPress={async () => {
-          try {
-            await shareFile(fileContent.fileUri!, fileContent.fileName);
-          } catch {}
-        }}
-      >
-        <Text style={[styles.buttonText, { color: theme.colors.white }]}>分享</Text>
-      </TouchableOpacity>
-    </>
-  ) : undefined;
+  const successButtons: SuccessButtonConfig[] | undefined = fileContent
+    ? [
+        {
+          label: '打开',
+          primary: true,
+          onPress: async () => {
+            try {
+              await openFile(fileContent.fileUri!);
+            } catch {}
+          },
+        },
+        {
+          label: '保存',
+          onPress: async () => {
+            try {
+              await saveFile(fileContent.fileUri!, fileContent.fileName);
+            } catch {}
+          },
+        },
+        {
+          label: '分享',
+          onPress: async () => {
+            try {
+              await shareFile(fileContent.fileUri!, fileContent.fileName);
+            } catch {}
+          },
+        },
+      ]
+    : undefined;
 
   return (
     <QuickLoadingPage
@@ -102,19 +95,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
       failureText={isUpload ? '上传失败' : '同步失败'}
       onComplete={onLoadingComplete}
       successContent={fileContent ?? undefined}
-      successButton={successButton}
+      successButtons={successButtons}
     />
   );
 };
-
-const styles = StyleSheet.create({
-  button: {
-    paddingHorizontal: 28,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  buttonText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-});
