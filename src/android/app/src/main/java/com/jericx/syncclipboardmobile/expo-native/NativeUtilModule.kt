@@ -100,10 +100,10 @@ class NativeUtilModule(reactContext: ReactApplicationContext) :
     }
 
     /**
-     * 取消指定 jobId 的哈希计算。
+     * 取消指定 jobId 的任务（哈希计算、上传、下载）。
      */
     @ReactMethod
-    fun cancelFileHash(jobId: String) {
+    fun cancelJob(jobId: String) {
         cancelFlags[jobId]?.set(true)
     }
 
@@ -249,13 +249,88 @@ class NativeUtilModule(reactContext: ReactApplicationContext) :
         }
     }
 
+
+
     /**
-     * 取消指定 jobId 的上传任务。
+     * 流式 GET 下载文件从 HTTP/HTTPS 端点，不将文件内容读入 JVM 堆内存。
+     *
+     * 以 DOWNLOAD_BUFFER_SIZE 大小的缓冲区逐块从 socket 读取并写入本地文件，
+     * 内存占用为 O(bufferSize)，与文件大小无关。
+     *
+     * @param url     下载目标 URL（http:// 或 https://）
+     * @param headers 请求头键值对（含 Authorization 等）
+     * @param fileUri 本地文件路径（file:// URI 或裸路径）
+     * @param jobId   用于取消的唯一 ID，由 JS 侧生成，调用 cancelDownload(jobId) 可中断下载
+     * @param promise resolve: null  |  reject: 错误码 + 信息
      */
     @ReactMethod
-    fun cancelUpload(jobId: String) {
-        cancelFlags[jobId]?.set(true)
+    fun downloadFile(url: String, headers: ReadableMap, fileUri: String, jobId: String, promise: Promise) {
+        val cancelFlag = AtomicBoolean(false)
+        cancelFlags[jobId] = cancelFlag
+
+        executor.submit {
+            var connection: HttpURLConnection? = null
+            try {
+                val path = resolveFilePath(fileUri)
+                val file = File(path)
+                val parentDir = file.parentFile
+
+                if (parentDir != null && !parentDir.exists()) {
+                    parentDir.mkdirs()
+                }
+
+                connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 30_000
+                    readTimeout = 0
+
+                    val iter = headers.keySetIterator()
+                    while (iter.hasNextKey()) {
+                        val key = iter.nextKey()
+                        setRequestProperty(key, headers.getString(key))
+                    }
+                }
+
+                val responseCode = connection.responseCode
+
+                if (responseCode !in 200..299) {
+                    cancelFlags.remove(jobId)
+                    val body = try {
+                        connection.errorStream?.bufferedReader()?.readText() ?: ""
+                    } catch (_: Exception) { "" }
+                    promise.reject("HTTP_ERROR", "HTTP $responseCode: $body")
+                    return@submit
+                }
+
+                connection.inputStream.use { input ->
+                    file.outputStream().use { output ->
+                        val buffer = ByteArray(UPLOAD_BUFFER_SIZE)
+                        var read: Int
+                        while (input.read(buffer).also { read = it } != -1) {
+                            if (cancelFlag.get()) {
+                                cancelFlags.remove(jobId)
+                                file.delete()
+                                promise.reject("CANCELLED", "Download was cancelled")
+                                return@submit
+                            }
+                            output.write(buffer, 0, read)
+                        }
+                        output.flush()
+                    }
+                }
+
+                cancelFlags.remove(jobId)
+                promise.resolve(null)
+            } catch (e: Exception) {
+                cancelFlags.remove(jobId)
+                promise.reject("DOWNLOAD_ERROR", e.message ?: "Unknown error", e)
+            } finally {
+                connection?.disconnect()
+            }
+        }
     }
+
+
 
     // -------------------------------------------------------------------------
     // Private helpers

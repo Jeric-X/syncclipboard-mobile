@@ -46,7 +46,6 @@ export interface ISyncClipboardAPI {
  */
 export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
   private static readonly PROFILE_ENDPOINT = '/SyncClipboard.json';
-  private static readonly FILE_ENDPOINT = '/file/';
 
   constructor(config: APIClientConfig) {
     super(config);
@@ -109,73 +108,6 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
   }
 
   /**
-   * 直接下载文件到指定路径（优化内存占用）
-   */
-  async downloadFile(
-    fileName: string,
-    destinationUri: string,
-    signal?: AbortSignal
-  ): Promise<string> {
-    if (!fileName) {
-      throw new ValidationError('File name is required');
-    }
-    if (!destinationUri) {
-      throw new ValidationError('Destination URI is required');
-    }
-
-    try {
-      const { File } = await import('expo-file-system');
-      const { fetch } = await import('expo/fetch');
-      const url = `${this.baseURL}${SyncClipboardAPI.FILE_ENDPOINT}${encodeURIComponent(fileName)}`;
-
-      // 准备请求头
-      const headers = await this.getHeaders();
-
-      console.log(`[SyncClipboardAPI] Downloading file ${fileName} to ${destinationUri}`);
-
-      // 目标存在时先删除，避免冲突
-      const file = new File(destinationUri);
-      if (file.exists) {
-        file.delete();
-      }
-
-      // 使用 fetch 下载，支持 AbortSignal
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-        signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      // 将响应体写入文件
-      const blob = await response.blob();
-      const reader = new FileReader();
-
-      await new Promise<void>((resolve, reject) => {
-        reader.onload = async () => {
-          try {
-            const base64 = (reader.result as string).split(',')[1];
-            file.write(base64, { encoding: 'base64' });
-            resolve();
-          } catch (error) {
-            reject(error);
-          }
-        };
-        reader.onerror = () => reject(new Error('Failed to read response blob'));
-        reader.readAsDataURL(blob);
-      });
-
-      return destinationUri;
-    } catch (error) {
-      console.error(`[SyncClipboardAPI] Failed to download file ${fileName}:`, error);
-      throw error;
-    }
-  }
-
-  /**
    * 上传文件数据
    * @param fileName 服务器上的文件名
    * @param fileUri 本地文件的 URI
@@ -191,7 +123,7 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
 
     console.log(`[SyncClipboardAPI] Uploading file: ${fileName}`);
 
-    const url = `${this.baseURL}${SyncClipboardAPI.FILE_ENDPOINT}${encodeURIComponent(fileName)}`;
+    const url = `${this.baseURL}/file/${encodeURIComponent(fileName)}`;
 
     // 准备请求头
     const headers = await this.getHeaders();

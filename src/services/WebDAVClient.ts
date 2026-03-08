@@ -26,15 +26,12 @@ export interface WebDAVConfig {
  */
 export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
   private static readonly PROFILE_FILENAME = 'SyncClipboard.json';
-  private static readonly DATA_FOLDER = 'file';
 
   constructor(config: WebDAVConfig) {
     const { baseURL, username, password, timeout } = config;
 
-    // 创建认证服务
     const authService = new AuthService(username, password);
 
-    // 调用父类构造函数
     super({
       baseURL,
       timeout,
@@ -86,73 +83,6 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
   }
 
   /**
-   * 直接下载文件到指定路径（优化内存占用）
-   */
-  async downloadFile(
-    fileName: string,
-    destinationUri: string,
-    signal?: AbortSignal
-  ): Promise<string> {
-    if (!fileName) {
-      throw new ValidationError('File name is required');
-    }
-    if (!destinationUri) {
-      throw new ValidationError('Destination URI is required');
-    }
-
-    try {
-      const { File } = await import('expo-file-system');
-      const { fetch } = await import('expo/fetch');
-      const url = `${this.baseURL}/${WebDAVClient.DATA_FOLDER}/${encodeURIComponent(fileName)}`;
-
-      // 准备请求头
-      const headers = await this.getHeaders();
-
-      console.log(`[WebDAVClient] Downloading file ${fileName} to ${destinationUri}`);
-
-      // 目标存在时先删除，避免冲突
-      const file = new File(destinationUri);
-      if (file.exists) {
-        file.delete();
-      }
-
-      // 使用 fetch 下载，支持 AbortSignal
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-        signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      // 将响应体写入文件
-      const blob = await response.blob();
-      const reader = new FileReader();
-
-      await new Promise<void>((resolve, reject) => {
-        reader.onload = async () => {
-          try {
-            const base64 = (reader.result as string).split(',')[1];
-            await file.write(base64, { encoding: 'base64' });
-            resolve();
-          } catch (error) {
-            reject(error);
-          }
-        };
-        reader.onerror = () => reject(new Error('Failed to read response blob'));
-        reader.readAsDataURL(blob);
-      });
-
-      return destinationUri;
-    } catch (error) {
-      console.error(`[WebDAVClient] Failed to download file ${fileName}:`, error);
-      throw error;
-    }
-  }
-
-  /**
    * 上传文件数据
    * @param fileName 服务器上的文件名
    * @param fileUri 本地文件的 URI，避免将大文件加载到内存中
@@ -168,10 +98,9 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
 
     console.log(`[WebDAVClient] Uploading file: ${fileName}`);
 
-    // 确保目录存在
-    await this.ensureDirectoryExists(`/${WebDAVClient.DATA_FOLDER}`);
+    await this.ensureDirectoryExists('/file');
 
-    const url = `${this.baseURL}/${WebDAVClient.DATA_FOLDER}/${encodeURIComponent(fileName)}`;
+    const url = `${this.baseURL}/file/${encodeURIComponent(fileName)}`;
 
     // 准备请求头
     const headers = await this.getHeaders();
@@ -308,7 +237,7 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
     }
 
     try {
-      const url = `/${WebDAVClient.DATA_FOLDER}/${encodeURIComponent(fileName)}`;
+      const url = `/file/${encodeURIComponent(fileName)}`;
       await this.delete(url);
     } catch (error) {
       console.error(`[WebDAVClient] Failed to delete file ${fileName}:`, error);

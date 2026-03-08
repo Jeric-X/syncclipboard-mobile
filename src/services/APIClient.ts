@@ -7,6 +7,7 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import { AuthService } from './AuthService';
 import { ProfileDto } from '../types/api';
 import type { ClipboardContent } from '../types/clipboard';
+import { nativeDownloadFile } from '../nativeModules/NativeUtilModule';
 import {
   APIError,
   AuthenticationError,
@@ -268,6 +269,40 @@ export abstract class APIClient {
   ): Promise<T> {
     const response = await this.client.patch<T>(url, data, config);
     return response.data;
+  }
+
+  private static readonly FILE_ENDPOINT = '/file/';
+
+  /**
+   * 直接下载文件到指定路径（优化内存占用）
+   * 使用原生 HttpURLConnection 流式下载，每次仅持有 8KB 缓冲，不将文件内容读入 JVM/JS 堆内存
+   */
+  async downloadFile(
+    fileName: string,
+    destinationUri: string,
+    signal?: AbortSignal
+  ): Promise<string> {
+    if (!fileName) {
+      throw new ConfigurationError('File name is required');
+    }
+    if (!destinationUri) {
+      throw new ConfigurationError('Destination URI is required');
+    }
+
+    try {
+      const url = `${this.baseURL}${APIClient.FILE_ENDPOINT}${encodeURIComponent(fileName)}`;
+      const headers = await this.getHeaders();
+
+      console.log(`[${this.constructor.name}] Downloading file ${fileName} to ${destinationUri}`);
+
+      await nativeDownloadFile(url, headers, destinationUri, signal);
+
+      console.log(`[${this.constructor.name}] File downloaded successfully: ${fileName}`);
+      return destinationUri;
+    } catch (error) {
+      console.error(`[${this.constructor.name}] Failed to download file ${fileName}:`, error);
+      throw error;
+    }
   }
 
   /**

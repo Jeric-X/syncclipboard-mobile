@@ -1,10 +1,11 @@
 ﻿/**
- * NativeUtilModule – hash, file copy & streaming upload wrapper (Android Only)
+ * NativeUtilModule – hash, file copy, streaming upload & download wrapper (Android Only)
  *
- * 对应同名 Kotlin 模块 NativeUtilModule，三类功能统一封装：
+ * 对应同名 Kotlin 模块 NativeUtilModule，四类功能统一封装：
  *   - nativeCopyFile          文件流式拷贝（不经过 JS/JVM 堆内存）
  *   - nativeCalculateFileHash SHA-256 哈希（后台 IO 线程，支持进度回调与取消）
  *   - nativeUploadFile        HTTP PUT 流式上传（每次仅占 8 KB 缓冲，支持取消）
+ *   - nativeDownloadFile      HTTP GET 流式下载（每次仅占 8 KB 缓冲，支持取消）
  */
 
 import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
@@ -15,7 +16,7 @@ import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 
 interface NativeUtilModuleInterface {
   calculateFileHash(fileUri: string, jobId: string): Promise<string>;
-  cancelFileHash(jobId: string): void;
+  cancelJob(jobId: string): void;
   copyFile(srcUri: string, destUri: string): Promise<void>;
   uploadFile(
     url: string,
@@ -23,7 +24,12 @@ interface NativeUtilModuleInterface {
     fileUri: string,
     jobId: string
   ): Promise<void>;
-  cancelUpload(jobId: string): void;
+  downloadFile(
+    url: string,
+    headers: Record<string, string>,
+    fileUri: string,
+    jobId: string
+  ): Promise<void>;
   addListener(eventName: string): void;
   removeListeners(count: number): void;
 }
@@ -102,7 +108,7 @@ export async function nativeCalculateFileHash(
         })
       : null;
 
-  const abortHandler = () => _module!.cancelFileHash(jobId);
+  const abortHandler = () => _module!.cancelJob(jobId);
   signal?.addEventListener('abort', abortHandler);
 
   try {
@@ -151,12 +157,52 @@ export async function nativeUploadFile(
 
   let abortListener: (() => void) | null = null;
   if (signal) {
-    abortListener = () => _module!.cancelUpload(jobId);
+    abortListener = () => _module!.cancelJob(jobId);
     signal.addEventListener('abort', abortListener);
   }
 
   try {
     await _module.uploadFile(url, headers, fileUri, jobId);
+  } finally {
+    if (signal && abortListener) {
+      signal.removeEventListener('abort', abortListener);
+    }
+  }
+}
+
+/**
+ * 以 GET 方式将 HTTP/HTTPS 端点内容流式下载到本地文件。
+ * 每次仅持有 8KB 缓冲，不将文件内容读入 JVM/JS 堆内存。
+ *
+ * @param url      下载目标 URL
+ * @param headers  请求头（含 Authorization 等）
+ * @param fileUri  本地文件 URI（file:// 或裸路径）
+ * @param signal   可选 AbortSignal，触发时取消下载
+ */
+export async function nativeDownloadFile(
+  url: string,
+  headers: Record<string, string>,
+  fileUri: string,
+  signal?: AbortSignal
+): Promise<void> {
+  if (!_module) {
+    throw new Error('NativeUtilModule is not available on this platform');
+  }
+
+  if (signal?.aborted) {
+    throw new DOMException('Download aborted', 'AbortError');
+  }
+
+  const jobId = generateJobId('download');
+
+  let abortListener: (() => void) | null = null;
+  if (signal) {
+    abortListener = () => _module!.cancelJob(jobId);
+    signal.addEventListener('abort', abortListener);
+  }
+
+  try {
+    await _module.downloadFile(url, headers, fileUri, jobId);
   } finally {
     if (signal && abortListener) {
       signal.removeEventListener('abort', abortListener);
