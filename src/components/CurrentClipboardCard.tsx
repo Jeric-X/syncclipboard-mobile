@@ -8,14 +8,17 @@ import { View, Text, StyleSheet, TouchableOpacity, Platform, Share, Image } from
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardContent } from '@/types/clipboard';
 import { useSettingsStore } from '@/stores';
-import { openFile, shareFile } from '@/utils/fileActions';
+import { openFile, shareFile, saveFile } from '@/utils/fileActions';
 
 interface CurrentClipboardCardProps {
   clipboard: ClipboardContent | null;
   isRemote?: boolean;
   onUpload?: () => void;
+  uploading?: boolean;
+  onCancelUpload?: () => void;
   onDownload?: () => void;
   downloading?: boolean;
+  onCancelDownload?: () => void;
   onCopy: (content: ClipboardContent) => Promise<void>;
 }
 
@@ -23,8 +26,11 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   clipboard,
   isRemote = false,
   onUpload,
+  uploading = false,
+  onCancelUpload,
   onDownload,
   downloading = false,
+  onCancelDownload,
   onCopy,
 }) => {
   const { theme } = useTheme();
@@ -221,6 +227,19 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
     return false;
   })();
 
+  // 判断是否显示保存按钮（非Text类型且有文件URI）
+  const canShowSaveButton = canShowShareButton;
+
+  // 保存文件到用户选择的目录
+  const handleSaveFile = async () => {
+    if (!clipboard.fileUri) return;
+    try {
+      await saveFile(clipboard.fileUri, clipboard.fileName);
+    } catch (error) {
+      console.error('[CurrentClipboardCard] Failed to save file:', error);
+    }
+  };
+
   return (
     <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
       {/* 标题栏 */}
@@ -320,13 +339,13 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
 
       {/* 按钮区域 */}
       <View style={styles.actionButtons}>
-        {/* Text 类型：只有在不需要下载时才显示复制按钮 */}
-        {clipboard.type === 'Text' && !showDownloadButton && (
+        {/* 远程 Text 类型：只有在不需要下载时才显示复制按钮 */}
+        {isRemote && clipboard.type === 'Text' && !showDownloadButton && (
           <TouchableOpacity
             style={[
               styles.actionButton,
+              styles.actionButtonLast,
               { backgroundColor: theme.colors.primary },
-              !onUpload && !showDownloadButton && styles.actionButtonLast,
             ]}
             onPress={() => onCopy(clipboard)}
           >
@@ -337,14 +356,20 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         {/* 非文本且有文件：打开按钮 */}
         {canOpenFile && (
           <TouchableOpacity
-            style={[
-              styles.actionButton,
-              { backgroundColor: theme.colors.primary },
-              !canShowShareButton && !onUpload && !showDownloadButton && styles.actionButtonLast,
-            ]}
+            style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
             onPress={handleOpenFile}
           >
             <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>打开</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* 非Text类型且已下载：保存按钮 */}
+        {canShowSaveButton && (
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
+            onPress={handleSaveFile}
+          >
+            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>保存</Text>
           </TouchableOpacity>
         )}
 
@@ -353,8 +378,8 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
           <TouchableOpacity
             style={[
               styles.actionButton,
+              styles.actionButtonLast,
               { backgroundColor: theme.colors.primary },
-              !onUpload && !showDownloadButton && styles.actionButtonLast,
             ]}
             onPress={handleShare}
           >
@@ -371,7 +396,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
               styles.actionButtonLast,
               { borderColor: theme.colors.primary },
             ]}
-            onPress={onUpload}
+            onPress={uploading ? onCancelUpload : onUpload}
           >
             <Text
               style={[
@@ -380,7 +405,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
                 { color: theme.colors.primary },
               ]}
             >
-              上传
+              {uploading ? '取消' : '上传'}
             </Text>
           </TouchableOpacity>
         )}
@@ -392,10 +417,8 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
               styles.secondaryButton,
               styles.actionButtonLast,
               { borderColor: theme.colors.primary },
-              downloading && styles.buttonDisabled,
             ]}
-            onPress={onDownload}
-            disabled={downloading}
+            onPress={downloading ? onCancelDownload : onDownload}
           >
             <Text
               style={[
@@ -404,7 +427,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
                 { color: theme.colors.primary },
               ]}
             >
-              {downloading ? '下载中...' : '下载'}
+              {downloading ? '取消' : '下载'}
             </Text>
           </TouchableOpacity>
         )}
@@ -498,9 +521,6 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     borderWidth: 1,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
   },
   actionButtonText: {
     fontSize: 15,

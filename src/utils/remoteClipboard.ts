@@ -19,12 +19,14 @@ import { calculateFileProfileHash } from './hash';
  * @param content   待填充 fileUri 的 ClipboardContent
  * @param apiClient 用于执行下载的 API 客户端
  * @param hasData   profile 是否携带附件
+ * @param signal    可选的 AbortSignal 用于取消操作
  * @returns 含有 fileUri 的更新后 ClipboardContent
  */
 export async function downloadAndAddToHistory(
   content: ClipboardContent,
   apiClient: ISyncClipboardAPI,
-  hasData: boolean
+  hasData: boolean,
+  signal?: AbortSignal
 ): Promise<ClipboardContent> {
   const needsDownload = hasData && content.fileName;
 
@@ -49,7 +51,7 @@ export async function downloadAndAddToHistory(
   // 缓存未命中，流式下载到临时目录，避免加载进内存
   if (!fileUri) {
     const destUri = prepareTempFilePath(content.fileName!);
-    fileUri = await apiClient.downloadFile(content.fileName!, destUri);
+    fileUri = await apiClient.downloadFile(content.fileName!, destUri, signal);
   }
 
   // 如果 profileHash 为空，下载完成后重新计算

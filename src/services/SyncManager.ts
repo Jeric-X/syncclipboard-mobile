@@ -166,7 +166,8 @@ export class SyncManager {
    */
   public async sync(
     direction: SyncDirection = SyncDirection.Both,
-    isAuto: boolean = false
+    isAuto: boolean = false,
+    signal?: AbortSignal
   ): Promise<SyncResult> {
     if (!this.config || !this.apiClient) {
       throw new Error('SyncManager not initialized');
@@ -193,16 +194,16 @@ export class SyncManager {
 
       switch (direction) {
         case SyncDirection.Upload:
-          result = await this.upload(isAuto);
+          result = await this.upload(isAuto, signal);
           break;
         case SyncDirection.Download:
-          result = await this.download(isAuto);
+          result = await this.download(isAuto, signal);
           break;
         case SyncDirection.Both:
           // 先下载后上传，避免覆盖远程内容
-          const downloadResult = await this.download(isAuto);
+          const downloadResult = await this.download(isAuto, signal);
           if (downloadResult.success || downloadResult.skipped) {
-            const uploadResult = await this.upload(isAuto);
+            const uploadResult = await this.upload(isAuto, signal);
             result = uploadResult;
           } else {
             result = downloadResult;
@@ -262,7 +263,7 @@ export class SyncManager {
   /**
    * 上传剪贴板内容
    */
-  private async upload(isAuto: boolean = false): Promise<SyncResult> {
+  private async upload(isAuto: boolean = false, signal?: AbortSignal): Promise<SyncResult> {
     if (!this.apiClient || !this.config) {
       throw new Error('SyncManager not initialized');
     }
@@ -334,7 +335,7 @@ export class SyncManager {
       });
 
       // 使用 putContent 统一处理：先上传数据（如果有），再上传配置
-      await this.apiClient.putContent(localContent);
+      await this.apiClient.putContent(localContent, { signal });
 
       console.log('[SyncManager] Content uploaded successfully');
 
@@ -396,14 +397,14 @@ export class SyncManager {
   /**
    * 下载剪贴板内容
    */
-  private async download(isAuto: boolean = false): Promise<SyncResult> {
+  private async download(isAuto: boolean = false, signal?: AbortSignal): Promise<SyncResult> {
     if (!this.apiClient || !this.config) {
       throw new Error('SyncManager not initialized');
     }
 
     try {
       // 获取远程剪贴板配置
-      const profile = await this.apiClient.getClipboard();
+      const profile = await this.apiClient.getClipboard(signal);
 
       if (!profile || !profile.hash) {
         return {
@@ -444,7 +445,7 @@ export class SyncManager {
 
           if (resolution === 'local') {
             // 使用本地版本，上传覆盖远程
-            return await this.upload();
+            return await this.upload(isAuto, signal);
           } else if (resolution === 'skip') {
             // 跳过此次同步
             return {
@@ -466,7 +467,7 @@ export class SyncManager {
       // 如果有文件数据，优先从历史记录读取缓存，否则下载并保存到历史记录
       if (profile.hasData && profile.dataName) {
         const { downloadAndAddToHistory } = await import('../utils/remoteClipboard');
-        const updatedContent = await downloadAndAddToHistory(content, this.apiClient, true);
+        const updatedContent = await downloadAndAddToHistory(content, this.apiClient, true, signal);
         content.fileUri = updatedContent.fileUri;
       }
 

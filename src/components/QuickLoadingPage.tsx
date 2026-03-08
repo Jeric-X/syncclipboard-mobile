@@ -20,8 +20,8 @@ import type { ClipboardContent } from '@/types/clipboard';
 type LoadingState = 'loading' | 'success' | 'error';
 
 export interface QuickLoadingPageProps {
-  /** 要执行的异步任务。抛出异常则进入 error 状态。 */
-  task: () => Promise<void>;
+  /** 要执行的异步任务。抛出异常则进入 error 状态。接收 AbortSignal 用于取消操作。 */
+  task: (signal: AbortSignal) => Promise<void>;
   loadingText: string;
   successText: string;
   failureText: string;
@@ -57,13 +57,25 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
     taskRef.current = task;
   }, [task]);
 
+  // AbortController 用于取消任务
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const run = useCallback(async () => {
     setState('loading');
     setErrorMessage(null);
+
+    // 创建新的 AbortController
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+
     try {
-      await taskRef.current();
+      await taskRef.current(signal);
       setState('success');
     } catch (err) {
+      // 如果是取消操作，直接返回，不显示错误
+      if (signal.aborted) {
+        return;
+      }
       setErrorMessage(err instanceof Error ? err.message : '操作失败，请重试');
       setState('error');
     }
@@ -71,7 +83,17 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
 
   useEffect(() => {
     run();
+    return () => {
+      // 组件卸载时取消任务
+      abortControllerRef.current?.abort();
+    };
   }, [run]);
+
+  // 取消任务
+  const handleCancel = useCallback(() => {
+    abortControllerRef.current?.abort();
+    onComplete();
+  }, [onComplete]);
 
   // 成功后：无 successContent 且无 successButton 时自动关闭
   // 放在独立 useEffect 中，确保在 React 批处理完成、父组件更新 successButton prop 后再判断
@@ -82,10 +104,13 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
     return () => clearTimeout(timer);
   }, [state, successContent, successButton, onComplete]);
 
-  // 返回键：loading 时屏蔽；error / success-with-content/extra 时允许离开
+  // 返回键：loading 时允许取消；error / success-with-content/extra 时允许离开
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (state === 'loading') return true;
+      if (state === 'loading') {
+        handleCancel();
+        return true;
+      }
       if (
         state === 'error' ||
         (state === 'success' && (successContent !== undefined || successButton !== undefined))
@@ -96,7 +121,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
       return false;
     });
     return () => sub.remove();
-  }, [state, successContent, successButton, onComplete]);
+  }, [state, successContent, successButton, onComplete, handleCancel]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
@@ -105,6 +130,16 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
           <>
             <ActivityIndicator size="large" color={theme.colors.primary} />
             <Text style={[styles.statusText, { color: theme.colors.text }]}>{loadingText}</Text>
+            <TouchableOpacity
+              style={[
+                styles.button,
+                styles.buttonOutline,
+                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+              ]}
+              onPress={handleCancel}
+            >
+              <Text style={[styles.buttonText, { color: theme.colors.text }]}>取消</Text>
+            </TouchableOpacity>
           </>
         )}
 

@@ -46,30 +46,33 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
   }, []);
 
   // 上传任务：由 QuickTileLoadingScreen 调用（含重试）
-  const task = useCallback(async () => {
-    if (resolveError) throw new Error(`解析分享内容失败: ${resolveError.message}`);
-    if (!activeServer) throw new Error('请先在设置中配置服务器');
+  const task = useCallback(
+    async (signal: AbortSignal) => {
+      if (resolveError) throw new Error(`解析分享内容失败: ${resolveError.message}`);
+      if (!activeServer) throw new Error('请先在设置中配置服务器');
 
-    const payload = resolvedSharedPayloads[0];
-    if (!payload || !payload.contentUri) throw new Error('没有可处理的文件');
+      const payload = resolvedSharedPayloads[0];
+      if (!payload || !payload.contentUri) throw new Error('没有可处理的文件');
 
-    const contentMime = payload.contentMimeType;
-    let fileName = payload.originalName;
-    if (!fileName) {
-      const ext = getFileExtFromMime(contentMime);
-      fileName = `shared_${Date.now()}${ext}`;
-    }
+      const contentMime = payload.contentMimeType;
+      let fileName = payload.originalName;
+      if (!fileName) {
+        const ext = getFileExtFromMime(contentMime);
+        fileName = `shared_${Date.now()}${ext}`;
+      }
 
-    await uploadFileAndAddToHistory(
-      payload.contentUri,
-      fileName,
-      contentMime,
-      undefined,
-      activeServer,
-      { onProgress: setLoadingText }
-    );
-    clearSharedPayloads();
-  }, [resolvedSharedPayloads, activeServer, resolveError]);
+      await uploadFileAndAddToHistory(
+        payload.contentUri,
+        fileName,
+        contentMime,
+        undefined,
+        activeServer,
+        { signal, onProgress: setLoadingText }
+      );
+      clearSharedPayloads();
+    },
+    [resolvedSharedPayloads, activeServer, resolveError]
+  );
 
   if (!hasShareContent) return null;
 

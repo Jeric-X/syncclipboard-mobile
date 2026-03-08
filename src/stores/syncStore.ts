@@ -50,7 +50,7 @@ interface SyncState {
   initialize: () => Promise<void>;
 
   /** 执行同步 */
-  sync: (direction?: SyncDirection) => Promise<SyncResult>;
+  sync: (direction?: SyncDirection, signal?: AbortSignal) => Promise<SyncResult>;
 
   /** 更新同步模式 */
   setSyncMode: (mode: SyncMode) => Promise<void>;
@@ -176,7 +176,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     }
   },
 
-  sync: async (direction = SyncDirection.Both) => {
+  sync: async (direction = SyncDirection.Both, signal?: AbortSignal) => {
     const { manager, isInitialized } = get();
 
     if (!isInitialized || !manager) {
@@ -192,7 +192,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     set({ error: null });
 
     try {
-      const result = await manager.sync(direction);
+      const result = await manager.sync(direction, false, signal);
 
       set({
         lastResult: result,

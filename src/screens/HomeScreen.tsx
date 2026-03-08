@@ -43,6 +43,7 @@ export function HomeScreen() {
   const [loadingRemote, setLoadingRemote] = useState(false);
   const [downloadingRemote, setDownloadingRemote] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [uploadingClipboard, setUploadingClipboard] = useState(false);
   const [error, setError] = useState<{ title: string; message: string } | null>(null);
   const { message, showMessage, handleMessageShown } = useMessageToast();
   const appState = useRef(AppState.currentState);
@@ -53,6 +54,8 @@ export function HomeScreen() {
   const signalRClient = useRef(getSignalRClient());
   const signalRConnected = useRef(false);
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
+  const downloadAbortControllerRef = useRef<AbortController | null>(null);
+  const clipboardUploadAbortControllerRef = useRef<AbortController | null>(null);
 
   const { currentContent, getContent, startMonitoring, stopMonitoring } = useClipboardStore();
   const sync = useSyncStore((state) => state.sync);
@@ -478,7 +481,7 @@ export function HomeScreen() {
     }
   }, [activeServer, showMessage]);
 
-  const handleCancelUpload = useCallback(() => {
+  const handleCancelFileUpload = useCallback(() => {
     if (!uploadingFile) {
       return;
     }
@@ -687,17 +690,19 @@ export function HomeScreen() {
     }
 
     try {
-      setError(null); // 清除之前的错误
+      setError(null);
+      setUploadingClipboard(true);
+      const abortController = new AbortController();
+      clipboardUploadAbortControllerRef.current = abortController;
+
       console.log('[HomeScreen] Starting upload...');
-      const result = await sync(SyncDirection.Upload);
+      const result = await sync(SyncDirection.Upload, abortController.signal);
       console.log('[HomeScreen] Upload result:', JSON.stringify(result, null, 2));
 
-      // 检查同步结果
       if (result.success) {
-        await fetchRemoteClipboard(true); // 静默刷新，避免 loading 指示器导致组件闪烁
+        await fetchRemoteClipboard(true);
         showMessage('剪贴板已上传到服务器', 'success');
       } else {
-        // 上传失败，显示错误信息
         const errorMessage = result.error || '上传失败';
         console.log('[HomeScreen] Upload failed, setting error:', errorMessage);
         setError({
@@ -707,9 +712,20 @@ export function HomeScreen() {
         showMessage('上传失败', 'error');
       }
     } catch (error: unknown) {
-      // 处理意外异常（通常不会到这里）
       console.error('[HomeScreen] Upload exception:', error);
       const errorMessage = error instanceof Error ? error.message : '无法上传到服务器';
+      const normalizedMessage = errorMessage.toLowerCase();
+      const isCanceled =
+        (error instanceof Error && error.name === 'AbortError') ||
+        normalizedMessage.includes('abort') ||
+        normalizedMessage.includes('canceled') ||
+        normalizedMessage.includes('cancelled');
+
+      if (isCanceled) {
+        showMessage('已取消上传', 'info');
+        return;
+      }
+
       const errorObj = error instanceof Error ? (error as unknown as Record<string, unknown>) : {};
       const errorDetails =
         error instanceof Error && errorObj.response
@@ -721,8 +737,23 @@ export function HomeScreen() {
         message: errorDetails,
       });
       showMessage('上传失败', 'error');
+    } finally {
+      clipboardUploadAbortControllerRef.current = null;
+      setUploadingClipboard(false);
     }
   };
+
+  // 取消剪贴板上传
+  const handleCancelClipboardUpload = useCallback(() => {
+    if (!uploadingClipboard) {
+      return;
+    }
+
+    if (clipboardUploadAbortControllerRef.current) {
+      clipboardUploadAbortControllerRef.current.abort();
+      showMessage('正在取消上传...', 'info');
+    }
+  }, [uploadingClipboard, showMessage]);
 
   const handleCopyError = async () => {
     if (error) {
@@ -751,23 +782,53 @@ export function HomeScreen() {
     }
 
     setDownloadingRemote(true);
+    const abortController = new AbortController();
+    downloadAbortControllerRef.current = abortController;
+
     try {
       // 使用公共函数：下载并添加到历史记录
       const apiClient = createAPIClient(activeServer);
       const updatedContent = await downloadAndAddToHistory(
         remoteContent,
         apiClient,
-        remoteContent.hasData || false
+        remoteContent.hasData || false,
+        abortController.signal
       );
       setRemoteContent(updatedContent);
       showMessage('文件已下载', 'success');
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '文件下载失败';
+      const normalizedMessage = errorMessage.toLowerCase();
+      const isCanceled =
+        (error instanceof Error && error.name === 'AbortError') ||
+        normalizedMessage.includes('abort') ||
+        normalizedMessage.includes('canceled') ||
+        normalizedMessage.includes('cancelled');
+
+      if (isCanceled) {
+        showMessage('已取消下载', 'info');
+        return;
+      }
+
       console.error('[HomeScreen] Failed to download remote file:', error);
       showMessage('文件下载失败', 'error');
     } finally {
+      downloadAbortControllerRef.current = null;
       setDownloadingRemote(false);
     }
   };
+
+  // 取消下载
+  const handleCancelDownload = useCallback(() => {
+    if (!downloadingRemote) {
+      return;
+    }
+
+    if (downloadAbortControllerRef.current) {
+      downloadAbortControllerRef.current.abort();
+      showMessage('正在取消下载...', 'info');
+    }
+  }, [downloadingRemote, showMessage]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -802,6 +863,7 @@ export function HomeScreen() {
                   isRemote={true}
                   onDownload={handleDownloadRemoteFile}
                   downloading={downloadingRemote}
+                  onCancelDownload={handleCancelDownload}
                   onCopy={async (content) => {
                     const result = await copyRemoteToLocal(content, 'Manual copy: ');
                     if (result.success) {
@@ -823,6 +885,8 @@ export function HomeScreen() {
                 clipboard={currentContent}
                 isRemote={false}
                 onUpload={handleUpload}
+                uploading={uploadingClipboard}
+                onCancelUpload={handleCancelClipboardUpload}
                 onCopy={copyLocalToClipboard}
               />
 
@@ -900,7 +964,7 @@ export function HomeScreen() {
             </Text>
             <TouchableOpacity
               style={[styles.uploadCancelButton, { backgroundColor: theme.colors.error }]}
-              onPress={handleCancelUpload}
+              onPress={handleCancelFileUpload}
             >
               <Text style={[styles.uploadCancelButtonText, { color: theme.colors.white }]}>
                 取消上传
