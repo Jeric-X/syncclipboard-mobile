@@ -518,7 +518,7 @@ class ClipboardSyncService {
   ): Promise<void> {
     const { useClipboardSyncServiceStore } = require('../stores/ClipboardSyncServiceStore');
     const { useSettingsStore } = require('../stores/settingsStore');
-    const { historyStorage } = require('./HistoryStorage');
+    const { historyStorage } = require('../storage/HistoryStorage');
     const config = useSettingsStore.getState().config;
     const previousHash = this.lastRemoteProfileHash;
 

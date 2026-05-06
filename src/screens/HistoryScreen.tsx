@@ -195,7 +195,7 @@ export function HistoryScreen() {
 
   // 监听 HistoryStorage 变更，实时更新 UI
   useEffect(() => {
-    const { HistoryStorage } = require('@/services/HistoryStorage');
+    const { HistoryStorage } = require('@/storage/HistoryStorage');
     const storage = HistoryStorage.getInstance();
 
     const handleChange = (items: ClipboardItem[], action: 'add' | 'update' | 'delete') => {

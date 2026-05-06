@@ -33,7 +33,7 @@ jest.mock('../utils/fileStorage', () => ({
   }),
 }));
 
-jest.mock('../services/ConfigStorage', () => ({
+jest.mock('../storage/ConfigStorage', () => ({
   configStorage: {
     getConfig: jest.fn().mockResolvedValue({ maxHistoryItems: 1000 }),
   },

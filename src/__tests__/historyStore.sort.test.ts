@@ -7,7 +7,7 @@ import { useHistoryStore } from '../stores/historyStore';
 import { ClipboardItem, HistorySyncStatus } from '../types/clipboard';
 
 // Mock historyStorage，避免真实 AsyncStorage 依赖
-jest.mock('../services', () => ({
+jest.mock('../storage', () => ({
   historyStorage: {
     searchItems: jest.fn().mockResolvedValue({ items: [], total: 0 }),
     addItem: jest.fn(),
