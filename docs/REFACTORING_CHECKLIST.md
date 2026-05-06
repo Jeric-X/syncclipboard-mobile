@@ -122,14 +122,14 @@ npm run lint
 
 **任务清单**:
 
-- [ ] 移动 `Logger.ts` → `utils/Logger.ts`（单文件，直接放在 utils 目录）
-- [ ] 移动 `UpdateService.ts` → `utils/UpdateService.ts`（单文件，直接放在 utils 目录）
-- [ ] 移动 `ApkDownloadService.ts` → `utils/ApkDownloadService.ts`（单文件，直接放在 utils 目录）
-- [ ] 移动 `ShortcutService.ts` → `utils/ShortcutService.ts`（单文件，直接放在 utils 目录）
-- [ ] 更新 `utils/index.ts` 导出
-- [ ] 更新 `services/index.ts` 中的导出
-- [ ] 更新所有导入路径
-- [ ] 移除循环引用和临时 import
+- [x] 移动 `Logger.ts` → `utils/Logger.ts`（单文件，直接放在 utils 目录）
+- [x] 移动 `UpdateService.ts` → `utils/UpdateService.ts`（单文件，直接放在 utils 目录）
+- [x] 移动 `ApkDownloadService.ts` → `utils/ApkDownloadService.ts`（单文件，直接放在 utils 目录）
+- [x] 移动 `ShortcutService.ts` → `utils/ShortcutService.ts`（单文件，直接放在 utils 目录）
+- [x] 更新 `utils/index.ts` 导出
+- [x] 更新 `services/index.ts` 中的导出
+- [x] 更新所有导入路径
+- [x] 移除循环引用和临时 import
 
 **验证命令**:
 
@@ -667,3 +667,38 @@ npm run lint
 **下一步计划**:
 
 - 阶段 2.3: 移动工具服务
+
+---
+
+### 执行记录 - 2026-05-06 (阶段 2.3)
+
+**执行阶段**: 阶段 2.3
+
+**完成任务**:
+
+- [x] 移动 `Logger.ts` → `src/utils/Logger.ts`
+- [x] 移动 `UpdateService.ts` → `src/utils/UpdateService.ts`
+- [x] 移动 `ApkDownloadService.ts` → `src/utils/ApkDownloadService.ts`
+- [x] 移动 `ShortcutService.ts` → `src/utils/ShortcutService.ts`
+- [x] 更新 `src/utils/index.ts` 添加导出
+- [x] 更新 `src/services/index.ts` 重导出来自新路径
+- [x] 更新 `App.tsx` `QuickActionApp.tsx` `ServiceRestartApp.tsx` 导入路径
+
+**修改文件**:
+
+- 移动: `src/services/Logger.ts` → `src/utils/Logger.ts`
+- 移动: `src/services/UpdateService.ts` → `src/utils/UpdateService.ts`
+- 移动: `src/services/ApkDownloadService.ts` → `src/utils/ApkDownloadService.ts`
+- 移动: `src/services/ShortcutService.ts` → `src/utils/ShortcutService.ts`
+- 更新: `src/utils/index.ts` (添加 4 个服务导出)
+- 更新: `src/services/index.ts` (重导出来自 `../utils/`)
+- 更新: `App.tsx` `src/QuickActionApp.tsx` `src/ServiceRestartApp.tsx` (Logger 导入路径)
+
+**验证结果**:
+
+- ✅ type-check 通过
+- ✅ lint 通过
+
+**下一步计划**:
+
+- 阶段 3.2: 拆分错误类 → `src/errors/`

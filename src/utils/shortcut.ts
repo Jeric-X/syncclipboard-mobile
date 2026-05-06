@@ -5,7 +5,7 @@ import {
   isShortcutModuleAvailable,
 } from 'shortcut';
 
-export const ShortcutService = {
+export const shortcut = {
   addDownloadShortcut(): Promise<boolean> {
     if (Platform.OS !== 'android') {
       return Promise.reject(new Error('Home-screen shortcuts are only supported on Android'));

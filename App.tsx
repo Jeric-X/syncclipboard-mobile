@@ -8,7 +8,7 @@ import { ShareReceiveScreen } from './src/screens/ShareReceiveScreen';
 import { ProcessTextScreen } from './src/screens/ProcessTextScreen';
 import { SyncDirection } from './src/types/sync';
 import { useSettingsStore } from './src/stores';
-import { initLogger } from './src/services/Logger';
+import { initLogger } from './src/utils/Logger';
 import { useTheme } from './src/hooks/useTheme';
 import { setDynamicShortcuts } from 'shortcut';
 import { moveTaskToBack, setExcludeFromRecents } from 'native-util';

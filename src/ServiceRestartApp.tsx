@@ -8,7 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, BackHandler, StatusBar, Platform } from 'react-native';
 import { useSettingsStore } from './stores';
-import { initLogger } from './services/Logger';
+import { initLogger } from './utils/Logger';
 import { getBackgroundServiceManager } from './services/BackgroundServiceManager';
 
 interface ServiceRestartAppProps {

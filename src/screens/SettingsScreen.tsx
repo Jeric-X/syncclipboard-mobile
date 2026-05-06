@@ -29,7 +29,7 @@ import { ServerConfigModal, ServerListItem, MessageToast } from '@/components';
 import { ServerConfig } from '@/types/api';
 import { useMessageToast } from '@/hooks/useMessageToast';
 import {
-  ShortcutService,
+  shortcut,
   checkForUpdate,
   calculateLogSize,
   clearLogs,
@@ -44,7 +44,7 @@ import {
   cleanOldApkCache,
   type ReleaseAssetInfo,
   type ApkSource,
-} from '@/services';
+} from '@/utils';
 import { Plus, RefreshCw, Check, ChevronDown, ChevronUp } from 'react-native-feather';
 import { hasOverlayPermission, requestOverlayPermission } from 'clipboard-overlay';
 import {
@@ -1246,7 +1246,7 @@ export const SettingsScreen = () => {
   // 处理添加下载快捷方式
   const handleAddDownloadShortcut = async () => {
     try {
-      await ShortcutService.addDownloadShortcut();
+      await shortcut.addDownloadShortcut();
     } catch (error: unknown) {
       showMessage(error instanceof Error ? error.message : '添加失败', 'error');
     }
@@ -1255,7 +1255,7 @@ export const SettingsScreen = () => {
   // 处理添加上传快捷方式
   const handleAddUploadShortcut = async () => {
     try {
-      await ShortcutService.addUploadShortcut();
+      await shortcut.addUploadShortcut();
     } catch (error: unknown) {
       showMessage(error instanceof Error ? error.message : '添加失败', 'error');
     }

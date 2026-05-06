@@ -4,8 +4,8 @@
  */
 
 import { Paths, Directory, File } from 'expo-file-system';
-import type { ReleaseAssetInfo } from './UpdateService';
-import { parseVersion, compareVersions } from './UpdateService';
+import type { ReleaseAssetInfo } from './update';
+import { parseVersion, compareVersions } from './update';
 
 // APK 缓存目录：CLIPBOARD_TEMP_DIR/updates/v{version}/
 // 清除缓存时会被一并清除

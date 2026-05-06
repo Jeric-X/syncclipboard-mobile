@@ -83,3 +83,15 @@ export * from './fileStorage';
 
 // Export config utilities
 export * from './config';
+
+// Logger
+export * from './Logger';
+
+// Update checker
+export * from './update';
+
+// APK Download
+export * from './apkDownload';
+
+// Shortcut
+export { shortcut } from './shortcut';

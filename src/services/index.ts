@@ -24,42 +24,6 @@ export { SyncManager } from './SyncManager';
 // Remote Clipboard Sync Service
 export { getClipboardSyncService as getClipboardSyncService } from './ClipboardSyncService';
 
-// Shortcut Service
-export { ShortcutService } from './ShortcutService';
-
-// Update Service
-export { checkForUpdate, parseVersion, compareVersions, versionToStr } from './UpdateService';
-export type { UpdateCheckResult, ParsedVersion, ReleaseAssetInfo } from './UpdateService';
-
-// APK Download Service
-export {
-  getPreferredAbi,
-  findAssetForAbi,
-  checkApkCache,
-  downloadApk,
-  installApk,
-  getApkCachePath,
-  cleanOldApkCache,
-} from './ApkDownloadService';
-export type { ApkDownloadOptions, ApkDownloadProgress, ApkSource } from './ApkDownloadService';
-
-// Logger Service
-export {
-  initLogger,
-  getLogger,
-  setLogLevel,
-  getLogDirectory,
-  getLogFilePaths,
-  getLogFileUris,
-  calculateLogSize,
-  clearLogs,
-  cleanOldLogs,
-  log,
-  saveLogsToFile,
-  type LogConfig,
-  type LogLevel,
-} from './Logger';
-
 // Factory function to create appropriate API client
 import { SyncClipboardClient } from '../api/clients/SyncClipboardClient';
 import { WebDAVClient } from '../api/clients/WebDAVClient';

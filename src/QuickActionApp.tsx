@@ -12,7 +12,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { QuickTileLoadingScreen } from './screens/QuickTileLoadingScreen';
 import { SyncDirection } from './types/sync';
 import { useSettingsStore } from './stores';
-import { initLogger } from './services/Logger';
+import { initLogger } from './utils/Logger';
 import { getBackgroundServiceManager } from './services/BackgroundServiceManager';
 
 interface QuickActionAppProps {

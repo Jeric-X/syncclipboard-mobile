@@ -98,6 +98,25 @@
 6. **测试功能**: 测试相关功能是否正常
 7. **清理引用**: 移除所有循环引用和临时 import（见下方说明）
 8. **记录执行**: 在 `REFACTORING_CHECKLIST.md` 中记录执行情况
+9. **清理重导出**: 如果移动了文件，`services/index.ts` 中对应的重导出必须删除，调用方直接改从新位置导入（见下方说明）
+
+#### 清理 barrel 重导出
+
+**原则**: `services/index.ts` 只导出 `src/services/` 目录下真实存在的文件。文件移动到其他目录后：
+
+1. **删除** `services/index.ts` 中对该文件的重导出
+2. **更新** 所有调用方的 import 来源，指向新位置
+3. 新位置的模块通过各自目录的 `index.ts` 独立导出（如 `@/utils`、`@/storage`、`@/api`）
+
+**示例**:
+
+```typescript
+// ❌ 错误 - services/index.ts 重导出已移走的文件
+export { Logger } from '../utils/Logger'; // Logger 不在 services 目录
+
+// ✅ 正确 - 调用方直接从新位置导入
+import { Logger } from '@/utils';
+```
 
 #### 清理循环引用和临时 import
 
