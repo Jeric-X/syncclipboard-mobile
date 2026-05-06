@@ -81,15 +81,15 @@ npm run lint
 
 **任务清单**:
 
-- [ ] 移动 `APIClient.ts` → `api/clients/APIClient.ts`
-- [ ] 移动 `SyncClipboardClient.ts` → `api/clients/SyncClipboardClient.ts`
-- [ ] 移动 `WebDAVClient.ts` → `api/clients/WebDAVClient.ts`
-- [ ] 移动 `S3Client.ts` → `api/clients/S3Client.ts`
-- [ ] 移动 `AuthService.ts` → `api/AuthService.ts`（单文件，直接放在 api 目录）
-- [ ] 创建 `api/clients/index.ts` 导出文件
-- [ ] 创建 `api/index.ts` 导出文件
-- [ ] 更新 `services/index.ts` 中的导出
-- [ ] 使用 IDE 重构功能更新所有导入路径
+- [x] 移动 `APIClient.ts` → `api/clients/APIClient.ts`
+- [x] 移动 `SyncClipboardClient.ts` → `api/clients/SyncClipboardClient.ts`
+- [x] 移动 `WebDAVClient.ts` → `api/clients/WebDAVClient.ts`
+- [x] 移动 `S3Client.ts` → `api/clients/S3Client.ts`
+- [x] 移动 `AuthService.ts` → `api/AuthService.ts`（单文件，直接放在 api 目录）
+- [x] 创建 `api/clients/index.ts` 导出文件
+- [x] 创建 `api/index.ts` 导出文件
+- [x] 从 `services/index.ts` 中移除导出
+- [x] 更新所有导入路径
 
 **需要更新的文件**:
 
@@ -128,11 +128,8 @@ npm run lint
 - [ ] 移动 `ShortcutService.ts` → `utils/ShortcutService.ts`（单文件，直接放在 utils 目录）
 - [ ] 更新 `utils/index.ts` 导出
 - [ ] 更新 `services/index.ts` 中的导出
-- [ ] 使用 IDE 重构功能更新所有导入路径
-
-**需要更新的文件**:
-
-- 引用这些服务的所有文件
+- [ ] 更新所有导入路径
+- [ ] 移除循环引用和临时 import
 
 **验证命令**:
 
@@ -169,6 +166,7 @@ npm run lint
 - [ ] 从 `services/errors.ts` 提取内容到新文件
 - [ ] 更新所有导入路径
 - [ ] 删除或保留 `services/errors.ts`（作为兼容层）
+- [ ] 移除循环引用和临时 import
 
 **需要更新的文件**:
 
@@ -202,6 +200,7 @@ npm run lint
 - [ ] 删除 `utils/index.ts` 中的重复实现
 - [ ] 创建 `utils/format/index.ts` 导出文件
 - [ ] 更新所有导入路径
+- [ ] 移除循环引用和临时 import
 
 **统一实现**:
 
@@ -245,6 +244,7 @@ npm run lint
 - [ ] 删除 `utils/clipboard.ts` 中的重复实现
 - [ ] 删除 `utils/index.ts` 中的重复实现
 - [ ] 更新所有导入路径
+- [ ] 移除循环引用和临时 import
 
 **统一实现**:
 
@@ -297,6 +297,7 @@ npm run lint
 - [ ] 更新 `types/history.ts` 或创建 `constants/history.ts` 存放常量
 - [ ] 更新所有导入路径
 - [ ] 删除或保留原 `HistoryAPI.ts`
+- [ ] 移除循环引用和临时 import
 
 **详细步骤**:
 
@@ -529,6 +530,7 @@ npm run lint
 - [ ] 移动历史记录相关服务
 - [ ] 移动同步相关服务
 - [ ] 更新所有导入路径
+- [ ] 移除循环引用和临时 import
 - [ ] 全面功能测试
 
 **详细步骤**: 参见 REFACTORING_PLAN.md 阶段 5
@@ -635,3 +637,33 @@ npm run lint
 **下一步计划**:
 
 - 阶段 2.2: 移动 API 客户端 → `src/api/clients/`
+
+---
+
+### 执行记录 - 2026-05-06 (阶段 2.2)
+
+**执行阶段**: 阶段 2.2
+
+**完成任务**:
+
+- [x] 移动 APIClient.ts / SyncClipboardClient.ts / WebDAVClient.ts / S3Client.ts → `src/api/clients/`
+- [x] 移动 AuthService.ts → `src/api/AuthService.ts`
+- [x] 创建 `src/api/clients/index.ts` 和 `src/api/index.ts` 统一导出
+- [x] 从 `services/index.ts` 彻底移除 API 客户端导出
+- [x] 更新所有静态和动态导入路径（13 个文件）
+
+**修改文件**:
+
+- 新建: `src/api/clients/APIClient.ts` `SyncClipboardClient.ts` `WebDAVClient.ts` `S3Client.ts` `index.ts`
+- 新建: `src/api/AuthService.ts` `src/api/index.ts`
+- 删除: `src/services/APIClient.ts` `SyncClipboardClient.ts` `WebDAVClient.ts` `S3Client.ts` `AuthService.ts`
+- 更新导入: `services/SyncManager.ts` `services/ClipboardSyncService.ts` `services/HistorySyncService.ts` `tasks/SmsUploadTask.ts` `utils/remoteClipboard.ts`
+
+**验证结果**:
+
+- ✅ type-check 通过
+- ✅ lint 通过
+
+**下一步计划**:
+
+- 阶段 2.3: 移动工具服务

@@ -5,11 +5,11 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ToastAndroid, Platform } from 'react-native';
-import { SyncClipboardClient } from './SyncClipboardClient';
-import { ISyncClipboardAPI } from './APIClient';
-import { WebDAVClient } from './WebDAVClient';
-import { S3Client } from './S3Client';
-import { AuthService } from './AuthService';
+import { SyncClipboardClient } from '../api/clients/SyncClipboardClient';
+import { ISyncClipboardAPI } from '../api/clients/APIClient';
+import { WebDAVClient } from '../api/clients/WebDAVClient';
+import { S3Client } from '../api/clients/S3Client';
+import { AuthService } from '../api/AuthService';
 import { clipboardManager } from './ClipboardManager';
 import { clipboardMonitor } from './ClipboardMonitor';
 import { ConfigurationError } from './errors';

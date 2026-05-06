@@ -8,7 +8,7 @@ import {
   createDefaultClipboardItem,
   HistorySyncStatus,
 } from '../types/clipboard';
-import { ISyncClipboardAPI, type DownloadProgressCallback } from '../services/APIClient';
+import { ISyncClipboardAPI, type DownloadProgressCallback } from '../api/clients/APIClient';
 import { historyStorage } from '../storage/HistoryStorage';
 import { useHistoryStore } from '../stores/historyStore';
 import { prepareTempFilePath } from './fileStorage';

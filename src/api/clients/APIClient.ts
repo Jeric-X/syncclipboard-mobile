@@ -4,10 +4,10 @@
  */
 
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
-import { AuthService } from './AuthService';
-import { APP_NAME, APP_VERSION } from '../constants';
-import { ProfileDto, ServerInfo } from '../types/api';
-import type { ClipboardContent } from '../types/clipboard';
+import { AuthService } from '../AuthService';
+import { APP_NAME, APP_VERSION } from '@/constants';
+import { ProfileDto, ServerInfo } from '@/types/api';
+import type { ClipboardContent } from '@/types/clipboard';
 import { nativeDownloadFile, type ProgressInfo } from 'native-util';
 import {
   APIError,
@@ -16,7 +16,7 @@ import {
   ServerError,
   TimeoutError,
   ConfigurationError,
-} from './errors';
+} from '@/services/errors';
 
 /**
  * 扩展的错误接口，包含网络错误标志和原始错误

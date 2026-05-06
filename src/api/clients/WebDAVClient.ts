@@ -5,10 +5,10 @@
 
 import { nativeUploadFile, type ProgressInfo } from 'native-util';
 import { APIClient, ISyncClipboardAPI, PutContentOptions } from './APIClient';
-import { ProfileDto, ServerInfo } from '../types/api';
-import type { ClipboardContent } from '../types/clipboard';
-import { ValidationError, ServerError } from './errors';
-import { AuthService } from './AuthService';
+import { ProfileDto, ServerInfo } from '@/types/api';
+import type { ClipboardContent } from '@/types/clipboard';
+import { ValidationError, ServerError } from '@/services/errors';
+import { AuthService } from '../AuthService';
 
 /**
  * WebDAV 客户端配置
@@ -323,7 +323,7 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
         fileName: content.fileName,
       });
 
-      const { contentToProfileDto } = await import('../utils/clipboard');
+      const { contentToProfileDto } = await import('@/utils/clipboard');
       const profile = await contentToProfileDto(content, { signal: options?.signal });
 
       if (profile.hasData && profile.dataName && content.fileUri) {

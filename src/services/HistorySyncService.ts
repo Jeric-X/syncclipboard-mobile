@@ -1101,8 +1101,8 @@ export class HistorySyncService {
 
       if (serverChanged) {
         console.log('[HistorySyncService] Server changed, switching...');
-        const { SyncClipboardClient } = await import('./SyncClipboardClient');
-        const { AuthService } = await import('./AuthService');
+        const { SyncClipboardClient } = await import('../api/clients/SyncClipboardClient');
+        const { AuthService } = await import('../api/AuthService');
         const authService =
           serverConfig.username && serverConfig.password
             ? new AuthService(serverConfig.username, serverConfig.password)
@@ -1121,8 +1121,8 @@ export class HistorySyncService {
       return true;
     }
 
-    const { SyncClipboardClient } = await import('./SyncClipboardClient');
-    const { AuthService } = await import('./AuthService');
+    const { SyncClipboardClient } = await import('../api/clients/SyncClipboardClient');
+    const { AuthService } = await import('../api/AuthService');
     const authService =
       serverConfig.username && serverConfig.password
         ? new AuthService(serverConfig.username, serverConfig.password)

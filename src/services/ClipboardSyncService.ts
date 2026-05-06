@@ -23,7 +23,7 @@ import {
 import { SyncDirection, SyncResult } from '../types/sync';
 import type { ProfileChangedEvent } from 'signalr-client';
 import type { ServerConfig } from '../types/api';
-import type { ISyncClipboardAPI } from './APIClient';
+import type { ISyncClipboardAPI } from '../api/clients/APIClient';
 
 class ClipboardSyncService {
   private static instance: ClipboardSyncService | null = null;

@@ -1,3 +1,5 @@
-// API 客户端层 - clients 子目录
-// 包含: APIClient, SyncClipboardClient, WebDAVClient, S3Client
-// 此文件为占位文件，待阶段 2.2 移动文件后更新
+// API 客户端层导出
+export { APIClient, type APIClientConfig, type ISyncClipboardAPI } from './APIClient';
+export { SyncClipboardClient } from './SyncClipboardClient';
+export { WebDAVClient, type WebDAVConfig } from './WebDAVClient';
+export { S3Client, type S3ClientConfig } from './S3Client';

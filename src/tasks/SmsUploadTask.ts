@@ -9,11 +9,11 @@ import { Platform } from 'react-native';
 import { STORAGE_KEYS } from '../types/storage';
 import type { AppConfig } from '../types/storage';
 import type { ServerConfig, ProfileDto } from '../types/api';
-import { SyncClipboardClient } from '../services/SyncClipboardClient';
-import { WebDAVClient } from '../services/WebDAVClient';
-import { S3Client } from '../services/S3Client';
-import { AuthService } from '../services/AuthService';
-import type { ISyncClipboardAPI } from '../services/APIClient';
+import { SyncClipboardClient } from '../api/clients/SyncClipboardClient';
+import { WebDAVClient } from '../api/clients/WebDAVClient';
+import { S3Client } from '../api/clients/S3Client';
+import { AuthService } from '../api/AuthService';
+import type { ISyncClipboardAPI } from '../api/clients/APIClient';
 import { sha256 } from 'js-sha256';
 
 // 重试配置

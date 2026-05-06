@@ -14,10 +14,16 @@ import {
   type ProgressInfo,
 } from 'native-util';
 import { ISyncClipboardAPI, PutContentOptions, DownloadProgressCallback } from './APIClient';
-import { ProfileDto, ServerInfo } from '../types/api';
-import type { ClipboardContent } from '../types/clipboard';
-import { ValidationError, ServerError, NetworkError, TimeoutError, APIError } from './errors';
-import { APP_NAME, APP_VERSION } from '../constants';
+import { ProfileDto, ServerInfo } from '@/types/api';
+import type { ClipboardContent } from '@/types/clipboard';
+import {
+  ValidationError,
+  ServerError,
+  NetworkError,
+  TimeoutError,
+  APIError,
+} from '@/services/errors';
+import { APP_NAME, APP_VERSION } from '@/constants';
 
 /**
  * S3 客户端配置
@@ -218,7 +224,7 @@ export class S3Client implements ISyncClipboardAPI {
         fileName: content.fileName,
       });
 
-      const { contentToProfileDto } = await import('../utils/clipboard');
+      const { contentToProfileDto } = await import('@/utils/clipboard');
       const profile = await contentToProfileDto(content, { signal: options?.signal });
 
       // 确保 file/ 目录标记存在

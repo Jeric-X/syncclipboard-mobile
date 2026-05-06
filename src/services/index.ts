@@ -6,15 +6,6 @@
 // Error classes
 export * from './errors';
 
-// Authentication
-export { AuthService, type Credentials } from './AuthService';
-
-// API Clients
-export { APIClient, type APIClientConfig, type ISyncClipboardAPI } from './APIClient';
-export { SyncClipboardClient } from './SyncClipboardClient';
-export { WebDAVClient, type WebDAVConfig } from './WebDAVClient';
-export { S3Client, type S3ClientConfig } from './S3Client';
-
 // Clipboard Services
 export { ClipboardManager, clipboardManager } from './ClipboardManager';
 export { ClipboardMonitor, clipboardMonitor } from './ClipboardMonitor';
@@ -70,13 +61,13 @@ export {
 } from './Logger';
 
 // Factory function to create appropriate API client
-import { SyncClipboardClient } from './SyncClipboardClient';
-import { WebDAVClient } from './WebDAVClient';
-import { S3Client } from './S3Client';
-import { AuthService } from './AuthService';
+import { SyncClipboardClient } from '../api/clients/SyncClipboardClient';
+import { WebDAVClient } from '../api/clients/WebDAVClient';
+import { S3Client } from '../api/clients/S3Client';
+import { AuthService } from '../api/AuthService';
 import { ServerConfig } from '../types/api';
 import { ConfigurationError } from './errors';
-import { ISyncClipboardAPI } from './APIClient';
+import { ISyncClipboardAPI } from '../api/clients/APIClient';
 
 /**
  * 创建 API 客户端工厂函数

@@ -10,10 +10,10 @@ import {
   ProgressInfo,
 } from 'native-util';
 import { APIClient, APIClientConfig, PutContentOptions, ISyncClipboardAPI } from './APIClient';
-import { ProfileDto, ServerInfo } from '../types/api';
-import type { ClipboardContent } from '../types/clipboard';
-import { ValidationError, ServerError } from './errors';
-import { isTextInvalid } from '../utils/index';
+import { ProfileDto, ServerInfo } from '@/types/api';
+import type { ClipboardContent } from '@/types/clipboard';
+import { ValidationError, ServerError } from '@/services/errors';
+import { isTextInvalid } from '@/utils/index';
 import {
   HistoryRecordDto,
   HistoryRecordUpdateDto,
@@ -22,7 +22,7 @@ import {
   SyncConflictError,
   RecordNotFoundError,
   IHistoryAPI,
-} from './HistoryAPI';
+} from '@/services/HistoryAPI';
 
 /**
  * SyncClipboard API 客户端
@@ -142,7 +142,7 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
       fileName: content.fileName,
     });
 
-    const { contentToProfileDto } = await import('../utils/clipboard');
+    const { contentToProfileDto } = await import('@/utils/clipboard');
     const profile = await contentToProfileDto(content, { signal });
 
     if (!profile.hash) {
