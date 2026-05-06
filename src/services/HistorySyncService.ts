@@ -12,7 +12,7 @@ import {
   RecordNotFoundError,
   ProfileTypeFilter,
 } from './HistoryAPI';
-import { HistoryStorage } from './HistoryStorage';
+import { HistoryStorage } from '../storage/HistoryStorage';
 import { ClipboardItem, HistorySyncStatus } from '@/types/clipboard';
 import { ServerConfig } from '@/types/api';
 import { getSignalRClient, type HistoryChangedEvent } from 'signalr-client';
@@ -57,7 +57,7 @@ export class HistorySyncService {
    * 检查历史记录同步是否启用
    */
   private async isHistorySyncEnabled(): Promise<boolean> {
-    const { configStorage } = await import('./ConfigStorage');
+    const { configStorage } = await import('../storage/ConfigStorage');
     const config = await configStorage.getConfig();
     return config?.enableHistorySync ?? false;
   }

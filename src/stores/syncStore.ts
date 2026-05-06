@@ -14,7 +14,7 @@ import {
   SyncEventType,
 } from '../types/sync';
 import { SyncManager } from '../services';
-import { configStorage } from '../services';
+import { configStorage } from '../storage';
 
 /**
  * 同步状态接口

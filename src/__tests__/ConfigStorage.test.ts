@@ -1,4 +1,4 @@
-import { ConfigStorage } from '../services/ConfigStorage';
+import { ConfigStorage } from '../storage/ConfigStorage';
 import { AppConfig, DEFAULT_APP_CONFIG, STORAGE_KEYS } from '../types/storage';
 import { ServerConfig } from '../types/api';
 import { SyncMode } from '../types/sync';

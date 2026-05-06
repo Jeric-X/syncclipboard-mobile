@@ -29,7 +29,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useHistoryStore } from '@/stores/historyStore';
 import { useClipboardStore } from '@/stores/clipboardStore';
 import { useSettingsStore } from '@/stores';
-import { historyStorage } from '@/services';
+import { historyStorage } from '@/storage';
 import { useTransferQueueStore } from '@/stores/transferQueueStore';
 import { useHistoryDisplaySettings } from '@/hooks/useHistoryDisplaySettings';
 import { ClipboardItem, ClipboardContent, createDefaultClipboardItem } from '@/types/clipboard';
@@ -606,7 +606,7 @@ export function HistoryScreen() {
             setIsReorganizing(true);
             console.log('[HistoryScreen] Starting history reorganization...');
 
-            const { HistoryStorage } = await import('@/services/HistoryStorage');
+            const { HistoryStorage } = await import('@/storage/HistoryStorage');
             const { getHistorySyncService } = await import('@/services/HistorySyncService');
             const historyStorage = HistoryStorage.getInstance();
             const syncService = getHistorySyncService();

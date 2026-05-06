@@ -9,7 +9,7 @@ import {
   HistorySyncStatus,
 } from '../types/clipboard';
 import { ISyncClipboardAPI, type DownloadProgressCallback } from '../services/APIClient';
-import { historyStorage } from '../services/HistoryStorage';
+import { historyStorage } from '../storage/HistoryStorage';
 import { useHistoryStore } from '../stores/historyStore';
 import { prepareTempFilePath } from './fileStorage';
 import { calculateFileProfileHash } from './hash';

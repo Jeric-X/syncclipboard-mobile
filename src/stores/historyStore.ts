@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import { ClipboardItem } from '../types/clipboard';
 import { HistoryFilter, HistorySort } from '../types/storage';
-import { historyStorage } from '../services';
+import { historyStorage } from '../storage';
 
 /**
  * 历史记录状态接口

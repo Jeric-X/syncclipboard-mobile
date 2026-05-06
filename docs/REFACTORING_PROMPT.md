@@ -68,10 +68,7 @@
 ### 第一步：了解当前状态
 
 1. 阅读三份文档，理解重构目标
-2. 检查当前目录结构：
-   ```bash
-   ls -la src/services/
-   ```
+2. 检查当前目录结构
 3. 确认没有未提交的代码更改
 
 ### 第二步：选择执行阶段
@@ -115,6 +112,15 @@ npm run lint
 # 如果有测试，运行测试
 npm run test
 ```
+
+每次修改文档（.md 文件）后必须运行：
+
+```bash
+# 格式化文档
+npm run format-docs
+```
+
+> **注意**: 每次更新 `REFACTORING_CHECKLIST.md`、`REFACTORING_PLAN.md`、`README.md` 等文档后，都需要执行 `npm run format-docs` 保持格式一致。
 
 ---
 

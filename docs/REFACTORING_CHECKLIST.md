@@ -1,5 +1,7 @@
 # 重构执行清单
 
+> **重要**: 每次修改本文档或其他 `.md` 文档后，请运行 `npm run format-docs` 保持格式一致。
+
 ## ✅ 可立即执行的任务（低风险）
 
 ### 阶段 1: 创建新目录结构
@@ -8,13 +10,13 @@
 
 **任务清单**:
 
-- [ ] 创建 `src/api/` 目录
-- [ ] 创建 `src/api/clients/` 目录
-- [ ] 创建 `src/api/history/` 目录
-- [ ] 创建 `src/storage/` 目录
-- [ ] 创建 `src/errors/` 目录
-- [ ] 创建 `src/utils/format/` 目录
-- [ ] 创建 `src/utils/clipboard/` 目录
+- [x] 创建 `src/api/` 目录
+- [x] 创建 `src/api/clients/` 目录
+- [x] 创建 `src/api/history/` 目录
+- [x] 创建 `src/storage/` 目录
+- [x] 创建 `src/errors/` 目录
+- [x] 创建 `src/utils/format/` 目录
+- [x] 创建 `src/utils/clipboard/` 目录
 
 **设计原则**: 单文件模块不创建子目录，直接放在父目录下
 
@@ -35,13 +37,13 @@ npm run lint
 
 **任务清单**:
 
-- [ ] 移动 `ConfigStorage.ts` → `storage/ConfigStorage.ts`
-- [ ] 移动 `HistoryStorage.ts` → `storage/HistoryStorage.ts`
-- [ ] 移动 `SecureStorage.ts` → `storage/SecureStorage.ts`
-- [ ] 移动 `CacheManager.ts` → `storage/CacheManager.ts`
-- [ ] 创建 `storage/index.ts` 导出文件
-- [ ] 更新 `services/index.ts` 中的导出
-- [ ] 使用 IDE 重构功能更新所有导入路径
+- [x] 移动 `ConfigStorage.ts` → `storage/ConfigStorage.ts`
+- [x] 移动 `HistoryStorage.ts` → `storage/HistoryStorage.ts`
+- [x] 移动 `SecureStorage.ts` → `storage/SecureStorage.ts`
+- [x] 移动 `CacheManager.ts` → `storage/CacheManager.ts`
+- [x] 创建 `storage/index.ts` 导出文件
+- [x] 更新 `services/index.ts` 中的导出（已移除存储服务导出）
+- [x] 更新所有导入路径
 
 **需要更新的文件**:
 
@@ -597,4 +599,39 @@ npm run lint
 
 ---
 
-**最后更新**: 2026-05-05
+**最后更新**: 2026-05-06
+
+---
+
+## 📋 执行记录
+
+### 执行记录 - 2026-05-06
+
+**执行阶段**: 阶段 1 + 阶段 2.1
+
+**完成任务**:
+
+- [x] 创建 `src/api/` `src/api/clients/` `src/api/history/` 目录及占位 index.ts
+- [x] 创建 `src/storage/` 目录及 index.ts
+- [x] 创建 `src/errors/` 目录及占位 index.ts
+- [x] 创建 `src/utils/format/` `src/utils/clipboard/` 目录及占位 index.ts
+- [x] 移动 ConfigStorage.ts / HistoryStorage.ts / SecureStorage.ts / CacheManager.ts → `src/storage/`
+- [x] 更新 `src/storage/index.ts` 统一导出
+- [x] 从 `services/index.ts` 移除存储服务导出
+- [x] 更新所有静态和动态导入路径（11 个文件）
+
+**修改文件**:
+
+- 新建: `src/storage/ConfigStorage.ts` `src/storage/HistoryStorage.ts` `src/storage/SecureStorage.ts` `src/storage/CacheManager.ts` `src/storage/index.ts`
+- 新建占位: `src/api/index.ts` `src/api/clients/index.ts` `src/api/history/index.ts` `src/errors/index.ts` `src/utils/format/index.ts` `src/utils/clipboard/index.ts`
+- 删除: `src/services/ConfigStorage.ts` `src/services/HistoryStorage.ts` `src/services/SecureStorage.ts` `src/services/CacheManager.ts`
+- 更新导入: `services/ClipboardManager.ts` `services/HistorySyncService.ts` `services/HistoryTransferQueue.ts` `services/index.ts` `utils/remoteClipboard.ts` `stores/settingsStore.ts` `stores/syncStore.ts` `stores/historyStore.ts` `screens/HistoryScreen.tsx` `screens/SettingsScreen.tsx` `__tests__/HistoryStorage.sort.test.ts` `__tests__/ConfigStorage.test.ts`
+
+**验证结果**:
+
+- ✅ type-check 通过
+- ✅ lint 通过
+
+**下一步计划**:
+
+- 阶段 2.2: 移动 API 客户端 → `src/api/clients/`

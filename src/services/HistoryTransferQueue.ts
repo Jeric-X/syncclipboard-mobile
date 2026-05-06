@@ -4,7 +4,7 @@
  */
 
 import { IHistoryAPI, RecordNotFoundError } from './HistoryAPI';
-import { HistoryStorage } from './HistoryStorage';
+import { HistoryStorage } from '../storage/HistoryStorage';
 import { HistorySyncStatus } from '@/types/clipboard';
 import { getHistoryFileDir } from '@/utils/fileStorage';
 import { File } from 'expo-file-system';

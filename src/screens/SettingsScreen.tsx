@@ -741,7 +741,7 @@ export const SettingsScreen = () => {
       showMessage(`已设置历史记录最大保留条数为 ${maxItems}条`, 'success');
 
       // 更新历史记录存储的最大大小
-      const { historyStorage } = await import('@/services');
+      const { historyStorage } = await import('@/storage');
       historyStorage.setMaxHistorySize(maxItems);
     } catch (error: unknown) {
       setMaxHistoryItemsInput((config?.maxHistoryItems ?? 1000).toString());

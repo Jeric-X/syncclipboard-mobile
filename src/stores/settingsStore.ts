@@ -7,7 +7,7 @@ import { create } from 'zustand';
 import { AppConfig } from '../types/storage';
 import { ServerConfig } from '../types/api';
 import { SyncMode, ConflictResolution } from '../types/sync';
-import { configStorage } from '../services/ConfigStorage';
+import { configStorage } from '../storage/ConfigStorage';
 
 /**
  * 设置状态接口

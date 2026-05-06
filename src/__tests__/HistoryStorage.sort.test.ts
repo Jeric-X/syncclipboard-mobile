@@ -3,7 +3,7 @@
  * 验证历史记录插入、更新后排序行为符合预期
  */
 
-import { HistoryStorage } from '../services/HistoryStorage';
+import { HistoryStorage } from '../storage/HistoryStorage';
 import { ClipboardItem, HistorySyncStatus } from '../types/clipboard';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
