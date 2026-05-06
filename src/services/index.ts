@@ -3,9 +3,6 @@
  * Exports all API clients and services
  */
 
-// Error classes
-export * from './errors';
-
 // Clipboard Services
 export { ClipboardManager, clipboardManager } from './ClipboardManager';
 export { ClipboardMonitor, clipboardMonitor } from './ClipboardMonitor';
@@ -30,7 +27,7 @@ import { WebDAVClient } from '../api/clients/WebDAVClient';
 import { S3Client } from '../api/clients/S3Client';
 import { AuthService } from '../api/AuthService';
 import { ServerConfig } from '../types/api';
-import { ConfigurationError } from './errors';
+import { ConfigurationError } from '../errors';
 import { ISyncClipboardAPI } from '../api/clients/APIClient';
 
 /**

@@ -155,18 +155,18 @@ npm run lint
 
 **任务清单**:
 
-- [ ] 创建 `errors/APIError.ts`
-- [ ] 创建 `errors/AuthenticationError.ts`
-- [ ] 创建 `errors/NetworkError.ts`
-- [ ] 创建 `errors/ServerError.ts`
-- [ ] 创建 `errors/ValidationError.ts`
-- [ ] 创建 `errors/TimeoutError.ts`
-- [ ] 创建 `errors/ConfigurationError.ts`
-- [ ] 创建 `errors/index.ts` 导出文件
-- [ ] 从 `services/errors.ts` 提取内容到新文件
-- [ ] 更新所有导入路径
-- [ ] 删除或保留 `services/errors.ts`（作为兼容层）
-- [ ] 移除循环引用和临时 import
+- [x] 创建 `errors/APIError.ts`
+- [x] 创建 `errors/AuthenticationError.ts`
+- [x] 创建 `errors/NetworkError.ts`
+- [x] 创建 `errors/ServerError.ts`
+- [x] 创建 `errors/ValidationError.ts`
+- [x] 创建 `errors/TimeoutError.ts`
+- [x] 创建 `errors/ConfigurationError.ts`
+- [x] 创建 `errors/index.ts` 导出文件
+- [x] 从 `services/errors.ts` 提取内容到新文件
+- [x] 更新所有导入路径
+- [x] 删除 `services/errors.ts`
+- [x] 移除循环引用和临时 import
 
 **需要更新的文件**:
 
@@ -702,3 +702,33 @@ npm run lint
 **下一步计划**:
 
 - 阶段 3.2: 拆分错误类 → `src/errors/`
+
+---
+
+### 执行记录 - 2026-05-06 (阶段 3.2)
+
+**执行阶段**: 阶段 3.2
+
+**完成任务**:
+
+- [x] 拆分 `services/errors.ts` 为 7 个独立文件到 `src/errors/`
+- [x] 创建 `src/errors/index.ts` 统一导出
+- [x] 从 `services/index.ts` 移除 `export * from './errors'`
+- [x] 更新 7 个消费者文件的导入路径 → `@/errors`
+- [x] 删除 `src/services/errors.ts`
+
+**修改文件**:
+
+- 新建: `src/errors/APIError.ts` `AuthenticationError.ts` `NetworkError.ts` `ServerError.ts` `TimeoutError.ts` `ConfigurationError.ts` `ValidationError.ts` `index.ts`
+- 删除: `src/services/errors.ts`
+- 更新导入: `api/clients/APIClient.ts` `S3Client.ts` `WebDAVClient.ts` `SyncClipboardClient.ts` `api/AuthService.ts` `services/SyncManager.ts` `__tests__/errors.test.ts`
+- 更新: `src/services/index.ts` (移除 errors 重导出)
+
+**验证结果**:
+
+- ✅ type-check 通过
+- ✅ lint 通过
+
+**下一步计划**:
+
+- 阶段 4: 统一重复函数 (formatFileSize / truncateText)

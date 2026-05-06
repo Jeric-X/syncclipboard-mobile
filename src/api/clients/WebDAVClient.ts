@@ -7,7 +7,7 @@ import { nativeUploadFile, type ProgressInfo } from 'native-util';
 import { APIClient, ISyncClipboardAPI, PutContentOptions } from './APIClient';
 import { ProfileDto, ServerInfo } from '@/types/api';
 import type { ClipboardContent } from '@/types/clipboard';
-import { ValidationError, ServerError } from '@/services/errors';
+import { ValidationError, ServerError } from '@/errors';
 import { AuthService } from '../AuthService';
 
 /**

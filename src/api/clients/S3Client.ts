@@ -16,13 +16,7 @@ import {
 import { ISyncClipboardAPI, PutContentOptions, DownloadProgressCallback } from './APIClient';
 import { ProfileDto, ServerInfo } from '@/types/api';
 import type { ClipboardContent } from '@/types/clipboard';
-import {
-  ValidationError,
-  ServerError,
-  NetworkError,
-  TimeoutError,
-  APIError,
-} from '@/services/errors';
+import { ValidationError, ServerError, NetworkError, TimeoutError, APIError } from '@/errors';
 import { APP_NAME, APP_VERSION } from '@/constants';
 
 /**

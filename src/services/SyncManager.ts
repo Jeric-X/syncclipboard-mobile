@@ -12,7 +12,7 @@ import { S3Client } from '../api/clients/S3Client';
 import { AuthService } from '../api/AuthService';
 import { clipboardManager } from './ClipboardManager';
 import { clipboardMonitor } from './ClipboardMonitor';
-import { ConfigurationError } from './errors';
+import { ConfigurationError } from '@/errors';
 import { ServerConfig, ProfileDto } from '../types/api';
 import { compareHash } from '../utils/hash';
 import { isTextInvalid } from '../utils/index';

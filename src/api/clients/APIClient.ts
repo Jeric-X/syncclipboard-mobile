@@ -16,7 +16,7 @@ import {
   ServerError,
   TimeoutError,
   ConfigurationError,
-} from '@/services/errors';
+} from '@/errors';
 
 /**
  * 扩展的错误接口，包含网络错误标志和原始错误

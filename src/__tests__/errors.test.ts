@@ -6,7 +6,7 @@ import {
   TimeoutError,
   ConfigurationError,
   ValidationError,
-} from '../services/errors';
+} from '../errors';
 
 describe('Error Classes', () => {
   describe('APIError', () => {

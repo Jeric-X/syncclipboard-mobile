@@ -4,7 +4,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ConfigurationError } from '@/services/errors';
+import { ConfigurationError } from '@/errors';
 
 const STORAGE_KEY = '@syncclipboard:credentials';
 
