@@ -775,7 +775,7 @@ export function HistoryScreen() {
       }
 
       const { getHistoryTransferQueue } = await import('@/services/HistoryTransferQueue');
-      const { getProfileId } = await import('@/services/HistoryAPI');
+      const { getProfileId } = await import('@/utils');
 
       const profileId = getProfileId(item.type, item.profileHash);
       console.log(`[HistoryScreen] Generated profileId: ${profileId}`);
@@ -813,7 +813,7 @@ export function HistoryScreen() {
       }
 
       const { getHistoryTransferQueue } = await import('@/services/HistoryTransferQueue');
-      const { getProfileId } = await import('@/services/HistoryAPI');
+      const { getProfileId } = await import('@/utils');
 
       const profileId = getProfileId(item.type, item.profileHash);
       console.log(`[HistoryScreen] Generated profileId: ${profileId}`);

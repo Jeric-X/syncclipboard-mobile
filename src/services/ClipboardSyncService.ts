@@ -690,7 +690,7 @@ class ClipboardSyncService {
     if (this.transferQueueHandler) return;
     const { getHistoryTransferQueue } = require('./HistoryTransferQueue');
     const { useClipboardSyncServiceStore } = require('../stores/ClipboardSyncServiceStore');
-    const { getProfileId } = require('./HistoryAPI');
+    const { getProfileId } = require('@/utils');
     const queue = getHistoryTransferQueue();
 
     const handler = async (task: import('./HistoryTransferQueue').TransferTask) => {
@@ -1062,7 +1062,7 @@ class ClipboardSyncService {
   ): Promise<void> {
     if (!remoteContent.profileHash) return;
 
-    const { getProfileId } = require('./HistoryAPI');
+    const { getProfileId } = require('@/utils');
     const { createDefaultClipboardItem } = require('../types/clipboard');
     const { HistorySyncStatus } = require('../types/clipboard');
     const { getHistoryTransferQueue } = require('./HistoryTransferQueue');

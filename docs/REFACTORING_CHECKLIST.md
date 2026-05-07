@@ -369,15 +369,15 @@ npm run lint
 
 **任务清单**:
 
-- [ ] 创建 `types/history.ts` 并提取类型定义
-- [ ] 创建 `errors/HistoryErrors.ts` 并提取错误类
-- [ ] 创建 `utils/clipboard/dtoConvert.ts` 并提取 DTO 转换函数
-- [ ] 创建 `utils/clipboard/profileId.ts` 并提取 ProfileId 工具函数
-- [ ] 创建 `api/history/IHistoryAPI.ts` 并提取接口定义
-- [ ] 更新 `types/history.ts` 或创建 `constants/history.ts` 存放常量
-- [ ] 更新所有导入路径
-- [ ] 删除或保留原 `HistoryAPI.ts`
-- [ ] 移除循环引用和临时 import
+- [x] 创建 `types/history.ts` 并提取类型定义
+- [x] 创建 `errors/HistoryErrors.ts` 并提取错误类
+- [x] 创建 `utils/clipboard/dtoConvert.ts` 并提取 DTO 转换函数
+- [x] 创建 `utils/clipboard/profileId.ts` 并提取 ProfileId 工具函数
+- [x] 创建 `api/history/IHistoryAPI.ts` 并提取接口定义
+- [x] 更新 `types/history.ts` 或创建 `constants/history.ts` 存放常量
+- [x] 更新所有导入路径
+- [x] 保留原 `HistoryAPI.ts` 作为兼容层
+- [x] 移除循环引用和临时 import
 
 **详细步骤**:
 
@@ -587,6 +587,122 @@ npm run lint
 - [ ] 错误处理
 
 **风险**: 中等风险，需要仔细处理依赖关系
+
+---
+
+### 执行记录 - 2026-05-07 (第三次)
+
+**执行阶段**: 阶段 3.1
+**任务名称**: 拆分 HistoryAPI.ts
+**执行时间**: 2026-05-07
+
+**完成任务**:
+
+- [x] 创建 `types/history.ts` 并提取类型定义（HistoryRecordDto, HistoryQueryParams 等）
+- [x] 创建 `errors/HistoryErrors.ts` 并提取错误类（SyncConflictError, RecordNotFoundError）
+- [x] 创建 `utils/clipboard/dtoConvert.ts` 并提取 DTO 转换函数
+- [x] 创建 `utils/clipboard/profileId.ts` 并提取 ProfileId 工具函数
+- [x] 创建 `api/history/IHistoryAPI.ts` 并提取接口定义
+- [x] 更新各个 index.ts 的导出（types, errors, utils, api）
+- [x] 更新所有导入路径（5 个文件）
+- [x] 保留原 `HistoryAPI.ts` 作为兼容层
+
+**修改文件**:
+
+新建文件:
+
+- `src/types/history.ts`: 历史记录类型定义
+- `src/errors/HistoryErrors.ts`: 历史记录错误类
+- `src/utils/clipboard/dtoConvert.ts`: DTO 转换函数
+- `src/utils/clipboard/profileId.ts`: ProfileId 工具函数
+- `src/api/history/IHistoryAPI.ts`: 历史记录 API 接口
+
+更新文件:
+
+- `src/types/index.ts`: 添加 history 类型导出
+- `src/errors/index.ts`: 添加 HistoryErrors 导出
+- `src/utils/clipboard/index.ts`: 更新导出
+- `src/utils/index.ts`: 添加 dtoConvert 和 profileId 导出
+- `src/api/history/index.ts`: 更新导出
+- `src/services/HistoryAPI.ts`: 转换为兼容层，重导出所有内容
+- `src/api/clients/SyncClipboardClient.ts`: 更新导入路径
+- `src/services/HistorySyncService.ts`: 更新导入路径
+- `src/services/HistoryTransferQueue.ts`: 更新导入路径
+- `src/components/HistoryListItem.tsx`: 更新导入路径
+
+**验证结果**:
+
+- ✅ type-check 通过
+- ✅ lint 通过
+- ✅ test 通过（79 tests passed）
+
+**遇到的问题**:
+
+1. 问题: `utils/clipboard.ts` 文件与 `utils/clipboard/` 目录冲突
+
+   - 解决方案: 在 `utils/index.ts` 中显式导出 `clipboard/` 目录下的工具函数
+
+2. 问题: 动态导入需要更新路径
+
+   - 解决方案: 将所有动态导入从 `'./HistoryAPI'` 或 `'@/utils/clipboard'` 改为 `'@/utils'`
+
+3. 问题: Prettier 和 ESLint 格式化冲突
+   - 解决方案: 使用 `eslint --fix` 自动修复格式问题
+
+**优化成果**:
+
+- ✅ HistoryAPI.ts 拆分为多个职责单一的文件
+- ✅ 类型、错误、工具函数、接口各司其职
+- ✅ 保留了兼容层，不影响现有代码
+- ✅ 所有验证通过
+
+**下一步计划**:
+
+- 阶段 5: 重组业务服务（高风险，需要全面测试）
+
+---
+
+### 执行记录 - 2026-05-07 (第四次)
+
+**执行阶段**: 阶段 3.1 补充
+**任务名称**: 移除 HistoryAPI.ts 兼容层
+**执行时间**: 2026-05-07
+
+**完成任务**:
+
+- [x] 查找所有引用 services/HistoryAPI 的文件
+- [x] 更新所有导入路径（3 个文件，4 处导入）
+- [x] 删除 services/HistoryAPI.ts 文件
+- [x] 运行验证命令
+
+**修改文件**:
+
+- `src/services/HistoryAPI.ts`: 已删除
+- `src/screens/HistoryScreen.tsx`: 更新动态导入路径（2 处）
+- `src/services/HistoryTransferQueue.ts`: 更新动态导入路径（2 处）
+
+**验证结果**:
+
+- ✅ type-check 通过
+- ✅ lint 通过
+- ✅ test 通过（79 tests passed）
+
+**优化成果**:
+
+- ✅ 移除了不必要的兼容层
+- ✅ 所有模块直接引用原始文件
+- ✅ 代码结构更清晰
+- ✅ 所有验证通过
+- ✅ APK 构建成功
+
+**遇到的问题**:
+
+1. 问题: `ClipboardSyncService.ts` 中还有 2 处引用 `./HistoryAPI`
+
+   - 解决方案: 更新为 `@/utils`
+
+2. 问题: Android 构建缓存导致构建失败
+   - 解决方案: 删除 `android/app/build`、`android/.gradle`、`android/app/.cxx` 目录
 
 ---
 

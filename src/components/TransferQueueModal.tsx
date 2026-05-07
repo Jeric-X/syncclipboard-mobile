@@ -98,7 +98,9 @@ export const TransferQueueModal: React.FC<TransferQueueModalProps> = ({ visible,
                 <Text style={[styles.progressText, { color: theme.colors.textSecondary }]}>
                   {Math.round(task.progress)}%
                   {task.totalBytes
-                    ? ` (${formatFileSize(task.bytesTransferred)}/${formatFileSize(task.totalBytes)})`
+                    ? ` (${formatFileSize(task.bytesTransferred)}/${formatFileSize(
+                        task.totalBytes
+                      )})`
                     : ''}
                 </Text>
               )}

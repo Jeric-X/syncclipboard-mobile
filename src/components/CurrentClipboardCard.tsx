@@ -480,7 +480,9 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
               ]}
             >
               {downloading && downloadProgress
-                ? `${(downloadProgress.progress * 100).toFixed(0)}%  ${formatFileSize(downloadProgress.bytesTransferred)} / ${formatFileSize(downloadProgress.totalBytes)}`
+                ? `${(downloadProgress.progress * 100).toFixed(0)}%  ${formatFileSize(
+                    downloadProgress.bytesTransferred
+                  )} / ${formatFileSize(downloadProgress.totalBytes)}`
                 : downloading
                   ? '取消'
                   : '下载'}

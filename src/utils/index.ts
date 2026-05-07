@@ -11,6 +11,10 @@ export * from './hash';
 // Export clipboard utilities
 export * from './clipboard';
 
+// Export clipboard utility functions (dtoConvert, profileId)
+export { dtoToClipboardItem, clipboardItemToDto } from './clipboard/dtoConvert';
+export { getProfileId, parseProfileId } from './clipboard/profileId';
+
 // Export file storage utilities
 export * from './fileStorage';
 

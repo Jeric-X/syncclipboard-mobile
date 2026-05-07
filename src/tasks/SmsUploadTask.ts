@@ -137,7 +137,9 @@ async function uploadWithRetry(
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_DELAYS[attempt] ?? RETRY_DELAYS[RETRY_DELAYS.length - 1];
         console.warn(
-          `[SmsUploadTask] Upload failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${error}, retrying in ${delay}ms`
+          `[SmsUploadTask] Upload failed (attempt ${attempt + 1}/${
+            MAX_RETRIES + 1
+          }): ${error}, retrying in ${delay}ms`
         );
         await updateNotification(
           `验证码上传重试中: ${code}\n第${attempt + 1}次失败，${Math.round(delay / 1000)}秒后重试…`

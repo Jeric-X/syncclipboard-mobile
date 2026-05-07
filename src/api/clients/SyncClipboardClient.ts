@@ -19,10 +19,9 @@ import {
   HistoryRecordUpdateDto,
   HistoryQueryParams,
   HistoryStatisticsDto,
-  SyncConflictError,
-  RecordNotFoundError,
-  IHistoryAPI,
-} from '@/services/HistoryAPI';
+} from '@/types/history';
+import { SyncConflictError, RecordNotFoundError } from '@/errors';
+import type { IHistoryAPI } from '@/api/history';
 
 /**
  * SyncClipboard API 客户端
@@ -404,7 +403,9 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
       throw new ValidationError('Destination URI is required');
     }
 
-    const url = `${this.baseURL}${SyncClipboardClient.HISTORY_API_PREFIX}/${encodeURIComponent(profileId)}/data`;
+    const url = `${this.baseURL}${SyncClipboardClient.HISTORY_API_PREFIX}/${encodeURIComponent(
+      profileId
+    )}/data`;
 
     try {
       const headers = await this.getHeaders();

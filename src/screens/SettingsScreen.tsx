@@ -1071,7 +1071,9 @@ export const SettingsScreen = () => {
 
     const asset = findAssetForAbi(assets, preferredAbi as Parameters<typeof findAssetForAbi>[1]);
     console.log(
-      `[UpdateDownload] source=${source} version=${version} assets=${assets.map((a) => a.name).join(',')} selectedAsset=${asset?.name ?? 'none'}`
+      `[UpdateDownload] source=${source} version=${version} assets=${assets
+        .map((a) => a.name)
+        .join(',')} selectedAsset=${asset?.name ?? 'none'}`
     );
     if (!asset) {
       showMessage('找不到适合当前设备的 APK', 'error');

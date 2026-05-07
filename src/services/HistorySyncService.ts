@@ -3,15 +3,10 @@
  * 历史记录同步服务 - 核心同步逻辑
  */
 
-import {
-  IHistoryAPI,
-  HistoryRecordDto,
-  HistoryRecordUpdateDto,
-  dtoToClipboardItem,
-  SyncConflictError,
-  RecordNotFoundError,
-  ProfileTypeFilter,
-} from './HistoryAPI';
+import type { IHistoryAPI } from '@/api/history';
+import { HistoryRecordDto, HistoryRecordUpdateDto, ProfileTypeFilter } from '@/types/history';
+import { dtoToClipboardItem } from '@/utils';
+import { SyncConflictError, RecordNotFoundError } from '@/errors';
 import { HistoryStorage } from '../storage/HistoryStorage';
 import { ClipboardItem, HistorySyncStatus } from '@/types/clipboard';
 import { ServerConfig } from '@/types/api';
@@ -385,7 +380,9 @@ export class HistorySyncService {
     }
 
     console.log(
-      `[HistorySyncService] ${isIncremental ? 'Incremental' : 'Total'} records fetched: ${allRecords.length}`
+      `[HistorySyncService] ${isIncremental ? 'Incremental' : 'Total'} records fetched: ${
+        allRecords.length
+      }`
     );
     return allRecords;
   }
@@ -638,7 +635,7 @@ export class HistorySyncService {
 
       // hasData === false: 上传元数据
       try {
-        const { clipboardItemToDto } = await import('./HistoryAPI');
+        const { clipboardItemToDto } = await import('@/utils');
         const dto = clipboardItemToDto(item);
 
         console.log(`[HistorySyncService] Uploading LocalOnly record: ${item.profileHash}`);
@@ -746,7 +743,7 @@ export class HistorySyncService {
     }
 
     try {
-      const { clipboardItemToDto } = await import('./HistoryAPI');
+      const { clipboardItemToDto } = await import('@/utils');
       const dto = clipboardItemToDto(item);
 
       const createdRecord = await this.historyAPI.uploadRecord(dto);

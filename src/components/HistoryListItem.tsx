@@ -12,8 +12,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { ClipboardItem } from '@/types/clipboard';
 import { useTransferQueueStore } from '@/stores/transferQueueStore';
 import { getHistoryTransferQueue } from '@/services/HistoryTransferQueue';
-import { getProfileId } from '@/services/HistoryAPI';
-import { formatSizeWithType, formatFileSize } from '@/utils';
+import { getProfileId, formatSizeWithType, formatFileSize } from '@/utils';
 import { useSettingsStore } from '@/stores';
 
 const ACTION_ICON_SIZE = 15;

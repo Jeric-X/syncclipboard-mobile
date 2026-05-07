@@ -8,6 +8,9 @@ export * from './api';
 // Export Clipboard types
 export * from './clipboard';
 
+// Export History types
+export * from './history';
+
 // Export Sync types
 export * from './sync';
 

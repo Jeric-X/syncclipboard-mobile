@@ -182,7 +182,9 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
               </View>
               <Text style={[styles.progressText, { color: theme.colors.textSecondary }]}>
                 {progress.totalBytes > 0
-                  ? `${(progress.progress * 100).toFixed(0)}% ${formatFileSize(progress.bytesTransferred)} / ${formatFileSize(progress.totalBytes)}`
+                  ? `${(progress.progress * 100).toFixed(0)}% ${formatFileSize(
+                      progress.bytesTransferred
+                    )} / ${formatFileSize(progress.totalBytes)}`
                   : formatFileSize(progress.bytesTransferred)}
               </Text>
             </View>

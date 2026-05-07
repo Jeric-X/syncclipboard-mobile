@@ -3,7 +3,8 @@
  * 历史记录传输队列 - 管理数据上传/下载任务
  */
 
-import { IHistoryAPI, RecordNotFoundError } from './HistoryAPI';
+import type { IHistoryAPI } from '@/api/history';
+import { RecordNotFoundError } from '@/errors';
 import { HistoryStorage } from '../storage/HistoryStorage';
 import { HistorySyncStatus } from '@/types/clipboard';
 import { getHistoryFileDir } from '@/utils/fileStorage';
@@ -161,7 +162,7 @@ export class HistoryTransferQueue {
       return existingTask;
     }
 
-    const { parseProfileId } = await import('./HistoryAPI');
+    const { parseProfileId } = await import('@/utils');
     const parsed = parseProfileId(profileId);
     const item = parsed ? await this.historyStorage.getItem(parsed.hash) : null;
     const displayName = item?.text || profileId;
@@ -199,7 +200,7 @@ export class HistoryTransferQueue {
       return existingTask;
     }
 
-    const { parseProfileId } = await import('./HistoryAPI');
+    const { parseProfileId } = await import('@/utils');
     const parsed = parseProfileId(profileId);
     const item = parsed ? await this.historyStorage.getItem(parsed.hash) : null;
     const displayName = item?.text || profileId;
@@ -418,7 +419,7 @@ export class HistoryTransferQueue {
     console.log(`[HistoryTransferQueue] Task created: ${new Date(task.createdTime).toISOString()}`);
     console.log(`[HistoryTransferQueue] Is immediate: ${task.isImmediateTask}`);
 
-    const { parseProfileId } = await import('./HistoryAPI');
+    const { parseProfileId } = await import('@/utils');
     const parsed = parseProfileId(task.profileId);
     if (!parsed) {
       console.error(`[HistoryTransferQueue] Invalid profileId format: ${task.profileId}`);
@@ -490,7 +491,7 @@ export class HistoryTransferQueue {
       throw new Error('History API not initialized');
     }
 
-    const { parseProfileId } = await import('./HistoryAPI');
+    const { parseProfileId } = await import('@/utils');
     const parsed = parseProfileId(task.profileId);
     if (!parsed) {
       throw new Error(`Invalid profileId format: ${task.profileId}`);
@@ -542,7 +543,7 @@ export class HistoryTransferQueue {
       throw new Error(`No file to upload: ${task.profileId}`);
     }
 
-    const { clipboardItemToDto } = await import('./HistoryAPI');
+    const { clipboardItemToDto } = await import('@/utils');
     const dto = clipboardItemToDto(item);
 
     await this.historyAPI.uploadRecord(dto, item.fileUri, task.abortController.signal, (info) => {
