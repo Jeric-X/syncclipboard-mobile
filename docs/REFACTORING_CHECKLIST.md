@@ -194,13 +194,13 @@ npm run lint
 
 **任务清单**:
 
-- [ ] 创建 `utils/format/format.ts`
-- [ ] 实现统一的 `formatFileSize` 函数
-- [ ] 删除 `utils/clipboard.ts` 中的重复实现
-- [ ] 删除 `utils/index.ts` 中的重复实现
-- [ ] 创建 `utils/format/index.ts` 导出文件
-- [ ] 更新所有导入路径
-- [ ] 移除循环引用和临时 import
+- [x] 创建 `utils/format/format.ts`
+- [x] 实现统一的 `formatFileSize` 函数
+- [x] 删除 `utils/clipboard.ts` 中的重复实现
+- [x] 删除 `utils/index.ts` 中的重复实现
+- [x] 创建 `utils/format/index.ts` 导出文件
+- [x] 更新所有导入路径
+- [x] 移除循环引用和临时 import
 
 **统一实现**:
 
@@ -231,6 +231,45 @@ npm run lint
 - [ ] 文件大小显示
 
 **风险**: 低风险
+
+---
+
+### 执行记录 - 2026-05-07
+
+**执行阶段**: 阶段 4.1
+**任务名称**: 统一 formatFileSize
+**执行时间**: 2026-05-07
+
+**完成任务**:
+
+- [x] 创建 `utils/format/format.ts` 并实现统一的 `formatFileSize` 和 `truncateText`
+- [x] 更新 `utils/format/index.ts` 导出文件
+- [x] 删除 `utils/clipboard.ts` 中的重复实现
+- [x] 删除 `utils/index.ts` 中的重复实现，并添加重导出
+- [x] 更新 `SettingsScreen.tsx` 使用导入的 `formatFileSize`
+- [x] 修复 `utils/index.ts` 中的导入问题
+
+**修改文件**:
+
+- `src/utils/format/format.ts`: 新建文件，实现统一的 `formatFileSize` 和 `truncateText`
+- `src/utils/format/index.ts`: 更新导出
+- `src/utils/clipboard.ts`: 删除重复的 `formatFileSize` 实现
+- `src/utils/index.ts`: 删除重复实现，添加重导出，修复导入问题
+- `src/screens/SettingsScreen.tsx`: 添加 `formatFileSize` 导入，删除本地定义
+
+**验证结果**:
+
+- ✅ type-check 通过
+- ✅ lint 通过
+
+**遇到的问题**:
+
+- 问题: `utils/index.ts` 中的 `formatSizeWithType` 函数使用了 `formatFileSize`，但 `formatFileSize` 是通过 `export` 导出的，而不是导入到当前文件
+- 解决方案: 使用 `import { formatFileSize as formatFileSizeImpl } from './format'` 导入，然后在 `formatSizeWithType` 中使用 `formatFileSizeImpl`
+
+**下一步计划**:
+
+- 阶段 4.2: 统一 truncateText（已在阶段 4.1 中一并完成）
 
 ---
 
@@ -272,6 +311,47 @@ npm run lint
 - [ ] 文本截断显示
 
 **风险**: 低风险
+
+---
+
+### 执行记录 - 2026-05-07 (第二次)
+
+**执行阶段**: 阶段 4.1 & 4.2 优化
+**任务名称**: 将业务代码统一到 textUtils.ts
+**执行时间**: 2026-05-07
+
+**完成任务**:
+
+- [x] 将 `utils/format/format.ts` 中的函数移动到 `textUtils.ts`
+- [x] 将 `utils/index.ts` 中的业务函数移动到 `textUtils.ts`
+- [x] 更新 `utils/index.ts` 只保留重导出
+- [x] 删除 `utils/format/` 目录
+- [x] 删除 `utils/clipboard.ts` 中的重复 `truncateText` 实现
+
+**修改文件**:
+
+- `src/utils/textUtils.ts`: 添加所有格式化和验证函数
+- `src/utils/index.ts`: 简化为只保留重导出
+- `src/utils/clipboard.ts`: 删除重复的 `truncateText` 实现
+- `src/utils/format/format.ts`: 已删除
+- `src/utils/format/index.ts`: 已删除
+
+**验证结果**:
+
+- ✅ type-check 通过
+- ✅ lint 通过
+
+**遇到的问题**:
+
+- 问题: `clipboard.ts` 中也有 `truncateText` 函数，导致重复导出错误
+- 解决方案: 删除 `clipboard.ts` 中的 `truncateText` 函数，统一使用 `textUtils.ts` 中的实现
+
+**优化成果**:
+
+- ✅ 所有文本相关的工具函数统一到 `textUtils.ts`
+- ✅ `utils/index.ts` 结构更清晰，只保留重导出
+- ✅ 删除了 `format` 目录，简化了项目结构
+- ✅ 消除了重复代码
 
 ---
 

@@ -168,19 +168,6 @@ export function getExtensionFromFileName(fileName: string): string {
 }
 
 /**
- * 格式化文件大小
- */
-export function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 B';
-
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
-
-/**
  * 获取剪贴板类型的显示名称
  */
 export function getClipboardTypeDisplayName(type: ClipboardContentType): string {
@@ -206,16 +193,6 @@ export function getClipboardTypeIcon(type: ClipboardContentType): string {
   };
 
   return icons[type] || 'help';
-}
-
-/**
- * 截断文本预览
- */
-export function truncateText(text: string, maxLength: number = 100): string {
-  if (text.length <= maxLength) {
-    return text;
-  }
-  return text.substring(0, maxLength) + '...';
 }
 
 /**
