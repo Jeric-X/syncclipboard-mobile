@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { ToastAndroid, Linking } from 'react-native';
 import { SyncDirection } from '@/types/sync';
 import { ClipboardContent } from '@/types/clipboard';
-import { SyncManager } from '@/services/SyncManager';
+import { SyncManager } from '@/services/sync/SyncManager';
 import { useSyncStore } from '@/stores/syncStore';
 import { openFile, shareFile, saveFile, saveToGallery } from '@/utils/fileActions';
 import { isTextInvalid } from '@/utils/index';

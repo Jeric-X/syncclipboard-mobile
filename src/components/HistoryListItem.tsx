@@ -11,7 +11,7 @@ import { StarIcon } from './StarIcon';
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardItem } from '@/types/clipboard';
 import { useTransferQueueStore } from '@/stores/transferQueueStore';
-import { getHistoryTransferQueue } from '@/services/HistoryTransferQueue';
+import { getHistoryTransferQueue } from '@/services/history/HistoryTransferQueue';
 import { getProfileId, formatSizeWithType, formatFileSize } from '@/utils';
 import { useSettingsStore } from '@/stores';
 

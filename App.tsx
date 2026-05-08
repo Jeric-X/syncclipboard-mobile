@@ -12,7 +12,7 @@ import { initLogger } from './src/utils/Logger';
 import { useTheme } from './src/hooks/useTheme';
 import { setDynamicShortcuts } from 'shortcut';
 import { moveTaskToBack, setExcludeFromRecents } from 'native-util';
-import { getBackgroundServiceManager } from './src/services/BackgroundServiceManager';
+import { getBackgroundServiceManager } from './src/services/sync/BackgroundServiceManager';
 
 const QUICK_UPLOAD_URL = 'syncclipboard://quick-upload';
 const QUICK_DOWNLOAD_URL = 'syncclipboard://quick-download';

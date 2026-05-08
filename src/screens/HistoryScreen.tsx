@@ -108,7 +108,7 @@ export function HistoryScreen() {
     }
 
     const serverConfig = config!.servers[config!.activeServerIndex];
-    const { getHistorySyncService } = await import('@/services/HistorySyncService');
+    const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
     const syncService = getHistorySyncService();
     return syncService.ensureInitialized(serverConfig);
   }, [config, historySyncEnabled]);
@@ -394,7 +394,8 @@ export function HistoryScreen() {
           onPress: async () => {
             try {
               await clearHistory();
-              const { getHistorySyncService } = await import('@/services/HistorySyncService');
+              const { getHistorySyncService } =
+                await import('@/services/history/HistorySyncService');
               const syncService = getHistorySyncService();
               await syncService.resetSyncCursor();
               showMessage('已清空所有历史记录', 'success');
@@ -529,7 +530,7 @@ export function HistoryScreen() {
       return;
     }
 
-    const { getHistorySyncService } = await import('@/services/HistorySyncService');
+    const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
     const syncService = getHistorySyncService();
 
     setIsSyncing(true);
@@ -564,7 +565,7 @@ export function HistoryScreen() {
         return;
       }
 
-      const { getHistorySyncService } = await import('@/services/HistorySyncService');
+      const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
       const syncService = getHistorySyncService();
 
       setIsSyncing(true);
@@ -607,7 +608,7 @@ export function HistoryScreen() {
             console.log('[HistoryScreen] Starting history reorganization...');
 
             const { HistoryStorage } = await import('@/storage/HistoryStorage');
-            const { getHistorySyncService } = await import('@/services/HistorySyncService');
+            const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
             const historyStorage = HistoryStorage.getInstance();
             const syncService = getHistorySyncService();
 
@@ -638,7 +639,7 @@ export function HistoryScreen() {
 
         if (historySyncEnabled) {
           console.log('[HistoryScreen] Screen focused, starting incremental sync');
-          const { getHistorySyncService } = await import('@/services/HistorySyncService');
+          const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
           const syncService = getHistorySyncService();
           const serverConfig = currentConfig?.servers[currentConfig?.activeServerIndex];
           if (serverConfig) {
@@ -774,7 +775,7 @@ export function HistoryScreen() {
         return;
       }
 
-      const { getHistoryTransferQueue } = await import('@/services/HistoryTransferQueue');
+      const { getHistoryTransferQueue } = await import('@/services/history/HistoryTransferQueue');
       const { getProfileId } = await import('@/utils');
 
       const profileId = getProfileId(item.type, item.profileHash);
@@ -812,7 +813,7 @@ export function HistoryScreen() {
         }
       }
 
-      const { getHistoryTransferQueue } = await import('@/services/HistoryTransferQueue');
+      const { getHistoryTransferQueue } = await import('@/services/history/HistoryTransferQueue');
       const { getProfileId } = await import('@/utils');
 
       const profileId = getProfileId(item.type, item.profileHash);

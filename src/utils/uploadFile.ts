@@ -10,7 +10,7 @@ import { calculateFileProfileHash, calculateTextHash } from '@/utils/hash';
 import { prepareTempFilePath } from '@/utils/fileStorage';
 import { useHistoryStore } from '@/stores/historyStore';
 import { createAPIClient } from '@/services';
-import { SyncManager } from '@/services/SyncManager';
+import { SyncManager } from '@/services/sync/SyncManager';
 import type { ClipboardContent } from '@/types/clipboard';
 import { createDefaultClipboardItem, HistorySyncStatus } from '@/types/clipboard';
 import type { ClipboardContentType } from '@/types/api';

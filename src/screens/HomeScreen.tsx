@@ -22,7 +22,7 @@ import { copyToLocalClipboard } from '@/utils/clipboard';
 import { useMessageStore } from '@/stores/messageStore';
 import { useErrorStore } from '@/stores/errorStore';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
-import { getClipboardSyncService } from '@/services/ClipboardSyncService';
+import { getClipboardSyncService } from '@/services/clipboard/ClipboardSyncService';
 
 export function HomeScreen() {
   const { theme } = useTheme();

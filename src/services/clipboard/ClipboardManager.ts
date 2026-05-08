@@ -10,7 +10,7 @@ import * as FileSystem from 'expo-file-system';
 import { ClipboardContent } from '@/types';
 import { calculateTextHash, calculateFileHash } from '@/utils/hash';
 import { isTextInvalid } from '@/utils/index';
-import { historyStorage } from '../storage/HistoryStorage';
+import { historyStorage } from '../../storage/HistoryStorage';
 import { prepareTempFilePath, CLIPBOARD_TEMP_DIR } from '@/utils/fileStorage';
 import { nativeSetClipboardImageFromFile } from 'native-util';
 

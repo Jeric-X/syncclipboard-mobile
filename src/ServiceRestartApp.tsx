@@ -9,7 +9,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, BackHandler, StatusBar, Platform } from 'react-native';
 import { useSettingsStore } from './stores';
 import { initLogger } from './utils/Logger';
-import { getBackgroundServiceManager } from './services/BackgroundServiceManager';
+import { getBackgroundServiceManager } from './services/sync/BackgroundServiceManager';
 
 interface ServiceRestartAppProps {
   systemTheme?: 'light' | 'dark';

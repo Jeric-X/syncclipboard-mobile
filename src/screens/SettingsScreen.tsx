@@ -397,7 +397,7 @@ export const SettingsScreen = () => {
     }
 
     try {
-      const { getHistorySyncService } = await import('@/services/HistorySyncService');
+      const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
       const syncService = getHistorySyncService();
       syncService.cancelAll();
     } catch {
@@ -897,7 +897,7 @@ export const SettingsScreen = () => {
   // 处理切换历史记录同步
   const handleToggleHistorySync = async (enabled: boolean) => {
     try {
-      const { getHistorySyncService } = await import('@/services/HistorySyncService');
+      const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
       const syncService = getHistorySyncService();
       syncService.cancelAll();
 

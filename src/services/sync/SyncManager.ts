@@ -5,17 +5,17 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ToastAndroid, Platform } from 'react-native';
-import { SyncClipboardClient } from '../api/clients/SyncClipboardClient';
-import { ISyncClipboardAPI } from '../api/clients/APIClient';
-import { WebDAVClient } from '../api/clients/WebDAVClient';
-import { S3Client } from '../api/clients/S3Client';
-import { AuthService } from '../api/AuthService';
-import { clipboardManager } from './ClipboardManager';
-import { clipboardMonitor } from './ClipboardMonitor';
+import { SyncClipboardClient } from '../../api/clients/SyncClipboardClient';
+import { ISyncClipboardAPI } from '../../api/clients/APIClient';
+import { WebDAVClient } from '../../api/clients/WebDAVClient';
+import { S3Client } from '../../api/clients/S3Client';
+import { AuthService } from '../../api/AuthService';
+import { clipboardManager } from '../clipboard/ClipboardManager';
+import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import { ConfigurationError } from '@/errors';
-import { ServerConfig, ProfileDto } from '../types/api';
-import { compareHash } from '../utils/hash';
-import { isTextInvalid } from '../utils/index';
+import { ServerConfig, ProfileDto } from '../../types/api';
+import { compareHash } from '../../utils/hash';
+import { isTextInvalid } from '../../utils/index';
 import type { ProgressInfo } from 'native-util';
 import {
   SyncConfig,
@@ -30,9 +30,9 @@ import {
   SyncStats,
   ConflictResolution,
   OfflineQueueItem,
-} from '../types/sync';
-import { ClipboardContent } from '../types/clipboard';
-import { useSettingsStore } from '../stores/settingsStore';
+} from '../../types/sync';
+import { ClipboardContent } from '../../types/clipboard';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 const STORAGE_KEY_CONFIG = '@syncclipboard:sync:config';
 const STORAGE_KEY_STATS = '@syncclipboard:sync:stats';
@@ -455,7 +455,7 @@ export class SyncManager {
       }
 
       // 转换为 ProfileDto
-      const { contentToProfileDto } = await import('../utils/clipboard');
+      const { contentToProfileDto } = await import('../../utils/clipboard');
       const profile = await contentToProfileDto(localContent);
 
       console.log('[SyncManager] Upload - Profile info:', {
@@ -626,7 +626,7 @@ export class SyncManager {
       }
 
       // 转换为 ClipboardContent
-      const { profileDtoToContent } = await import('../utils/clipboard');
+      const { profileDtoToContent } = await import('../../utils/clipboard');
       const content = profileDtoToContent(profile);
 
       // 如果有文件数据，优先从历史记录读取缓存，否则下载并保存到历史记录
@@ -645,7 +645,7 @@ export class SyncManager {
             skipped: true,
           };
         }
-        const { downloadAndAddToHistory } = await import('../utils/remoteClipboard');
+        const { downloadAndAddToHistory } = await import('../../utils/remoteClipboard');
         const updatedContent = await downloadAndAddToHistory(
           content,
           this.apiClient,

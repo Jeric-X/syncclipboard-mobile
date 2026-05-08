@@ -7,7 +7,7 @@ import type { IHistoryAPI } from '@/api/history';
 import { HistoryRecordDto, HistoryRecordUpdateDto, ProfileTypeFilter } from '@/types/history';
 import { dtoToClipboardItem } from '@/utils';
 import { SyncConflictError, RecordNotFoundError } from '@/errors';
-import { HistoryStorage } from '../storage/HistoryStorage';
+import { HistoryStorage } from '../../storage/HistoryStorage';
 import { ClipboardItem, HistorySyncStatus } from '@/types/clipboard';
 import { ServerConfig } from '@/types/api';
 import { getSignalRClient, type HistoryChangedEvent } from 'signalr-client';
@@ -52,7 +52,7 @@ export class HistorySyncService {
    * 检查历史记录同步是否启用
    */
   private async isHistorySyncEnabled(): Promise<boolean> {
-    const { configStorage } = await import('../storage/ConfigStorage');
+    const { configStorage } = await import('../../storage/ConfigStorage');
     const config = await configStorage.getConfig();
     return config?.enableHistorySync ?? false;
   }
@@ -1098,8 +1098,8 @@ export class HistorySyncService {
 
       if (serverChanged) {
         console.log('[HistorySyncService] Server changed, switching...');
-        const { SyncClipboardClient } = await import('../api/clients/SyncClipboardClient');
-        const { AuthService } = await import('../api/AuthService');
+        const { SyncClipboardClient } = await import('../../api/clients/SyncClipboardClient');
+        const { AuthService } = await import('../../api/AuthService');
         const authService =
           serverConfig.username && serverConfig.password
             ? new AuthService(serverConfig.username, serverConfig.password)
@@ -1118,8 +1118,8 @@ export class HistorySyncService {
       return true;
     }
 
-    const { SyncClipboardClient } = await import('../api/clients/SyncClipboardClient');
-    const { AuthService } = await import('../api/AuthService');
+    const { SyncClipboardClient } = await import('../../api/clients/SyncClipboardClient');
+    const { AuthService } = await import('../../api/AuthService');
     const authService =
       serverConfig.username && serverConfig.password
         ? new AuthService(serverConfig.username, serverConfig.password)

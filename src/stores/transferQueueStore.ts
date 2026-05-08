@@ -4,7 +4,7 @@ import {
   TransferType,
   TransferTaskStatus,
   getHistoryTransferQueue,
-} from '@/services/HistoryTransferQueue';
+} from '@/services/history/HistoryTransferQueue';
 import { useErrorStore } from './errorStore';
 import { useMessageStore } from './messageStore';
 

@@ -4,8 +4,8 @@
  */
 
 // Clipboard Services
-export { ClipboardManager, clipboardManager } from './ClipboardManager';
-export { ClipboardMonitor, clipboardMonitor } from './ClipboardMonitor';
+export { ClipboardManager, clipboardManager } from './clipboard/ClipboardManager';
+export { ClipboardMonitor, clipboardMonitor } from './clipboard/ClipboardMonitor';
 
 // SignalR Client (re-exported from signalr-client module)
 export { getSignalRClient, resetSignalRClient } from 'signalr-client';
@@ -16,10 +16,10 @@ export type {
 } from 'signalr-client';
 
 // Sync Manager
-export { SyncManager } from './SyncManager';
+export { SyncManager } from './sync/SyncManager';
 
 // Remote Clipboard Sync Service
-export { getClipboardSyncService as getClipboardSyncService } from './ClipboardSyncService';
+export { getClipboardSyncService as getClipboardSyncService } from './clipboard/ClipboardSyncService';
 
 // Factory function to create appropriate API client
 import { SyncClipboardClient } from '../api/clients/SyncClipboardClient';

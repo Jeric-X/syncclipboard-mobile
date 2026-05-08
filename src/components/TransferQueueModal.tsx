@@ -12,7 +12,7 @@ import {
 import { X, Upload, Download, AlertCircle, Clock, CheckCircle } from 'react-native-feather';
 import { useTheme } from '@/hooks/useTheme';
 import { useTransferQueueStore } from '@/stores/transferQueueStore';
-import { TransferTask, getHistoryTransferQueue } from '@/services/HistoryTransferQueue';
+import { TransferTask, getHistoryTransferQueue } from '@/services/history/HistoryTransferQueue';
 import { formatFileSize } from '@/utils';
 
 interface TransferQueueModalProps {

@@ -38,7 +38,7 @@ class BackgroundServiceManager {
   // ─── 工具 ───────────────────────────────────────────────
 
   private getShouldRunBackground(): boolean {
-    const { useSettingsStore } = require('../stores/settingsStore');
+    const { useSettingsStore } = require('../../stores/settingsStore');
     const state = useSettingsStore.getState();
     const config = state.config;
     const tempDisabled = state.isTempDisabledBackgroundTasks;
@@ -55,7 +55,7 @@ class BackgroundServiceManager {
    */
   private _updateSmsReceiver(): void {
     try {
-      const { useSettingsStore } = require('../stores/settingsStore');
+      const { useSettingsStore } = require('../../stores/settingsStore');
       const config = useSettingsStore.getState().config;
       const { setStaticReceiverEnabled } = require('sms-forwarder');
       setStaticReceiverEnabled(!!config?.enableSmsForwarding);
@@ -72,7 +72,7 @@ class BackgroundServiceManager {
    */
   isSignalRRunning(): boolean {
     try {
-      const { getClipboardSyncService } = require('./ClipboardSyncService');
+      const { getClipboardSyncService } = require('../clipboard/ClipboardSyncService');
       return getClipboardSyncService().isSignalRRunning();
     } catch {
       return false;
@@ -89,7 +89,7 @@ class BackgroundServiceManager {
    */
   async start(): Promise<void> {
     // 等待配置加载完成
-    const { useSettingsStore } = require('../stores/settingsStore');
+    const { useSettingsStore } = require('../../stores/settingsStore');
     if (!useSettingsStore.getState().isLoaded) {
       await useSettingsStore.getState().loadConfig();
     }
@@ -101,7 +101,7 @@ class BackgroundServiceManager {
 
     // 始终启动剪贴板监控（无论是否启用后台任务，UI 需要感知本地剪贴板变化）
     try {
-      const { useClipboardStore } = require('../stores');
+      const { useClipboardStore } = require('../../stores');
       await useClipboardStore.getState().startMonitoring();
     } catch (e) {
       console.error('[BackgroundServiceManager] Failed to start clipboard monitoring:', e);
@@ -166,7 +166,7 @@ class BackgroundServiceManager {
   /** 启动/刷新 ClipboardSyncService */
   private async _startRemoteSync(): Promise<void> {
     try {
-      const { getClipboardSyncService } = require('./ClipboardSyncService');
+      const { getClipboardSyncService } = require('../clipboard/ClipboardSyncService');
       await getClipboardSyncService().refresh();
     } catch (e) {
       console.error('[BackgroundServiceManager] Failed to start/refresh remote sync:', e);
@@ -175,7 +175,7 @@ class BackgroundServiceManager {
 
   /** 启动后台专用服务（前台通知、心跳、剪贴板监控） */
   private async _startBackgroundOnlyServices(): Promise<void> {
-    const { useSettingsStore } = require('../stores/settingsStore');
+    const { useSettingsStore } = require('../../stores/settingsStore');
     const config = useSettingsStore.getState().config;
 
     // 1. 按需启动前台常驻通知服务
@@ -197,7 +197,7 @@ class BackgroundServiceManager {
 
     // 2. 统计心跳
     try {
-      const { useStatisticsStore } = require('../stores/statisticsStore');
+      const { useStatisticsStore } = require('../../stores/statisticsStore');
       await useStatisticsStore.getState().recordBackgroundTaskStart();
 
       const { setTimer: st } = require('native-timer');
@@ -213,7 +213,7 @@ class BackgroundServiceManager {
 
   /** 更新后台专用服务（配置变化时调用） */
   private async _updateBackgroundOnlyServices(): Promise<void> {
-    const { useSettingsStore } = require('../stores/settingsStore');
+    const { useSettingsStore } = require('../../stores/settingsStore');
     const config = useSettingsStore.getState().config;
 
     try {
@@ -266,7 +266,7 @@ class BackgroundServiceManager {
 
   private _subscribeToConfigChanges(): void {
     if (this.settingsUnsub) return;
-    const { useSettingsStore } = require('../stores/settingsStore');
+    const { useSettingsStore } = require('../../stores/settingsStore');
     this.settingsUnsub = useSettingsStore.subscribe(
       (
         state: { config: unknown; isTempDisabledBackgroundTasks: boolean },

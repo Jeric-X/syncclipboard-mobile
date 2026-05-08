@@ -13,7 +13,7 @@ import { QuickTileLoadingScreen } from './screens/QuickTileLoadingScreen';
 import { SyncDirection } from './types/sync';
 import { useSettingsStore } from './stores';
 import { initLogger } from './utils/Logger';
-import { getBackgroundServiceManager } from './services/BackgroundServiceManager';
+import { getBackgroundServiceManager } from './services/sync/BackgroundServiceManager';
 
 interface QuickActionAppProps {
   direction?: string;
