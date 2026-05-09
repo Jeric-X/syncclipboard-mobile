@@ -32,7 +32,7 @@ import { useSettingsStore } from '@/stores';
 import { historyStorage } from '@/storage';
 import { useTransferQueueStore } from '@/stores/transferQueueStore';
 import { useHistoryDisplaySettings } from '@/hooks/useHistoryDisplaySettings';
-import { HistoryItem, ClipboardContent, createDefaultClipboardItem } from '@/types/clipboard';
+import { HistoryItem, ClipboardContent, createHistoryItem } from '@/types/clipboard';
 import { HistoryFilter } from '@/types/storage';
 import { HistoryListItem } from '@/components/HistoryListItem';
 import { MessageToast } from '@/components/MessageToast';
@@ -723,7 +723,7 @@ export function HistoryScreen() {
           const seed = `debug-random-${now}-${index}-${Math.random().toString(36).slice(2, 10)}`;
           const profileHash = await calculateTextHash(seed);
 
-          return createDefaultClipboardItem({
+          return createHistoryItem({
             type: 'Text' as const,
             text: generateRandomDebugText(),
             profileHash,

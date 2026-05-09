@@ -12,7 +12,7 @@ import { useHistoryStore } from '@/stores/historyStore';
 import { createAPIClient } from '@/services';
 import { SyncManager } from '@/services/sync/SyncManager';
 import type { ClipboardContent } from '@/types/clipboard';
-import { createDefaultClipboardItem, HistorySyncStatus } from '@/types/clipboard';
+import { createHistoryItem, HistorySyncStatus } from '@/types/clipboard';
 import type { ClipboardContentType } from '@/types/api';
 import type { ServerConfig } from '@/types/api';
 
@@ -53,7 +53,7 @@ export async function importFileToHistory(
   const resolvedSize = fileSize ?? sourceFile.size;
 
   const savedItem = await useHistoryStore.getState().addItem(
-    createDefaultClipboardItem({
+    createHistoryItem({
       type: contentType,
       text: fileName,
       profileHash,
@@ -96,7 +96,7 @@ export async function uploadTextAndAddToHistory(
   const apiClient = createAPIClient(activeServer);
   await apiClient.putContent(content, { signal: options?.signal });
 
-  const historyItem = createDefaultClipboardItem({
+  const historyItem = createHistoryItem({
     type: 'Text',
     text,
     profileHash,

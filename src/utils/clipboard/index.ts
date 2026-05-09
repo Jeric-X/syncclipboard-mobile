@@ -4,8 +4,8 @@
  */
 
 export {
-  dtoToClipboardItem,
-  clipboardItemToDto,
+  dtoToHistoryItem as dtoToClipboardItem,
+  historyItemToDto as clipboardItemToDto,
   contentToProfileDto,
   profileDtoToContent,
   getExtensionFromMimeType,

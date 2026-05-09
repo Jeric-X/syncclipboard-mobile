@@ -95,7 +95,7 @@ export interface HistoryItem {
 /**
  * 创建 ClipboardItem 的默认值
  */
-export function createDefaultClipboardItem(
+export function createHistoryItem(
   base: Omit<
     HistoryItem,
     | 'starred'

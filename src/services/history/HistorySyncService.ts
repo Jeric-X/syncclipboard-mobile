@@ -5,7 +5,7 @@
 
 import type { IHistoryAPI } from '@/api/history';
 import { HistoryRecordDto, HistoryRecordUpdateDto, ProfileTypeFilter } from '@/types/history';
-import { dtoToClipboardItem } from '@/utils';
+import { dtoToHistoryItem } from '@/utils/clipboard/dtoConvert';
 import { SyncConflictError, RecordNotFoundError } from '@/errors';
 import { HistoryStorage } from '../../storage/HistoryStorage';
 import { HistoryItem, HistorySyncStatus } from '@/types/clipboard';
@@ -421,7 +421,7 @@ export class HistorySyncService {
       if (!localItem) {
         // 本地不存在，收集待添加（跳过已删除的记录）
         if (!remoteRecord.isDeleted) {
-          itemsToAdd.push(dtoToClipboardItem(remoteRecord));
+          itemsToAdd.push(dtoToHistoryItem(remoteRecord));
           remoteAddedCount++;
         }
       } else {
@@ -635,8 +635,8 @@ export class HistorySyncService {
 
       // hasData === false: 上传元数据
       try {
-        const { clipboardItemToDto } = await import('@/utils');
-        const dto = clipboardItemToDto(item);
+        const { historyItemToDto } = await import('@/utils/clipboard/dtoConvert');
+        const dto = historyItemToDto(item);
 
         console.log(`[HistorySyncService] Uploading LocalOnly record: ${item.profileHash}`);
         const createdRecord = await this.historyAPI.uploadRecord(dto, undefined, signal);
@@ -743,8 +743,8 @@ export class HistorySyncService {
     }
 
     try {
-      const { clipboardItemToDto } = await import('@/utils');
-      const dto = clipboardItemToDto(item);
+      const { historyItemToDto } = await import('@/utils/clipboard/dtoConvert');
+      const dto = historyItemToDto(item);
 
       const createdRecord = await this.historyAPI.uploadRecord(dto);
 
@@ -882,7 +882,7 @@ export class HistorySyncService {
 
     if (!localItem) {
       // 新记录，添加到本地
-      const item = dtoToClipboardItem(record);
+      const item = dtoToHistoryItem(record);
       await this.historyStorage.addItem(item);
     } else {
       // 已存在，合并

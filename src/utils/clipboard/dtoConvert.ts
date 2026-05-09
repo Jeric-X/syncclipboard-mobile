@@ -4,7 +4,7 @@
  */
 
 import { HistoryRecordDto } from '@/types/history';
-import { HistoryItem, HistorySyncStatus, createDefaultClipboardItem } from '@/types/clipboard';
+import { HistoryItem, HistorySyncStatus, createHistoryItem } from '@/types/clipboard';
 import { ClipboardContentType, ProfileDto } from '@/types/api';
 import { ClipboardContent } from '@/types';
 import { calculateContentHash } from '@/utils/hash';
@@ -180,7 +180,7 @@ export function clipboardContentToItem(
   content: ClipboardContent,
   overrides?: Partial<HistoryItem>
 ): HistoryItem {
-  return createDefaultClipboardItem({
+  return createHistoryItem({
     type: content.type,
     text: content.text || '',
     profileHash: content.profileHash || '',
@@ -198,7 +198,7 @@ export function clipboardContentToItem(
 /**
  * 将 HistoryRecordDto 转换为 ClipboardItem
  */
-export function dtoToClipboardItem(dto: HistoryRecordDto): HistoryItem {
+export function dtoToHistoryItem(dto: HistoryRecordDto): HistoryItem {
   return {
     type: dto.type as ClipboardContentType,
     text: dto.text || '',
@@ -221,7 +221,7 @@ export function dtoToClipboardItem(dto: HistoryRecordDto): HistoryItem {
 /**
  * 将 ClipboardItem 转换为 HistoryRecordDto
  */
-export function clipboardItemToDto(item: HistoryItem): HistoryRecordDto {
+export function historyItemToDto(item: HistoryItem): HistoryRecordDto {
   const hash = item.profileHash.includes('-')
     ? item.profileHash.split('-').slice(1).join('-')
     : item.profileHash;

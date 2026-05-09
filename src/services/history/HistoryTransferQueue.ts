@@ -543,8 +543,8 @@ export class HistoryTransferQueue {
       throw new Error(`No file to upload: ${task.profileId}`);
     }
 
-    const { clipboardItemToDto } = await import('@/utils');
-    const dto = clipboardItemToDto(item);
+    const { historyItemToDto } = await import('@/utils/clipboard/dtoConvert');
+    const dto = historyItemToDto(item);
 
     await this.historyAPI.uploadRecord(dto, item.fileUri, task.abortController.signal, (info) => {
       task.bytesTransferred = info.bytesTransferred;
