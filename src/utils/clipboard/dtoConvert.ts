@@ -4,7 +4,7 @@
  */
 
 import { HistoryRecordDto } from '@/types/history';
-import { ClipboardItem, HistorySyncStatus } from '@/types/clipboard';
+import { HistoryItem, HistorySyncStatus, createDefaultClipboardItem } from '@/types/clipboard';
 import { ClipboardContentType, ProfileDto } from '@/types/api';
 import { ClipboardContent } from '@/types';
 import { calculateContentHash } from '@/utils/hash';
@@ -169,12 +169,36 @@ export function validateClipboardContent(content: ClipboardContent): boolean {
   }
 }
 
+// ─── ClipboardContent → ClipboardItem ────────────────────────────────────────
+
+/**
+ * 将 ClipboardContent 转换为 ClipboardItem，填充默认元数据。
+ * @param content 剪贴板内容
+ * @param overrides 覆盖默认字段（如 syncStatus、hasRemoteData 等）
+ */
+export function clipboardContentToItem(
+  content: ClipboardContent,
+  overrides?: Partial<HistoryItem>
+): HistoryItem {
+  return createDefaultClipboardItem({
+    type: content.type,
+    text: content.text || '',
+    profileHash: content.profileHash || '',
+    hasData: content.hasData ?? !!(content.fileName || content.fileUri),
+    dataName: content.fileName,
+    size: content.fileSize,
+    timestamp: content.timestamp || Date.now(),
+    fileUri: content.fileUri,
+    ...overrides,
+  });
+}
+
 // ─── HistoryRecordDto ↔ ClipboardItem ────────────────────────────────────────
 
 /**
  * 将 HistoryRecordDto 转换为 ClipboardItem
  */
-export function dtoToClipboardItem(dto: HistoryRecordDto): ClipboardItem {
+export function dtoToClipboardItem(dto: HistoryRecordDto): HistoryItem {
   return {
     type: dto.type as ClipboardContentType,
     text: dto.text || '',
@@ -197,7 +221,7 @@ export function dtoToClipboardItem(dto: HistoryRecordDto): ClipboardItem {
 /**
  * 将 ClipboardItem 转换为 HistoryRecordDto
  */
-export function clipboardItemToDto(item: ClipboardItem): HistoryRecordDto {
+export function clipboardItemToDto(item: HistoryItem): HistoryRecordDto {
   const hash = item.profileHash.includes('-')
     ? item.profileHash.split('-').slice(1).join('-')
     : item.profileHash;

@@ -4,7 +4,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ClipboardItem, HistorySyncStatus } from '../types/clipboard';
+import { HistoryItem, HistorySyncStatus } from '../types/clipboard';
 import { HistoryFilter, HistorySort, STORAGE_KEYS } from '../types/storage';
 import { getHistoryFileDir } from '../utils/fileStorage';
 import { File, Directory } from 'expo-file-system';
@@ -18,7 +18,7 @@ const CURRENT_HISTORY_VERSION = 1;
 /**
  * 迁移函数类型
  */
-type MigrationFunction = (items: ClipboardItem[]) => ClipboardItem[];
+type MigrationFunction = (items: HistoryItem[]) => HistoryItem[];
 
 /**
  * 版本迁移函数映射
@@ -27,7 +27,7 @@ type MigrationFunction = (items: ClipboardItem[]) => ClipboardItem[];
  */
 const MIGRATIONS: Record<number, MigrationFunction> = {
   // v0 -> v1: 添加 syncStatus, isLocalFileReady, lastAccessed 字段
-  1: (items: ClipboardItem[]): ClipboardItem[] => {
+  1: (items: HistoryItem[]): HistoryItem[] => {
     return items.map((item) => {
       const migratedItem = { ...item };
 
@@ -58,14 +58,14 @@ const MIGRATIONS: Record<number, MigrationFunction> = {
  * 历史记录存储服务
  */
 export type HistoryChangeCallback = (
-  items: ClipboardItem[],
+  items: HistoryItem[],
   action: 'add' | 'update' | 'delete'
 ) => void;
 
 /**
  * 规范化 ClipboardItem，确保所有字段都有默认值
  */
-function normalizeClipboardItem(item: ClipboardItem): ClipboardItem {
+function normalizeClipboardItem(item: HistoryItem): HistoryItem {
   return {
     type: item.type,
     text: item.text ?? '',
@@ -94,11 +94,11 @@ function normalizeClipboardItem(item: ClipboardItem): ClipboardItem {
 
 export class HistoryStorage {
   private static instance: HistoryStorage | null = null;
-  private history: ClipboardItem[] = [];
+  private history: HistoryItem[] = [];
   private initialized = false;
   private maxHistorySize = 1000;
   private changeCallbacks: Set<HistoryChangeCallback> = new Set();
-  private pendingChanges: { items: ClipboardItem[]; action: 'add' | 'update' | 'delete' }[] = [];
+  private pendingChanges: { items: HistoryItem[]; action: 'add' | 'update' | 'delete' }[] = [];
   private notifyTimer: NodeJS.Timeout | null = null;
   private static readonly NOTIFY_BATCH_SIZE = 50;
   private static readonly NOTIFY_DELAY_MS = 100;
@@ -135,7 +135,7 @@ export class HistoryStorage {
   /**
    * 获取排序字段的值
    */
-  private getSortValue(item: ClipboardItem): number {
+  private getSortValue(item: HistoryItem): number {
     switch (this.sortConfig.field) {
       case 'timestamp':
         return item.timestamp;
@@ -154,7 +154,7 @@ export class HistoryStorage {
    * 二分查找插入位置（参照桌面端 InsertHistoryInOrder 实现）
    * pinned 项始终排在非 pinned 项之前
    */
-  private findInsertIndex(item: ClipboardItem): number {
+  private findInsertIndex(item: HistoryItem): number {
     const isDesc = this.sortConfig.order === 'desc';
     const isPinned = item.pinned;
     let searchStart = 0;
@@ -273,7 +273,7 @@ export class HistoryStorage {
     this.silentMode = false;
   }
 
-  private notifyChange(item: ClipboardItem, action: 'add' | 'update' | 'delete'): void {
+  private notifyChange(item: HistoryItem, action: 'add' | 'update' | 'delete'): void {
     if (this.silentMode) {
       return;
     }
@@ -296,7 +296,7 @@ export class HistoryStorage {
   /**
    * 立即批量通知变更
    */
-  private notifyChangeBatch(items: ClipboardItem[], action: 'add' | 'update' | 'delete'): void {
+  private notifyChangeBatch(items: HistoryItem[], action: 'add' | 'update' | 'delete'): void {
     // 浅拷贝，避免 store 中的旧引用和新通知指向同一对象导致比较失效
     const copied = items.map((item) => ({ ...item }));
     for (const callback of this.changeCallbacks) {
@@ -320,7 +320,7 @@ export class HistoryStorage {
     if (this.pendingChanges.length === 0) return;
 
     // 按操作类型分组
-    const groupedChanges = new Map<'add' | 'update' | 'delete', ClipboardItem[]>();
+    const groupedChanges = new Map<'add' | 'update' | 'delete', HistoryItem[]>();
     for (const change of this.pendingChanges) {
       const existing = groupedChanges.get(change.action) || [];
       existing.push(...change.items);
@@ -387,7 +387,7 @@ export class HistoryStorage {
     );
 
     if (historyJson) {
-      const parsedHistory: ClipboardItem[] = JSON.parse(historyJson);
+      const parsedHistory: HistoryItem[] = JSON.parse(historyJson);
       // 规范化所有记录，确保字段都有默认值
       this.history = parsedHistory.map(normalizeClipboardItem);
 
@@ -421,10 +421,7 @@ export class HistoryStorage {
    * @param fromVersion 起始版本号
    * @returns 迁移后的记录数组
    */
-  private async runMigrations(
-    items: ClipboardItem[],
-    fromVersion: number
-  ): Promise<ClipboardItem[]> {
+  private async runMigrations(items: HistoryItem[], fromVersion: number): Promise<HistoryItem[]> {
     let migratedItems = [...items];
 
     for (let v = fromVersion + 1; v <= CURRENT_HISTORY_VERSION; v++) {
@@ -453,7 +450,7 @@ export class HistoryStorage {
   /**
    * 添加历史记录
    */
-  public async addItem(item: ClipboardItem): Promise<ClipboardItem> {
+  public async addItem(item: HistoryItem): Promise<HistoryItem> {
     if (!this.initialized) {
       await this.initialize();
     }
@@ -509,7 +506,7 @@ export class HistoryStorage {
     );
 
     let action: 'add' | 'update';
-    let resultItem: ClipboardItem;
+    let resultItem: HistoryItem;
 
     if (existingIndex >= 0) {
       // 更新现有记录 - 参照桌面客户端 AddLocalProfile 逻辑
@@ -560,13 +557,13 @@ export class HistoryStorage {
   /**
    * 批量添加历史记录
    */
-  public async addItems(items: ClipboardItem[]): Promise<void> {
+  public async addItems(items: HistoryItem[]): Promise<void> {
     if (!this.initialized) {
       await this.initialize();
     }
 
-    const addedItems: ClipboardItem[] = [];
-    const updatedItems: ClipboardItem[] = [];
+    const addedItems: HistoryItem[] = [];
+    const updatedItems: HistoryItem[] = [];
 
     for (const item of items) {
       const existingIndex = this.history.findIndex(
@@ -625,7 +622,7 @@ export class HistoryStorage {
   /**
    * 根据 profileHash 获取历史记录
    */
-  public async getItem(profileHash: string): Promise<ClipboardItem | null> {
+  public async getItem(profileHash: string): Promise<HistoryItem | null> {
     if (!this.initialized) {
       await this.initialize();
     }
@@ -639,7 +636,7 @@ export class HistoryStorage {
   /**
    * 根据 localClipboardHash 获取历史记录
    */
-  public async getItemByLocalHash(localClipboardHash: string): Promise<ClipboardItem | null> {
+  public async getItemByLocalHash(localClipboardHash: string): Promise<HistoryItem | null> {
     if (!this.initialized) {
       await this.initialize();
     }
@@ -650,7 +647,7 @@ export class HistoryStorage {
   /**
    * 获取所有历史记录（排除软删除）
    */
-  public async getAllItems(): Promise<ClipboardItem[]> {
+  public async getAllItems(): Promise<HistoryItem[]> {
     if (!this.initialized) {
       await this.initialize();
     }
@@ -661,7 +658,7 @@ export class HistoryStorage {
   /**
    * 获取所有历史记录（包括软删除）
    */
-  public async getAllItemsIncludingDeleted(): Promise<ClipboardItem[]> {
+  public async getAllItemsIncludingDeleted(): Promise<HistoryItem[]> {
     if (!this.initialized) {
       await this.initialize();
     }
@@ -672,7 +669,7 @@ export class HistoryStorage {
   /**
    * 获取分页历史记录（排除软删除）
    */
-  public async getItems(page: number = 1, pageSize: number = 20): Promise<ClipboardItem[]> {
+  public async getItems(page: number = 1, pageSize: number = 20): Promise<HistoryItem[]> {
     if (!this.initialized) {
       await this.initialize();
     }
@@ -691,7 +688,7 @@ export class HistoryStorage {
   public async searchItems(
     filter?: HistoryFilter,
     sort?: HistorySort
-  ): Promise<{ items: ClipboardItem[]; total: number }> {
+  ): Promise<{ items: HistoryItem[]; total: number }> {
     if (!this.initialized) {
       await this.initialize();
     }
@@ -790,7 +787,7 @@ export class HistoryStorage {
   /**
    * 更新历史记录项
    */
-  public async updateItem(profileHash: string, updates: Partial<ClipboardItem>): Promise<void> {
+  public async updateItem(profileHash: string, updates: Partial<HistoryItem>): Promise<void> {
     if (!this.initialized) {
       await this.initialize();
     }
@@ -830,13 +827,13 @@ export class HistoryStorage {
    * 批量更新历史记录项
    */
   public async updateItems(
-    updates: { profileHash: string; updates: Partial<ClipboardItem> }[]
+    updates: { profileHash: string; updates: Partial<HistoryItem> }[]
   ): Promise<void> {
     if (!this.initialized) {
       await this.initialize();
     }
 
-    const updatedItems: ClipboardItem[] = [];
+    const updatedItems: HistoryItem[] = [];
 
     for (const { profileHash, updates: itemUpdates } of updates) {
       const index = this.history.findIndex(
@@ -914,7 +911,7 @@ export class HistoryStorage {
     }
 
     const now = Date.now();
-    const updatedItems: ClipboardItem[] = [];
+    const updatedItems: HistoryItem[] = [];
 
     for (let i = 0; i < this.history.length; i++) {
       const item = this.history[i];
@@ -993,13 +990,13 @@ export class HistoryStorage {
   /**
    * 批量物理删除历史记录项（一次性保存，减少IO）
    */
-  public async physicalDeleteItems(profileHashes: string[]): Promise<ClipboardItem[]> {
+  public async physicalDeleteItems(profileHashes: string[]): Promise<HistoryItem[]> {
     if (!this.initialized) {
       await this.initialize();
     }
 
     const hashSet = new Set(profileHashes.map((h) => h.toLowerCase()));
-    const deletedItems: ClipboardItem[] = [];
+    const deletedItems: HistoryItem[] = [];
 
     this.history = this.history.filter((item) => {
       if (hashSet.has(item.profileHash.toLowerCase())) {
@@ -1059,7 +1056,7 @@ export class HistoryStorage {
   /**
    * 获取所有软删除的记录
    */
-  public async getSoftDeletedItems(): Promise<ClipboardItem[]> {
+  public async getSoftDeletedItems(): Promise<HistoryItem[]> {
     if (!this.initialized) {
       await this.initialize();
     }
@@ -1210,7 +1207,7 @@ export class HistoryStorage {
   /**
    * 获取需要同步的记录（syncStatus === NeedSync）
    */
-  public async getNeedSyncItems(): Promise<ClipboardItem[]> {
+  public async getNeedSyncItems(): Promise<HistoryItem[]> {
     if (!this.initialized) {
       await this.initialize();
     }
@@ -1222,7 +1219,7 @@ export class HistoryStorage {
   /**
    * 获取本地记录（syncStatus === LocalOnly 或 undefined）
    */
-  public async getLocalOnlyItems(): Promise<ClipboardItem[]> {
+  public async getLocalOnlyItems(): Promise<HistoryItem[]> {
     if (!this.initialized) {
       await this.initialize();
     }
@@ -1236,7 +1233,7 @@ export class HistoryStorage {
   /**
    * 获取服务器记录（isLocalFileReady === false 且 syncStatus === Synced）
    */
-  public async getServerOnlyItems(): Promise<ClipboardItem[]> {
+  public async getServerOnlyItems(): Promise<HistoryItem[]> {
     if (!this.initialized) {
       await this.initialize();
     }

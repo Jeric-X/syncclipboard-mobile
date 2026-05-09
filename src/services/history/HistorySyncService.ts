@@ -8,7 +8,7 @@ import { HistoryRecordDto, HistoryRecordUpdateDto, ProfileTypeFilter } from '@/t
 import { dtoToClipboardItem } from '@/utils';
 import { SyncConflictError, RecordNotFoundError } from '@/errors';
 import { HistoryStorage } from '../../storage/HistoryStorage';
-import { ClipboardItem, HistorySyncStatus } from '@/types/clipboard';
+import { HistoryItem, HistorySyncStatus } from '@/types/clipboard';
 import { ServerConfig } from '@/types/api';
 import { getSignalRClient, type HistoryChangedEvent } from 'signalr-client';
 
@@ -41,7 +41,7 @@ export class HistorySyncService {
   private reorganizeAbortController: AbortController | null = null;
   private progressCallbacks: Set<SyncProgressCallback> = new Set();
   private storageChangeCallback:
-    | ((items: ClipboardItem[], action: 'add' | 'update' | 'delete') => void)
+    | ((items: HistoryItem[], action: 'add' | 'update' | 'delete') => void)
     | null = null;
 
   constructor() {
@@ -395,8 +395,8 @@ export class HistorySyncService {
     signal: AbortSignal
   ): Promise<void> {
     // 先收集所有需要添加和更新的记录
-    const itemsToAdd: ClipboardItem[] = [];
-    const itemsToUpdate: { profileHash: string; updates: Partial<ClipboardItem> }[] = [];
+    const itemsToAdd: HistoryItem[] = [];
+    const itemsToUpdate: { profileHash: string; updates: Partial<HistoryItem> }[] = [];
 
     // 统计计数
     let remoteAddedCount = 0;
@@ -404,7 +404,7 @@ export class HistorySyncService {
     let localUpdatedCount = 0;
 
     const localItems = await this.historyStorage.getAllItemsIncludingDeleted();
-    const localMap = new Map<string, ClipboardItem>();
+    const localMap = new Map<string, HistoryItem>();
 
     for (const item of localItems) {
       localMap.set(item.profileHash.toLowerCase(), item);
@@ -678,7 +678,7 @@ export class HistorySyncService {
    * 处理同步冲突
    */
   private async handleSyncConflict(
-    local: ClipboardItem,
+    local: HistoryItem,
     serverRecord: HistoryRecordDto
   ): Promise<void> {
     const remoteVersion = serverRecord.version || 0;
@@ -709,7 +709,7 @@ export class HistorySyncService {
    * - 新增记录：上传到服务器（如果启用了历史记录同步）
    */
   private handleLocalHistoryChanged = async (
-    items: ClipboardItem[],
+    items: HistoryItem[],
     action: 'add' | 'update' | 'delete'
   ): Promise<void> => {
     if (!this.historyAPI || !(await this.isHistorySyncEnabled())) return;
@@ -732,7 +732,7 @@ export class HistorySyncService {
    * - hasData === true: 不上传（有数据文件，移动端不支持上传大文件）
    * - hasData === false: 上传元数据（纯文本，不需要数据文件）
    */
-  private async uploadNewRecord(item: ClipboardItem): Promise<void> {
+  private async uploadNewRecord(item: HistoryItem): Promise<void> {
     if (!this.historyAPI) return;
 
     if (item.hasData) {
@@ -775,7 +775,7 @@ export class HistorySyncService {
    * 4. 其他异常，原样抛出
    */
   private async pushRecordUpdate(
-    item: ClipboardItem,
+    item: HistoryItem,
     signal?: AbortSignal
   ): Promise<'synced' | 'notFound' | 'conflict'> {
     if (!this.historyAPI) {
@@ -824,7 +824,7 @@ export class HistorySyncService {
   /**
    * 同步单条记录
    */
-  private async syncOneRecord(item: ClipboardItem): Promise<void> {
+  private async syncOneRecord(item: HistoryItem): Promise<void> {
     if (!this.historyAPI) return;
 
     try {

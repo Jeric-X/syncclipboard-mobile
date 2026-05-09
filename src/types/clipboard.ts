@@ -22,7 +22,7 @@ export enum HistorySyncStatus {
 /**
  * 剪贴板项目
  */
-export interface ClipboardItem {
+export interface HistoryItem {
   /** 内容类型 */
   type: ClipboardContentType;
 
@@ -97,7 +97,7 @@ export interface ClipboardItem {
  */
 export function createDefaultClipboardItem(
   base: Omit<
-    ClipboardItem,
+    HistoryItem,
     | 'starred'
     | 'syncStatus'
     | 'version'
@@ -109,7 +109,7 @@ export function createDefaultClipboardItem(
   > &
     Partial<
       Pick<
-        ClipboardItem,
+        HistoryItem,
         | 'starred'
         | 'syncStatus'
         | 'version'
@@ -120,7 +120,7 @@ export function createDefaultClipboardItem(
         | 'isLocalFileReady'
       >
     >
-): ClipboardItem {
+): HistoryItem {
   const now = Date.now();
   return {
     starred: false,
@@ -192,7 +192,7 @@ export interface ClipboardMonitorOptions {
 /**
  * 剪贴板历史项
  */
-export interface ClipboardHistoryItem extends ClipboardItem {
+export interface ClipboardHistoryItem extends HistoryItem {
   /** 备注 */
   note?: string;
 

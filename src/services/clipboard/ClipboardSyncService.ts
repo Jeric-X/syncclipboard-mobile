@@ -15,11 +15,8 @@
  */
 
 import { Platform, ToastAndroid } from 'react-native';
-import {
-  ClipboardContent,
-  createDefaultClipboardItem,
-  HistorySyncStatus,
-} from '../../types/clipboard';
+import { ClipboardContent, HistorySyncStatus } from '../../types/clipboard';
+import { clipboardContentToItem } from '@/utils/clipboard/dtoConvert';
 import { SyncDirection, SyncResult } from '../../types/sync';
 import type { ProfileChangedEvent } from 'signalr-client';
 import type { ServerConfig } from '../../types/api';
@@ -608,14 +605,8 @@ class ClipboardSyncService {
       if (!hasData) {
         try {
           const { useHistoryStore } = require('../../stores/historyStore');
-          const historyItem = createDefaultClipboardItem({
-            type: finalContent.type,
-            text: finalContent.text || '',
-            profileHash: finalContent.profileHash || '',
+          const historyItem = clipboardContentToItem(finalContent, {
             hasData: false,
-            dataName: finalContent.fileName,
-            size: finalContent.fileSize,
-            timestamp: finalContent.timestamp || Date.now(),
             syncStatus: HistorySyncStatus.Synced,
           });
           await useHistoryStore.getState().addItem(historyItem);
@@ -1063,7 +1054,6 @@ class ClipboardSyncService {
     if (!remoteContent.profileHash) return;
 
     const { getProfileId } = require('@/utils');
-    const { createDefaultClipboardItem } = require('../../types/clipboard');
     const { HistorySyncStatus } = require('../../types/clipboard');
     const { getHistoryTransferQueue } = require('../history/HistoryTransferQueue');
     const { useHistoryStore } = require('../../stores/historyStore');
@@ -1072,14 +1062,7 @@ class ClipboardSyncService {
     const queue = getHistoryTransferQueue();
 
     try {
-      const historyItem = createDefaultClipboardItem({
-        type: remoteContent.type,
-        text: remoteContent.text || '',
-        profileHash: remoteContent.profileHash,
-        hasData: remoteContent.hasData || false,
-        dataName: remoteContent.fileName,
-        size: remoteContent.fileSize,
-        timestamp: remoteContent.timestamp || Date.now(),
+      const historyItem = clipboardContentToItem(remoteContent, {
         syncStatus: HistorySyncStatus.NeedSync,
         hasRemoteData: true,
         isLocalFileReady: false,

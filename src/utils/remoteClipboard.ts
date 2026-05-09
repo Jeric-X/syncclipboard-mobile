@@ -3,11 +3,8 @@
  * 远程剪贴板工具函数 - 下载文件并保存到历史记录
  */
 
-import {
-  ClipboardContent,
-  createDefaultClipboardItem,
-  HistorySyncStatus,
-} from '../types/clipboard';
+import { ClipboardContent, HistorySyncStatus } from '../types/clipboard';
+import { clipboardContentToItem } from './clipboard/dtoConvert';
 import { ISyncClipboardAPI, type DownloadProgressCallback } from '../api/clients/APIClient';
 import { historyStorage } from '../storage/HistoryStorage';
 import { useHistoryStore } from '../stores/historyStore';
@@ -64,16 +61,10 @@ export async function downloadAndAddToHistory(
 
   // 写入历史记录
   try {
-    const item = createDefaultClipboardItem({
-      type: updatedContent.type,
-      text: updatedContent.text || '',
-      profileHash: profileHash || '',
+    const item = clipboardContentToItem(updatedContent, {
       hasData,
-      dataName: updatedContent.fileName,
-      size: updatedContent.fileSize,
-      timestamp: updatedContent.timestamp || Date.now(),
+      profileHash: profileHash || '',
       syncStatus: HistorySyncStatus.Synced,
-      fileUri: updatedContent.fileUri,
     });
     await useHistoryStore.getState().addItem(item);
 

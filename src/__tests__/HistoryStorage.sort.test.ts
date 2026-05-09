@@ -4,7 +4,7 @@
  */
 
 import { HistoryStorage } from '../storage/HistoryStorage';
-import { ClipboardItem, HistorySyncStatus } from '../types/clipboard';
+import { HistoryItem, HistorySyncStatus } from '../types/clipboard';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn().mockResolvedValue(null),
@@ -51,8 +51,8 @@ jest.mock('../types/clipboard', () => {
 function createItem(
   profileHash: string,
   timestamp: number,
-  overrides?: Partial<ClipboardItem>
-): ClipboardItem {
+  overrides?: Partial<HistoryItem>
+): HistoryItem {
   return {
     type: 'Text',
     text: `item-${profileHash}`,
@@ -75,7 +75,7 @@ function createItem(
 /**
  * 提取 profileHash 列表，方便断言比对顺序
  */
-function hashes(items: ClipboardItem[]): string[] {
+function hashes(items: HistoryItem[]): string[] {
   return items.map((i) => i.profileHash);
 }
 

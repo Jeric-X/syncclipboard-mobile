@@ -4,7 +4,7 @@
  */
 
 import { useHistoryStore } from '../stores/historyStore';
-import { ClipboardItem, HistorySyncStatus } from '../types/clipboard';
+import { HistoryItem, HistorySyncStatus } from '../types/clipboard';
 
 // Mock historyStorage，避免真实 AsyncStorage 依赖
 jest.mock('../storage', () => ({
@@ -26,8 +26,8 @@ jest.mock('../storage', () => ({
 function createItem(
   profileHash: string,
   timestamp: number,
-  overrides?: Partial<ClipboardItem>
-): ClipboardItem {
+  overrides?: Partial<HistoryItem>
+): HistoryItem {
   return {
     type: 'Text',
     text: `item-${profileHash}`,
@@ -47,7 +47,7 @@ function createItem(
   };
 }
 
-function hashes(items: ClipboardItem[]): string[] {
+function hashes(items: HistoryItem[]): string[] {
   return items.map((i) => i.profileHash);
 }
 

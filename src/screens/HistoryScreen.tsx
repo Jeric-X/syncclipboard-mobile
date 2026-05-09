@@ -32,7 +32,7 @@ import { useSettingsStore } from '@/stores';
 import { historyStorage } from '@/storage';
 import { useTransferQueueStore } from '@/stores/transferQueueStore';
 import { useHistoryDisplaySettings } from '@/hooks/useHistoryDisplaySettings';
-import { ClipboardItem, ClipboardContent, createDefaultClipboardItem } from '@/types/clipboard';
+import { HistoryItem, ClipboardContent, createDefaultClipboardItem } from '@/types/clipboard';
 import { HistoryFilter } from '@/types/storage';
 import { HistoryListItem } from '@/components/HistoryListItem';
 import { MessageToast } from '@/components/MessageToast';
@@ -150,7 +150,7 @@ export function HistoryScreen() {
     [setSort, loadItems]
   );
 
-  const listRef = useRef<FlashListRef<ClipboardItem>>(null);
+  const listRef = useRef<FlashListRef<HistoryItem>>(null);
 
   // 已在历史记录页面时，再次点击导航栏按钮回到顶部
   useEffect(() => {
@@ -198,7 +198,7 @@ export function HistoryScreen() {
     const { HistoryStorage } = require('@/storage/HistoryStorage');
     const storage = HistoryStorage.getInstance();
 
-    const handleChange = (items: ClipboardItem[], action: 'add' | 'update' | 'delete') => {
+    const handleChange = (items: HistoryItem[], action: 'add' | 'update' | 'delete') => {
       handleStorageChange(items, action);
     };
 
@@ -215,7 +215,7 @@ export function HistoryScreen() {
   }, [items]);
 
   // ClipboardItem 转换为 ClipboardContent 后调用公共复制函数
-  const copyItemWithSync = useCallback(async (item: ClipboardItem) => {
+  const copyItemWithSync = useCallback(async (item: HistoryItem) => {
     const content: ClipboardContent = {
       type: item.type,
       text: item.text,
@@ -238,7 +238,7 @@ export function HistoryScreen() {
 
   // 点击列表项 - 复制到剪贴板
   const handleItemPress = useCallback(
-    async (item: ClipboardItem) => {
+    async (item: HistoryItem) => {
       const result = await copyItemWithSync(item);
       if (result.success) {
         showMessage(result.message, 'success');
@@ -251,7 +251,7 @@ export function HistoryScreen() {
 
   // 分享项目
   const handleShare = useCallback(
-    async (item: ClipboardItem) => {
+    async (item: HistoryItem) => {
       try {
         if (item.type === 'Text' && !isTextInvalid(item.text)) {
           await Share.share({
@@ -273,7 +273,7 @@ export function HistoryScreen() {
 
   // 储存文件到设备（图片类型保存到相册）
   const handleSave = useCallback(
-    async (item: ClipboardItem) => {
+    async (item: HistoryItem) => {
       if (!item.fileUri) return;
       try {
         if (item.type === 'Image') {
@@ -301,7 +301,7 @@ export function HistoryScreen() {
 
   // 打开文件
   const handleOpen = useCallback(
-    async (item: ClipboardItem) => {
+    async (item: HistoryItem) => {
       if (!item.fileUri) return;
       try {
         await openFile(item.fileUri);
@@ -315,7 +315,7 @@ export function HistoryScreen() {
 
   // 切换收藏状态
   const handleToggleStar = useCallback(
-    async (item: ClipboardItem) => {
+    async (item: HistoryItem) => {
       try {
         await toggleStar(item.profileHash);
         // 同步由 HistorySyncService.handleLocalHistoryChanged 自动处理
@@ -329,7 +329,7 @@ export function HistoryScreen() {
 
   // 长按进入多选模式
   const handleItemLongPress = useCallback(
-    (item: ClipboardItem) => {
+    (item: HistoryItem) => {
       if (!isMultiSelectMode) {
         setIsMultiSelectMode(true);
         clearSelection();
@@ -341,7 +341,7 @@ export function HistoryScreen() {
 
   // 多选模式下点击 item 切换选中
   const handleMultiSelectPress = useCallback(
-    (item: ClipboardItem) => {
+    (item: HistoryItem) => {
       toggleSelection(item.profileHash);
     },
     [toggleSelection]
@@ -761,7 +761,7 @@ export function HistoryScreen() {
   }, [showHistoryDebugInfo, setShowHistoryDebugInfo]);
 
   const handleDownload = useCallback(
-    async (item: ClipboardItem) => {
+    async (item: HistoryItem) => {
       console.log(`[HistoryScreen] ========== Download Button Clicked ==========`);
       console.log(`[HistoryScreen] Item profileHash: ${item.profileHash}`);
       console.log(`[HistoryScreen] Item type: ${item.type}`);
@@ -789,7 +789,7 @@ export function HistoryScreen() {
   );
 
   const handleUpload = useCallback(
-    async (item: ClipboardItem) => {
+    async (item: HistoryItem) => {
       console.log(`[HistoryScreen] ========== Upload Button Clicked ==========`);
       console.log(`[HistoryScreen] Item profileHash: ${item.profileHash}`);
       console.log(`[HistoryScreen] Item type: ${item.type}`);
@@ -827,7 +827,7 @@ export function HistoryScreen() {
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: ClipboardItem }) => {
+    ({ item }: { item: HistoryItem }) => {
       return (
         <HistoryListItem
           item={item}
@@ -884,7 +884,7 @@ export function HistoryScreen() {
 
   // 客户端分类筛选
   const filteredItemsByTab = useMemo(() => {
-    const result: Record<string, ClipboardItem[]> = {
+    const result: Record<string, HistoryItem[]> = {
       all: sortedItems,
       Text: sortedItems.filter((item) => item.type === 'Text'),
       Image: sortedItems.filter((item) => item.type === 'Image'),

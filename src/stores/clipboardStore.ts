@@ -4,7 +4,8 @@
  */
 
 import { create } from 'zustand';
-import { ClipboardContent, createDefaultClipboardItem } from '../types/clipboard';
+import { ClipboardContent } from '../types/clipboard';
+import { clipboardContentToItem } from '@/utils/clipboard/dtoConvert';
 import { localClipboard, clipboardMonitor } from '../services';
 import { useHistoryStore } from './historyStore';
 
@@ -97,16 +98,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       // 使用持久化的 hash 判断是否需要添加历史记录
       const changed = await clipboardMonitor.checkAndUpdateLastContent(content);
       if (changed) {
-        const historyItem = createDefaultClipboardItem({
-          type: content.type,
-          text: content.text || '',
-          profileHash: content.profileHash || '',
-          hasData: !!(content.fileName || content.fileUri),
-          dataName: content.fileName,
-          size: content.fileSize,
-          timestamp: content.timestamp || Date.now(),
-          fileUri: content.fileUri,
-        });
+        const historyItem = clipboardContentToItem(content);
         await useHistoryStore.getState().addItem(historyItem);
       }
     } catch (error) {
@@ -134,16 +126,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       await clipboardMonitor.setLastContent(content);
 
       // 添加到历史记录
-      const historyItem = createDefaultClipboardItem({
-        type: content.type,
-        text: content.text || '',
-        profileHash: content.profileHash || '',
-        hasData: !!(content.fileName || content.fileUri),
-        dataName: content.fileName,
-        size: content.fileSize,
-        timestamp: content.timestamp || Date.now(),
-        fileUri: content.fileUri,
-      });
+      const historyItem = clipboardContentToItem(content);
       await useHistoryStore.getState().addItem(historyItem);
     } catch (error) {
       const errorMessage =
@@ -169,16 +152,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       set({ currentContent: content });
 
       // 添加到历史记录
-      const historyItem = createDefaultClipboardItem({
-        type: content.type,
-        text: content.text || '',
-        profileHash: content.profileHash || '',
-        hasData: !!(content.fileName || content.fileUri),
-        dataName: content.fileName,
-        size: content.fileSize,
-        timestamp: content.timestamp || Date.now(),
-        fileUri: content.fileUri,
-      });
+      const historyItem = clipboardContentToItem(content);
       await useHistoryStore.getState().addItem(historyItem);
     });
 

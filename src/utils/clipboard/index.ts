@@ -13,6 +13,7 @@ export {
   getClipboardTypeDisplayName,
   getClipboardTypeIcon,
   validateClipboardContent,
+  clipboardContentToItem,
 } from './dtoConvert';
 export type { ContentToProfileDtoOptions } from './dtoConvert';
 export { getProfileId, parseProfileId } from './profileId';
