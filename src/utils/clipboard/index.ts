@@ -3,5 +3,16 @@
  * 剪贴板工具函数导出
  */
 
-export { dtoToClipboardItem, clipboardItemToDto } from './dtoConvert';
+export {
+  dtoToClipboardItem,
+  clipboardItemToDto,
+  contentToProfileDto,
+  profileDtoToContent,
+  getExtensionFromMimeType,
+  getExtensionFromFileName,
+  getClipboardTypeDisplayName,
+  getClipboardTypeIcon,
+  validateClipboardContent,
+} from './dtoConvert';
+export type { ContentToProfileDtoOptions } from './dtoConvert';
 export { getProfileId, parseProfileId } from './profileId';

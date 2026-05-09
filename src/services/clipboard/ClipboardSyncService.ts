@@ -52,7 +52,7 @@ class ClipboardSyncService {
   private readonly _signalRCallback = async (event: ProfileChangedEvent): Promise<void> => {
     try {
       if (!this.activeServer) return;
-      const { profileDtoToContent } = await import('../../utils/clipboard');
+      const { profileDtoToContent } = await import('../../utils/clipboard/dtoConvert');
       const profile = {
         type: event.type as 'Text' | 'Image' | 'File' | 'Group',
         hash: event.hash,
@@ -298,7 +298,7 @@ class ClipboardSyncService {
       const profile = await apiClient.getClipboard();
 
       if (profile) {
-        const { profileDtoToContent } = await import('../../utils/clipboard');
+        const { profileDtoToContent } = await import('../../utils/clipboard/dtoConvert');
         const content = profileDtoToContent(profile);
         const currentHash = content.profileHash || content.text || '';
         await this._processRemoteClipboardContent(

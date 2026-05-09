@@ -5,7 +5,171 @@
 
 import { HistoryRecordDto } from '@/types/history';
 import { ClipboardItem, HistorySyncStatus } from '@/types/clipboard';
-import { ClipboardContentType } from '@/types/api';
+import { ClipboardContentType, ProfileDto } from '@/types/api';
+import { ClipboardContent } from '@/types';
+import { calculateContentHash } from '@/utils/hash';
+
+// ─── ProfileDto ↔ ClipboardContent ────────────────────────────────────────────
+
+export interface ContentToProfileDtoOptions {
+  signal?: AbortSignal;
+}
+
+/**
+ * 将 ClipboardContent 转换为 ProfileDto
+ */
+export async function contentToProfileDto(
+  content: ClipboardContent,
+  options?: ContentToProfileDtoOptions
+): Promise<ProfileDto> {
+  let { type, text = '', profileHash, fileName, fileSize, fileUri } = content;
+
+  if (!profileHash) {
+    profileHash = await calculateContentHash(content, options?.signal);
+  }
+
+  switch (type) {
+    case 'Text': {
+      if (fileUri && fileName) {
+        return {
+          type: 'Text',
+          text,
+          hash: profileHash,
+          hasData: true,
+          dataName: fileName,
+          size: fileSize,
+        };
+      }
+      return { type: 'Text', text, hash: profileHash, hasData: false };
+    }
+    case 'Image':
+      return {
+        type: 'Image',
+        text: text || '[图片]',
+        hash: profileHash,
+        hasData: true,
+        dataName: fileName,
+        size: fileSize,
+      };
+    case 'File':
+      return {
+        type: 'File',
+        text: text || fileName || '[文件]',
+        hash: profileHash,
+        hasData: true,
+        dataName: fileName,
+        size: fileSize,
+      };
+    case 'Group':
+      return {
+        type: 'Group',
+        text: text || '[文件组]',
+        hash: profileHash,
+        hasData: true,
+        dataName: fileName,
+        size: fileSize,
+      };
+    default:
+      throw new Error(`Unsupported clipboard type: ${type}`);
+  }
+}
+
+/**
+ * 将 ProfileDto 转换为 ClipboardContent
+ */
+export function profileDtoToContent(profile: ProfileDto): ClipboardContent {
+  const { type, text, hash, hasData, dataName, size } = profile;
+
+  const baseContent: ClipboardContent = {
+    type: type as ClipboardContentType,
+    text,
+    profileHash: hash,
+    timestamp: Date.now(),
+    hasData,
+  };
+
+  if (hasData) {
+    switch (type) {
+      case 'Text':
+        return { ...baseContent, fileName: dataName, fileSize: size || text?.length || 0 };
+      case 'Image':
+        return { ...baseContent, fileName: dataName, fileSize: size };
+      case 'File':
+      case 'Group':
+        return { ...baseContent, fileName: dataName, fileSize: size };
+    }
+  }
+
+  if (type === 'Text') {
+    return { ...baseContent, fileSize: size || text?.length || 0 };
+  }
+
+  return baseContent;
+}
+
+// ─── MIME / 文件扩展名工具 ────────────────────────────────────────────────────
+
+export function getExtensionFromMimeType(mimeType: string): string {
+  const mimeToExt: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'image/svg+xml': 'svg',
+    'image/bmp': 'bmp',
+    'text/plain': 'txt',
+    'text/html': 'html',
+    'application/pdf': 'pdf',
+    'application/zip': 'zip',
+    'application/json': 'json',
+    'application/xml': 'xml',
+  };
+  return mimeToExt[mimeType.toLowerCase()] || 'bin';
+}
+
+export function getExtensionFromFileName(fileName: string): string {
+  const match = fileName.match(/\.([^.]+)$/);
+  return match ? match[1].toLowerCase() : 'bin';
+}
+
+// ─── 剪贴板类型辅助 ───────────────────────────────────────────────────────────
+
+export function getClipboardTypeDisplayName(type: ClipboardContentType): string {
+  const displayNames: Record<ClipboardContentType, string> = {
+    Text: '文本',
+    Image: '图片',
+    File: '文件',
+    Group: '文件组',
+  };
+  return displayNames[type] || '未知';
+}
+
+export function getClipboardTypeIcon(type: ClipboardContentType): string {
+  const icons: Record<ClipboardContentType, string> = {
+    Text: 'text',
+    Image: 'image',
+    File: 'file',
+    Group: 'folder',
+  };
+  return icons[type] || 'help';
+}
+
+export function validateClipboardContent(content: ClipboardContent): boolean {
+  if (!content || !content.type) return false;
+  switch (content.type) {
+    case 'Text':
+      return typeof content.text === 'string' && content.text.length > 0;
+    case 'Image':
+    case 'File':
+    case 'Group':
+      return Boolean(content.fileUri || content.fileName);
+    default:
+      return false;
+  }
+}
+
+// ─── HistoryRecordDto ↔ ClipboardItem ────────────────────────────────────────
 
 /**
  * 将 HistoryRecordDto 转换为 ClipboardItem

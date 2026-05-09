@@ -455,7 +455,7 @@ export class SyncManager {
       }
 
       // 转换为 ProfileDto
-      const { contentToProfileDto } = await import('../../utils/clipboard');
+      const { contentToProfileDto } = await import('../../utils/clipboard/dtoConvert');
       const profile = await contentToProfileDto(localContent);
 
       console.log('[SyncManager] Upload - Profile info:', {
@@ -626,7 +626,7 @@ export class SyncManager {
       }
 
       // 转换为 ClipboardContent
-      const { profileDtoToContent } = await import('../../utils/clipboard');
+      const { profileDtoToContent } = await import('../../utils/clipboard/dtoConvert');
       const content = profileDtoToContent(profile);
 
       // 如果有文件数据，优先从历史记录读取缓存，否则下载并保存到历史记录

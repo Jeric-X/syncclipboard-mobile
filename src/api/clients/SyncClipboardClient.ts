@@ -141,7 +141,7 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
       fileName: content.fileName,
     });
 
-    const { contentToProfileDto } = await import('@/utils/clipboard');
+    const { contentToProfileDto } = await import('@/utils/clipboard/dtoConvert');
     const profile = await contentToProfileDto(content, { signal });
 
     if (!profile.hash) {
