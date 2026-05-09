@@ -10,7 +10,7 @@ import { ISyncClipboardAPI } from '../../api/clients/APIClient';
 import { WebDAVClient } from '../../api/clients/WebDAVClient';
 import { S3Client } from '../../api/clients/S3Client';
 import { AuthService } from '../../api/AuthService';
-import { clipboardManager } from '../clipboard/ClipboardManager';
+import { localClipboard } from '../clipboard/LocalClipboard';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import { ConfigurationError } from '@/errors';
 import { ServerConfig, ProfileDto } from '../../types/api';
@@ -69,7 +69,7 @@ export class SyncManager {
 
   private config: SyncConfig | null = null;
   private apiClient: ISyncClipboardAPI | null = null;
-  private clipboardManager = clipboardManager;
+  private clipboardManager = localClipboard;
   private clipboardMonitor = clipboardMonitor;
 
   private status: SyncStatus = SyncStatus.Idle;

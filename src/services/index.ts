@@ -4,7 +4,7 @@
  */
 
 // Clipboard Services
-export { ClipboardManager, clipboardManager } from './clipboard/ClipboardManager';
+export { LocalClipboard, localClipboard } from './clipboard/LocalClipboard';
 export { ClipboardMonitor, clipboardMonitor } from './clipboard/ClipboardMonitor';
 
 // SignalR Client (re-exported from signalr-client module)

@@ -5,7 +5,7 @@
 
 import { create } from 'zustand';
 import { ClipboardContent, createDefaultClipboardItem } from '../types/clipboard';
-import { clipboardManager, clipboardMonitor } from '../services';
+import { localClipboard, clipboardMonitor } from '../services';
 import { useHistoryStore } from './historyStore';
 
 /**
@@ -31,12 +31,6 @@ interface ClipboardState {
 
   /** 设置剪贴板内容 */
   setContent: (content: ClipboardContent) => Promise<void>;
-
-  /** 从图库选择图片 */
-  pickImage: () => Promise<void>;
-
-  /** 拍照 */
-  takePhoto: () => Promise<void>;
 
   /** 开始监听剪贴板 */
   startMonitoring: () => Promise<void>;
@@ -77,7 +71,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const content = await clipboardManager.getClipboardContent();
+      const content = await localClipboard.getClipboardContent();
 
       // 剪贴板读取返回空时（如 Android 后台→前台瞬间的权限延迟），保留已有内容
       if (!content) {
@@ -126,10 +120,10 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      await clipboardManager.setClipboardContent(content);
+      await localClipboard.setClipboardContent(content);
 
       console.log(
-        `[clipboardManager] new content set: type=${content.type}, text=${content.text?.substring(
+        `[localClipboard] new content set: type=${content.type}, text=${content.text?.substring(
           0,
           20
         )}, profileHash=${content.profileHash?.substring(0, 8)}, timestamp=${content.timestamp}`
@@ -154,68 +148,6 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to set clipboard content';
-      set({ error: errorMessage, isLoading: false });
-    }
-  },
-
-  pickImage: async () => {
-    set({ isLoading: true, error: null });
-
-    try {
-      const content = await clipboardManager.pickImageFromGallery();
-      if (content) {
-        set({ currentContent: content, isLoading: false });
-
-        // 更新持久化的 hash
-        await clipboardMonitor.setLastContent(content);
-
-        // 添加到历史记录
-        const historyItem = createDefaultClipboardItem({
-          type: content.type,
-          text: content.text || '',
-          profileHash: content.profileHash || '',
-          hasData: !!(content.fileName || content.fileUri),
-          dataName: content.fileName,
-          size: content.fileSize,
-          timestamp: content.timestamp || Date.now(),
-        });
-        await useHistoryStore.getState().addItem(historyItem);
-      } else {
-        set({ isLoading: false });
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to pick image';
-      set({ error: errorMessage, isLoading: false });
-    }
-  },
-
-  takePhoto: async () => {
-    set({ isLoading: true, error: null });
-
-    try {
-      const content = await clipboardManager.takePhoto();
-      if (content) {
-        set({ currentContent: content, isLoading: false });
-
-        // 更新持久化的 hash
-        await clipboardMonitor.setLastContent(content);
-
-        // 添加到历史记录
-        const historyItem = createDefaultClipboardItem({
-          type: content.type,
-          text: content.text || '',
-          profileHash: content.profileHash || '',
-          hasData: !!(content.fileName || content.fileUri),
-          dataName: content.fileName,
-          size: content.fileSize,
-          timestamp: content.timestamp || Date.now(),
-        });
-        await useHistoryStore.getState().addItem(historyItem);
-      } else {
-        set({ isLoading: false });
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to take photo';
       set({ error: errorMessage, isLoading: false });
     }
   },

@@ -5,7 +5,6 @@
 
 import * as Clipboard from 'expo-clipboard';
 import * as ClipboardProxy from '@/utils/clipboardProxy';
-import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { ClipboardContent } from '@/types';
 import { calculateTextHash, calculateFileHash } from '@/utils/hash';
@@ -17,9 +16,7 @@ import { nativeSetClipboardImageFromFile } from 'native-util';
 /**
  * 剪贴板管理器类
  */
-export class ClipboardManager {
-  private lastProfileHash: string = '';
-
+export class LocalClipboard {
   /**
    * 获取当前剪贴板内容
    */
@@ -277,10 +274,6 @@ export class ClipboardManager {
   async setTextContent(text: string): Promise<void> {
     try {
       await Clipboard.setStringAsync(text);
-
-      // 计算并更新 localClipboardHash（用于本地变化检测）
-      const localClipboardHash = await calculateTextHash(text);
-      this.lastProfileHash = localClipboardHash;
     } catch (error) {
       console.error('[ClipboardManager] Failed to set text content:', error);
 
@@ -302,10 +295,6 @@ export class ClipboardManager {
       if (!success) {
         throw new Error('Native setClipboardImageFromFile returned false');
       }
-
-      // 计算并更新 localClipboardHash（用于本地变化检测，与 getImageContent 保持一致使用文件内容 hash）
-      const localClipboardHash = await calculateFileHash(imageUri);
-      this.lastProfileHash = localClipboardHash;
     } catch (error) {
       console.error('[ClipboardManager] Failed to set image content:', error);
       throw new Error('Failed to set image to clipboard');
@@ -349,124 +338,12 @@ export class ClipboardManager {
   async clearClipboard(): Promise<void> {
     try {
       await Clipboard.setStringAsync('');
-      this.lastProfileHash = '';
     } catch (error) {
       console.error('[ClipboardManager] Failed to clear clipboard:', error);
       throw new Error('Failed to clear clipboard');
     }
   }
-
-  /**
-   * 检查剪贴板内容是否发生变化
-   */
-  async hasClipboardChanged(): Promise<boolean> {
-    try {
-      const content = await this.getClipboardContent();
-      if (!content || !content.profileHash) {
-        return false;
-      }
-
-      const hasChanged = content.profileHash !== this.lastProfileHash;
-      if (hasChanged) {
-        this.lastProfileHash = content.profileHash;
-      }
-
-      return hasChanged;
-    } catch (error) {
-      console.error('[ClipboardManager] Failed to check clipboard change:', error);
-      return false;
-    }
-  }
-
-  /**
-   * 获取上次记录的 profileHash
-   */
-  getLastProfileHash(): string {
-    return this.lastProfileHash;
-  }
-
-  /**
-   * 重置上次记录的 profileHash
-   */
-  resetLastProfileHash(): void {
-    this.lastProfileHash = '';
-  }
-
-  /**
-   * 从相册选择图片
-   */
-  async pickImageFromGallery(): Promise<ClipboardContent | null> {
-    try {
-      // 请求权限
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        throw new Error('Permission to access media library denied');
-      }
-
-      // 选择图片
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: false,
-        quality: 1,
-      });
-
-      if (result.canceled || !result.assets || result.assets.length === 0) {
-        return null;
-      }
-
-      const asset = result.assets[0];
-      const profileHash = await calculateTextHash(asset.uri);
-
-      return {
-        type: 'Image',
-        text: '[图片]',
-        fileUri: asset.uri,
-        fileSize: asset.fileSize,
-        profileHash,
-      };
-    } catch (error) {
-      console.error('[ClipboardManager] Failed to pick image:', error);
-      return null;
-    }
-  }
-
-  /**
-   * 拍照
-   */
-  async takePhoto(): Promise<ClipboardContent | null> {
-    try {
-      // 请求权限
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        throw new Error('Permission to access camera denied');
-      }
-
-      // 拍照
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: false,
-        quality: 1,
-      });
-
-      if (result.canceled || !result.assets || result.assets.length === 0) {
-        return null;
-      }
-
-      const asset = result.assets[0];
-      const profileHash = await calculateTextHash(asset.uri);
-
-      return {
-        type: 'Image',
-        text: '[图片]',
-        fileUri: asset.uri,
-        fileSize: asset.fileSize,
-        profileHash,
-      };
-    } catch (error) {
-      console.error('[ClipboardManager] Failed to take photo:', error);
-      return null;
-    }
-  }
 }
 
 // 导出单例
-export const clipboardManager = new ClipboardManager();
+export const localClipboard = new LocalClipboard();

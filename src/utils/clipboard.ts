@@ -291,7 +291,7 @@ export async function copyClipboardItem(
  * 调用者负责在成功后更新 UI 状态。
  */
 export async function copyToLocalClipboard(content: ClipboardContent): Promise<CopyResult> {
-  const { clipboardManager, clipboardMonitor } = await import('@/services');
+  const { localClipboard, clipboardMonitor } = await import('@/services');
 
   clipboardMonitor.pausePolling();
   try {
@@ -315,7 +315,7 @@ export async function copyToLocalClipboard(content: ClipboardContent): Promise<C
       }
     }
 
-    const result = await copyClipboardItem(contentToCopy, clipboardManager);
+    const result = await copyClipboardItem(contentToCopy, localClipboard);
     if (result.success) {
       await clipboardMonitor.setLastContent(contentToCopy);
     }

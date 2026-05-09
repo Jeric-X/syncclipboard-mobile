@@ -5,7 +5,7 @@
 
 import { AppState, AppStateStatus, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ClipboardManager } from './ClipboardManager';
+import { LocalClipboard } from './LocalClipboard';
 import { ClipboardContent, ClipboardChangeCallback, ClipboardMonitorOptions } from '@/types';
 import { setTimer, clearTimer } from 'native-timer';
 
@@ -21,7 +21,7 @@ interface PersistedClipboardHash {
  * 剪贴板监听器类
  */
 export class ClipboardMonitor {
-  private clipboardManager: ClipboardManager;
+  private clipboardManager: LocalClipboard;
   private callbacks: Set<ClipboardChangeCallback> = new Set();
   private isMonitoring: boolean = false;
   private pollingTimerTag: string | null = null;
@@ -40,7 +40,7 @@ export class ClipboardMonitor {
   private isChecking: boolean = false;
   private checkGeneration: number = 0;
 
-  constructor(clipboardManager: ClipboardManager, options?: ClipboardMonitorOptions) {
+  constructor(clipboardManager: LocalClipboard, options?: ClipboardMonitorOptions) {
     this.clipboardManager = clipboardManager;
 
     if (options) {
@@ -408,7 +408,6 @@ export class ClipboardMonitor {
    */
   async reset(): Promise<void> {
     this.lastContent = null;
-    this.clipboardManager.resetLastProfileHash();
     try {
       await AsyncStorage.removeItem(LAST_CLIPBOARD_HASH_KEY);
     } catch (error) {
@@ -418,5 +417,5 @@ export class ClipboardMonitor {
 }
 
 // 创建默认实例
-import { clipboardManager } from './ClipboardManager';
-export const clipboardMonitor = new ClipboardMonitor(clipboardManager);
+import { localClipboard } from './LocalClipboard';
+export const clipboardMonitor = new ClipboardMonitor(localClipboard);

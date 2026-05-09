@@ -67,8 +67,8 @@ export function HomeScreen() {
   // 复制本地剪贴板内容（简单模式，直接设置到剪贴板）
   const copyLocalToClipboard = async (content: ClipboardContent) => {
     try {
-      const { clipboardManager } = await import('@/services');
-      await clipboardManager.setClipboardContent(content);
+      const { localClipboard } = await import('@/services');
+      await localClipboard.setClipboardContent(content);
       showMessage('已复制到剪贴板', 'success');
     } catch (error) {
       console.error('[HomeScreen] Failed to copy local content:', error);
