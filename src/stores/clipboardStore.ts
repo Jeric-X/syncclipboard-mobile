@@ -5,9 +5,7 @@
 
 import { create } from 'zustand';
 import { ClipboardContent } from '../types/clipboard';
-import { clipboardContentToItem } from '@/utils/clipboard/dtoConvert';
 import { localClipboard, clipboardMonitor } from '../services';
-import { useHistoryStore } from './historyStore';
 
 /**
  * 剪贴板状态接口
@@ -29,9 +27,6 @@ interface ClipboardState {
   // 动作
   /** 获取剪贴板内容 */
   getContent: () => Promise<void>;
-
-  /** 设置剪贴板内容 */
-  setContent: (content: ClipboardContent) => Promise<void>;
 
   /** 开始监听剪贴板 */
   startMonitoring: () => Promise<void>;
@@ -94,43 +89,9 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       }
 
       set({ currentContent: content, isLoading: false });
-
-      // 使用持久化的 hash 判断是否需要添加历史记录
-      const changed = await clipboardMonitor.checkAndUpdateLastContent(content);
-      if (changed) {
-        const historyItem = clipboardContentToItem(content);
-        await useHistoryStore.getState().addItem(historyItem);
-      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to get clipboard content';
-      set({ error: errorMessage, isLoading: false });
-    }
-  },
-
-  setContent: async (content: ClipboardContent) => {
-    set({ isLoading: true, error: null });
-
-    try {
-      await localClipboard.setClipboardContent(content);
-
-      console.log(
-        `[localClipboard] new content set: type=${content.type}, text=${content.text?.substring(
-          0,
-          20
-        )}, profileHash=${content.profileHash?.substring(0, 8)}, timestamp=${content.timestamp}`
-      );
-      set({ currentContent: content, isLoading: false });
-
-      // 更新持久化的 hash
-      await clipboardMonitor.setLastContent(content);
-
-      // 添加到历史记录
-      const historyItem = clipboardContentToItem(content);
-      await useHistoryStore.getState().addItem(historyItem);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Failed to set clipboard content';
       set({ error: errorMessage, isLoading: false });
     }
   },
@@ -142,7 +103,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
 
     set({ isMonitoring: true });
 
-    clipboardMonitor.addCallback(async (content) => {
+    clipboardMonitor.addCallback((content) => {
       console.log('[ClipboardStore] Clipboard content updated:', {
         type: content.type,
         localClipboardHash: content.localClipboardHash?.substring(0, 8),
@@ -150,17 +111,13 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
         timestamp: content.timestamp,
       });
       set({ currentContent: content });
-
-      // 添加到历史记录
-      const historyItem = clipboardContentToItem(content);
-      await useHistoryStore.getState().addItem(historyItem);
     });
 
     await clipboardMonitor.start();
 
-    // 立即读取一次当前剪贴板内容，确保 UI 不需要等待第一次轮询 tick
-    // （监控的 change-detection 路径在内容无变化时不触发回调，需要显式初始读取）
-    await get().getContent();
+    // 立即触发一次检查，确保 UI 不需要等待第一次轮询 tick
+    // （lastContent 为 null 时 hasContentChanged 必返回 true，当前剪贴板内容会立即推送给回调）
+    await clipboardMonitor.triggerCheck();
   },
 
   stopMonitoring: () => {

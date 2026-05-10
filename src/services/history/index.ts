@@ -12,3 +12,4 @@ export type {
   TaskStatusChangedCallback,
 } from './HistoryTransferQueue';
 export { getHistoryTransferQueue } from './HistoryTransferQueue';
+export { HistoryService, getHistoryService } from './HistoryService';

@@ -184,9 +184,6 @@ export interface ClipboardMonitorOptions {
 
   /** 是否在应用进入后台时停止监听 */
   stopOnBackground?: boolean;
-
-  /** 防抖延迟（毫秒） */
-  debounceDelay?: number;
 }
 
 /**

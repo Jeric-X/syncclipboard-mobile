@@ -4,6 +4,7 @@
  *
  * 负责管理：
  * - ClipboardSyncService（远程同步、SignalR/轮询、SyncManager、自动上传/下载）
+ * - HistoryService（本地历史记录追踪）
  * - 前台服务（常驻通知）
  * - 短信验证码服务
  * - 剪贴板监控（startMonitoring）
@@ -105,6 +106,14 @@ class BackgroundServiceManager {
       await useClipboardStore.getState().startMonitoring();
     } catch (e) {
       console.error('[BackgroundServiceManager] Failed to start clipboard monitoring:', e);
+    }
+
+    // 始终启动 HistoryService 本地历史追踪（无需服务器配置，始终运行）
+    try {
+      const { getHistoryService } = require('../history/HistoryService');
+      getHistoryService().startTracking();
+    } catch (e) {
+      console.error('[BackgroundServiceManager] Failed to start local history tracking:', e);
     }
 
     // 始终启动 ClipboardSyncService（前台 UI + 后台同步）
