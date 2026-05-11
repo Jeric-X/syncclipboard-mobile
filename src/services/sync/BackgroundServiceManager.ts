@@ -102,8 +102,11 @@ class BackgroundServiceManager {
 
     // 始终启动剪贴板监控（无论是否启用后台任务，UI 需要感知本地剪贴板变化）
     try {
-      const { useClipboardStore } = require('../../stores');
-      await useClipboardStore.getState().startMonitoring();
+      const { clipboardMonitor } = require('../../services/clipboard/ClipboardMonitor');
+      if (!clipboardMonitor.isActive()) {
+        await clipboardMonitor.start();
+        await clipboardMonitor.triggerCheck();
+      }
     } catch (e) {
       console.error('[BackgroundServiceManager] Failed to start clipboard monitoring:', e);
     }

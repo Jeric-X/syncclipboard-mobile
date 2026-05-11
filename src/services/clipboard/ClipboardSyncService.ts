@@ -21,6 +21,7 @@ import { SyncDirection, SyncResult } from '../../types/sync';
 import type { ProfileChangedEvent } from 'signalr-client';
 import type { ServerConfig } from '../../types/api';
 import type { ISyncClipboardAPI } from '../../api/clients/APIClient';
+import { clipboardMonitor } from './ClipboardMonitor';
 
 class ClipboardSyncService {
   private static instance: ClipboardSyncService | null = null;
@@ -255,8 +256,7 @@ class ClipboardSyncService {
    */
   async refreshContent(): Promise<void> {
     // 更新本地剪贴板内容
-    const { useClipboardStore } = require('../../stores/clipboardStore');
-    await useClipboardStore.getState().getContent();
+    await clipboardMonitor.triggerCheck();
 
     // 如有活跃服务器，刷新远程内容
     if (!this.activeServer) return;
@@ -835,11 +835,10 @@ class ClipboardSyncService {
   private _subscribeToLocalPollingIntervalChanges(): void {
     if (this._localPollingIntervalUnsub) return;
     const { useSettingsStore } = require('../../stores/settingsStore');
-    const { useClipboardStore } = require('../../stores/clipboardStore');
 
     // 立即应用当前值
     const currentInterval = useSettingsStore.getState().config?.localPollingInterval ?? 1000;
-    useClipboardStore.getState().updatePollingInterval(currentInterval);
+    clipboardMonitor.updatePollingInterval(currentInterval);
 
     this._localPollingIntervalUnsub = useSettingsStore.subscribe(
       (
@@ -849,7 +848,7 @@ class ClipboardSyncService {
         const interval = state.config?.localPollingInterval ?? 1000;
         const prevInterval = prevState.config?.localPollingInterval ?? 1000;
         if (interval !== prevInterval) {
-          useClipboardStore.getState().updatePollingInterval(interval);
+          clipboardMonitor.updatePollingInterval(interval);
         }
       }
     );

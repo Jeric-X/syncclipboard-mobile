@@ -320,3 +320,10 @@ export class ClipboardMonitor {
 // 创建默认实例
 import { localClipboard } from './LocalClipboard';
 export const clipboardMonitor = new ClipboardMonitor(localClipboard);
+
+// 注册默认 callback：将剪贴板变化同步到 clipboardStore
+// 使用 require 延迟加载，避免循环依赖
+clipboardMonitor.addCallback((content) => {
+  const { useClipboardStore } = require('../../stores/clipboardStore');
+  useClipboardStore.getState().setCurrentContentDisplay(content);
+});
