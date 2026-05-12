@@ -6,7 +6,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppConfig, DEFAULT_APP_CONFIG, STORAGE_KEYS } from '../types/storage';
 import { ServerConfig } from '../types/api';
-import { SyncMode } from '../types/sync';
 
 /**
  * 配置存储服务
@@ -214,21 +213,6 @@ export class ConfigStorage {
   }
 
   // ========== 同步设置管理 ==========
-
-  /**
-   * 获取同步模式
-   */
-  public async getSyncMode(): Promise<string> {
-    const config = await this.getConfig();
-    return config.syncMode;
-  }
-
-  /**
-   * 设置同步模式
-   */
-  public async setSyncMode(mode: string): Promise<void> {
-    await this.updateConfig({ syncMode: mode as SyncMode });
-  }
 
   /**
    * 获取同步间隔

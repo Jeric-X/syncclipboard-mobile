@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import { AppConfig } from '../types/storage';
 import { ServerConfig } from '../types/api';
-import { SyncMode, ConflictResolution } from '../types/sync';
+import { ConflictResolution } from '../types/sync';
 import { configStorage } from '../storage/ConfigStorage';
 
 /**
@@ -63,9 +63,6 @@ interface SettingsState {
   setTheme: (theme: 'light' | 'dark' | 'auto') => Promise<void>;
 
   // 同步设置
-  /** 设置同步模式 */
-  setSyncMode: (mode: string) => Promise<void>;
-
   /** 设置同步间隔 */
   setSyncInterval: (interval: number) => Promise<void>;
 
@@ -278,10 +275,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setTheme: async (theme: 'light' | 'dark' | 'auto') => {
     await get().updateConfig({ theme });
-  },
-
-  setSyncMode: async (mode: string) => {
-    await get().updateConfig({ syncMode: mode as SyncMode });
   },
 
   setSyncInterval: async (interval: number) => {

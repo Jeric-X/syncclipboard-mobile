@@ -6,7 +6,6 @@
 import { create } from 'zustand';
 import {
   SyncStatus,
-  SyncMode,
   SyncDirection,
   SyncResult,
   SyncStats,
@@ -26,9 +25,6 @@ interface SyncState {
 
   /** 同步状态 */
   status: SyncStatus;
-
-  /** 同步模式 */
-  mode: SyncMode;
 
   /** 是否已初始化 */
   isInitialized: boolean;
@@ -52,9 +48,6 @@ interface SyncState {
   /** 执行同步 */
   sync: (direction?: SyncDirection, signal?: AbortSignal) => Promise<SyncResult>;
 
-  /** 更新同步模式 */
-  setSyncMode: (mode: SyncMode) => Promise<void>;
-
   /** 更新同步间隔 */
   setSyncInterval: (interval: number) => Promise<void>;
 
@@ -77,7 +70,6 @@ interface SyncState {
 const initialState = {
   manager: null,
   status: SyncStatus.Idle,
-  mode: SyncMode.Manual,
   isInitialized: false,
   lastResult: null,
   stats: null,
@@ -114,7 +106,6 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       // 初始化同步管理器
       await manager.initialize({
         server: activeServer,
-        mode: config.syncMode as SyncMode,
         interval: config.syncInterval,
         conflictResolution: config.conflictResolution,
         enableOfflineQueue: config.enableOfflineQueue,
@@ -165,7 +156,6 @@ export const useSyncStore = create<SyncState>((set, get) => ({
 
       set({
         manager,
-        mode: config.syncMode as SyncMode,
         stats: manager.getStats(),
         offlineQueueSize: manager.getOfflineQueueSize(),
         isInitialized: true,
@@ -212,25 +202,6 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         direction,
         error: errorMessage,
       };
-    }
-  },
-
-  setSyncMode: async (mode: SyncMode) => {
-    const { manager } = get();
-
-    try {
-      // 更新配置存储
-      await configStorage.updateConfig({ syncMode: mode as SyncMode });
-
-      // 更新同步管理器配置
-      if (manager) {
-        await manager.updateConfig({ mode });
-      }
-
-      set({ mode, error: null });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update sync mode';
-      set({ error: errorMessage });
     }
   },
 

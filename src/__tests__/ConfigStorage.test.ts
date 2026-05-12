@@ -1,7 +1,6 @@
 import { ConfigStorage } from '../storage/ConfigStorage';
 import { AppConfig, DEFAULT_APP_CONFIG, STORAGE_KEYS } from '../types/storage';
 import { ServerConfig } from '../types/api';
-import { SyncMode } from '../types/sync';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(),
@@ -77,24 +76,21 @@ describe('ConfigStorage', () => {
     it('should return config after initialization', async () => {
       const mockConfig: AppConfig = {
         ...DEFAULT_APP_CONFIG,
-        syncMode: SyncMode.Manual,
       };
       mockGetItem.mockResolvedValue(JSON.stringify(mockConfig));
 
       const result = await configStorage.getConfig();
 
-      expect(result.syncMode).toBe(SyncMode.Manual);
+      expect(result).toBeDefined();
     });
 
     it('should return a copy of config', async () => {
       mockGetItem.mockResolvedValue(JSON.stringify(DEFAULT_APP_CONFIG));
 
       const result = await configStorage.getConfig();
-
-      result.syncMode = SyncMode.Auto;
       const result2 = await configStorage.getConfig();
 
-      expect(result2.syncMode).not.toBe(SyncMode.Auto);
+      expect(result).not.toBe(result2);
     });
   });
 
@@ -103,7 +99,7 @@ describe('ConfigStorage', () => {
       mockGetItem.mockResolvedValue(JSON.stringify(DEFAULT_APP_CONFIG));
       mockSetItem.mockResolvedValue(undefined);
 
-      await configStorage.updateConfig({ syncMode: SyncMode.Auto });
+      await configStorage.updateConfig({ syncInterval: 10000 });
 
       expect(mockSetItem).toHaveBeenCalled();
     });

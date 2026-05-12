@@ -4,14 +4,13 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ToastAndroid, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { SyncClipboardClient } from '../../api/clients/SyncClipboardClient';
 import { ISyncClipboardAPI } from '../../api/clients/APIClient';
 import { WebDAVClient } from '../../api/clients/WebDAVClient';
 import { S3Client } from '../../api/clients/S3Client';
 import { AuthService } from '../../api/AuthService';
 import { localClipboard } from '../clipboard/LocalClipboard';
-import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import { ConfigurationError } from '@/errors';
 import { ServerConfig, ProfileDto } from '../../types/api';
 import { compareHash } from '../../utils/hash';
@@ -20,7 +19,6 @@ import type { ProgressInfo } from 'native-util';
 import {
   SyncConfig,
   SyncStatus,
-  SyncMode,
   SyncDirection,
   SyncResult,
   SyncTask,
@@ -50,7 +48,6 @@ interface ExtendedError extends Error {
  * 默认同步配置
  */
 const DEFAULT_CONFIG: Partial<SyncConfig> = {
-  mode: SyncMode.Manual,
   interval: 5000, // 5秒
   conflictResolution: ConflictResolution.UseNewest,
   enableOfflineQueue: true,
@@ -70,7 +67,6 @@ export class SyncManager {
   private config: SyncConfig | null = null;
   private apiClient: ISyncClipboardAPI | null = null;
   private clipboardManager = localClipboard;
-  private clipboardMonitor = clipboardMonitor;
 
   private status: SyncStatus = SyncStatus.Idle;
   private listeners: Map<string, SyncListener> = new Map();
@@ -84,14 +80,12 @@ export class SyncManager {
     conflictCount: 0,
   };
 
-  private syncTimer: NodeJS.Timeout | null = null;
   private isSyncing = false;
   private currentSyncPromise: Promise<SyncResult> | null = null;
   private currentSyncAbortController: AbortController | null = null;
   private lastLocalProfileHash: string | null = null;
   private lastRemoteProfileHash: string | null = null;
   private offlineQueue: OfflineQueueItem[] = [];
-  private realtimeSyncCallback: ((content: ClipboardContent) => Promise<void>) | null = null;
   private pendingUploadContent: ClipboardContent | null = null;
 
   private constructor() {
@@ -211,15 +205,6 @@ export class SyncManager {
     // 加载持久化数据
     await this.loadPersistedData();
 
-    // 如果是自动模式，启动自动同步
-    if (this.config.mode === SyncMode.Auto) {
-      this.startAutoSync();
-    }
-
-    // 始终监听剪贴板变化以支持后台自动上传
-    // （React useEffect 在后台不可靠，需要通过 ClipboardMonitor 回调直接触发）
-    this.startRealtimeSync();
-
     // 处理离线队列
     if (this.config.enableOfflineQueue && this.offlineQueue.length > 0) {
       await this.processOfflineQueue();
@@ -230,8 +215,6 @@ export class SyncManager {
    * 销毁同步管理器
    */
   public async destroy(): Promise<void> {
-    this.stopAutoSync();
-    this.stopRealtimeSync();
     await this.savePersistedData();
     this.listeners.clear();
   }
@@ -676,67 +659,6 @@ export class SyncManager {
   }
 
   /**
-   * 启动自动同步
-   */
-  private startAutoSync(): void {
-    if (!this.config) return;
-
-    this.stopAutoSync();
-
-    const interval = this.config.interval || 5000;
-    this.syncTimer = setInterval(() => {
-      this.sync(SyncDirection.Both, true).catch((error) => {
-        console.error('Auto sync failed:', error);
-      });
-    }, interval);
-  }
-
-  /**
-   * 停止自动同步
-   */
-  private stopAutoSync(): void {
-    if (this.syncTimer) {
-      clearInterval(this.syncTimer);
-      this.syncTimer = null;
-    }
-  }
-
-  /**
-   * 启动实时同步
-   */
-  private startRealtimeSync(): void {
-    this.realtimeSyncCallback = async (content: ClipboardContent) => {
-      // 检查是否启用了自动同步
-      const appConfig = useSettingsStore.getState().config;
-      if (!(appConfig?.autoSync ?? false)) return;
-      // 保存已读取的内容，避免 upload 重新读取剪贴板（后台时第二次悬浮窗读取可能失败）
-      this.pendingUploadContent = content;
-      // 当剪贴板变化时，上传新内容
-      const result = await this.sync(SyncDirection.Upload, true);
-      this.pendingUploadContent = null;
-      // 显示系统 Toast 通知
-      if (result.success && !result.skipped && Platform.OS === 'android') {
-        const preview = this.getContentPreview(content);
-        if (appConfig?.syncToastEnabled !== false) {
-          ToastAndroid.show(`已上传\n${preview}`, ToastAndroid.SHORT);
-        }
-        this.updateForegroundNotification(`已上传: ${preview}`);
-      }
-    };
-    this.clipboardMonitor.addCallback(this.realtimeSyncCallback);
-  }
-
-  /**
-   * 停止实时同步（只移除自己的回调，不停止整个 ClipboardMonitor）
-   */
-  private stopRealtimeSync(): void {
-    if (this.realtimeSyncCallback) {
-      this.clipboardMonitor.removeCallback(this.realtimeSyncCallback);
-      this.realtimeSyncCallback = null;
-    }
-  }
-
-  /**
    * 获取内容预览文本（用于 Toast 通知）
    */
   public getContentPreview(content: ClipboardContent): string {
@@ -1032,20 +954,7 @@ export class SyncManager {
       throw new Error('SyncManager not initialized');
     }
 
-    const oldMode = this.config.mode;
     this.config = { ...this.config, ...config };
-
-    // 如果模式改变，重新启动同步
-    if (oldMode !== this.config.mode) {
-      this.stopAutoSync();
-      this.stopRealtimeSync();
-
-      if (this.config.mode === SyncMode.Auto) {
-        this.startAutoSync();
-      } else if (this.config.mode === SyncMode.Realtime) {
-        this.startRealtimeSync();
-      }
-    }
 
     await AsyncStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(this.config));
   }

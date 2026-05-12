@@ -4,7 +4,7 @@
  */
 
 import { ServerConfig } from './api';
-import { SyncMode, ConflictResolution } from './sync';
+import { ConflictResolution } from './sync';
 import { HistorySyncStatus } from './clipboard';
 
 /**
@@ -16,9 +16,6 @@ export interface AppConfig {
 
   /** 当前激活的服务器索引 */
   activeServerIndex: number;
-
-  /** 同步模式 */
-  syncMode: SyncMode;
 
   /** 同步间隔（毫秒） */
   syncInterval: number;
@@ -276,7 +273,6 @@ export const STORAGE_KEYS = {
 export const DEFAULT_APP_CONFIG: AppConfig = {
   servers: [],
   activeServerIndex: -1,
-  syncMode: 'manual' as SyncMode,
   syncInterval: 5000,
   conflictResolution: 'newest' as ConflictResolution,
   enableOfflineQueue: true,

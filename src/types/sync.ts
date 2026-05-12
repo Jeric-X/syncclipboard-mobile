@@ -35,18 +35,6 @@ export enum SyncStatus {
 }
 
 /**
- * 同步模式
- */
-export enum SyncMode {
-  /** 手动同步 */
-  Manual = 'manual',
-  /** 自动同步 */
-  Auto = 'auto',
-  /** 实时同步 */
-  Realtime = 'realtime',
-}
-
-/**
  * 冲突解决策略
  */
 export enum ConflictResolution {
@@ -66,9 +54,6 @@ export enum ConflictResolution {
 export interface SyncConfig {
   /** 服务器配置 */
   server: ServerConfig;
-
-  /** 同步模式 */
-  mode: SyncMode;
 
   /** 同步间隔（毫秒）- 仅自动模式 */
   interval?: number;
