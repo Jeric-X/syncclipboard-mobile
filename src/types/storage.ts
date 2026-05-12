@@ -23,12 +23,6 @@ export interface AppConfig {
   /** 冲突解决策略 */
   conflictResolution: ConflictResolution;
 
-  /** 是否启用离线队列 */
-  enableOfflineQueue: boolean;
-
-  /** 最大离线队列大小 */
-  maxOfflineQueueSize: number;
-
   /** 是否同步大文件 */
   syncLargeFiles: boolean;
 
@@ -275,8 +269,6 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   activeServerIndex: -1,
   syncInterval: 5000,
   conflictResolution: 'newest' as ConflictResolution,
-  enableOfflineQueue: true,
-  maxOfflineQueueSize: 100,
   syncLargeFiles: true,
   largeFileThreshold: 10 * 1024 * 1024, // 10MB
   theme: 'auto',

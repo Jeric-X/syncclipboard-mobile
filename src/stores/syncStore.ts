@@ -5,12 +5,8 @@
 
 import { create } from 'zustand';
 import {
-  SyncStatus,
   SyncDirection,
   SyncResult,
-  SyncStats,
-  SyncEvent,
-  SyncEventType,
 } from '../types/sync';
 import { SyncManager } from '../services';
 import { configStorage } from '../storage';
@@ -19,24 +15,12 @@ import { configStorage } from '../storage';
  * 同步状态接口
  */
 interface SyncState {
-  // 状态
+  // 内部状态
   /** 同步管理器实例 */
   manager: SyncManager | null;
 
-  /** 同步状态 */
-  status: SyncStatus;
-
   /** 是否已初始化 */
   isInitialized: boolean;
-
-  /** 最后同步结果 */
-  lastResult: SyncResult | null;
-
-  /** 同步统计 */
-  stats: SyncStats | null;
-
-  /** 离线队列大小 */
-  offlineQueueSize: number;
 
   /** 错误信息 */
   error: string | null;
@@ -48,18 +32,6 @@ interface SyncState {
   /** 执行同步 */
   sync: (direction?: SyncDirection, signal?: AbortSignal) => Promise<SyncResult>;
 
-  /** 更新同步间隔 */
-  setSyncInterval: (interval: number) => Promise<void>;
-
-  /** 刷新统计信息 */
-  refreshStats: () => void;
-
-  /** 清空离线队列 */
-  clearOfflineQueue: () => Promise<void>;
-
-  /** 清除错误 */
-  clearError: () => void;
-
   /** 销毁 */
   destroy: () => Promise<void>;
 }
@@ -69,11 +41,7 @@ interface SyncState {
  */
 const initialState = {
   manager: null,
-  status: SyncStatus.Idle,
   isInitialized: false,
-  lastResult: null,
-  stats: null,
-  offlineQueueSize: 0,
   error: null,
 };
 
@@ -108,56 +76,14 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         server: activeServer,
         interval: config.syncInterval,
         conflictResolution: config.conflictResolution,
-        enableOfflineQueue: config.enableOfflineQueue,
-        maxOfflineQueueSize: config.maxOfflineQueueSize,
         syncLargeFiles: config.syncLargeFiles,
         largeFileThreshold: config.largeFileThreshold,
         maxRetries: 3,
         retryDelay: 2000,
       });
 
-      // 添加事件监听器
-      manager.addListener('store', (event: SyncEvent) => {
-        switch (event.type) {
-          case SyncEventType.StatusChanged:
-            if (event.status) {
-              set({ status: event.status });
-            }
-            break;
-
-          case SyncEventType.Completed:
-            if (event.result) {
-              set({
-                lastResult: event.result,
-                stats: manager.getStats(),
-                offlineQueueSize: manager.getOfflineQueueSize(),
-                error: null,
-              });
-            }
-            break;
-
-          case SyncEventType.Failed:
-            if (event.result) {
-              set({
-                lastResult: event.result,
-                error: event.result.error || 'Sync failed',
-                stats: manager.getStats(),
-              });
-            }
-            break;
-
-          case SyncEventType.Conflict:
-            set({
-              error: 'Sync conflict detected',
-            });
-            break;
-        }
-      });
-
       set({
         manager,
-        stats: manager.getStats(),
-        offlineQueueSize: manager.getOfflineQueueSize(),
         isInitialized: true,
         error: null,
       });
@@ -186,9 +112,6 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       const result = await manager.sync(direction, false, signal);
 
       set({
-        lastResult: result,
-        stats: manager.getStats(),
-        offlineQueueSize: manager.getOfflineQueueSize(),
         error: result.success ? null : result.error || 'Sync failed',
       });
 
@@ -205,65 +128,14 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     }
   },
 
-  setSyncInterval: async (interval: number) => {
-    const { manager } = get();
-
-    try {
-      // 更新配置存储
-      await configStorage.updateConfig({ syncInterval: interval });
-
-      // 更新同步管理器配置
-      if (manager) {
-        await manager.updateConfig({ interval });
-      }
-
-      set({ error: null });
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Failed to update sync interval';
-      set({ error: errorMessage });
-    }
-  },
-
-  refreshStats: () => {
-    const { manager } = get();
-
-    if (manager) {
-      set({
-        stats: manager.getStats(),
-        status: manager.getStatus(),
-        offlineQueueSize: manager.getOfflineQueueSize(),
-      });
-    }
-  },
-
-  clearOfflineQueue: async () => {
-    const { manager } = get();
-
-    if (manager) {
-      try {
-        await manager.clearOfflineQueue();
-        set({ offlineQueueSize: 0, error: null });
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : 'Failed to clear offline queue';
-        set({ error: errorMessage });
-      }
-    }
-  },
-
-  clearError: () => {
-    set({ error: null });
-  },
-
   destroy: async () => {
     const { manager } = get();
 
     if (manager) {
-      manager.removeListener('store');
       await manager.destroy();
     }
 
     set(initialState);
   },
 }));
+

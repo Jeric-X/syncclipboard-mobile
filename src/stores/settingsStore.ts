@@ -69,9 +69,6 @@ interface SettingsState {
   /** 设置冲突解决策略 */
   setConflictResolution: (strategy: string) => Promise<void>;
 
-  /** 设置离线队列 */
-  setOfflineQueue: (enabled: boolean) => Promise<void>;
-
   /** 设置大文件同步 */
   setLargeFileSync: (enabled: boolean, threshold?: number) => Promise<void>;
 
@@ -283,10 +280,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setConflictResolution: async (strategy: string) => {
     await get().updateConfig({ conflictResolution: strategy as ConflictResolution });
-  },
-
-  setOfflineQueue: async (enabled: boolean) => {
-    await get().updateConfig({ enableOfflineQueue: enabled });
   },
 
   setLargeFileSync: async (enabled: boolean, threshold?: number) => {

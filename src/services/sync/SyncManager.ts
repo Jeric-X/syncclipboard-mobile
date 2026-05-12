@@ -21,28 +21,18 @@ import {
   SyncStatus,
   SyncDirection,
   SyncResult,
-  SyncTask,
   SyncEvent,
   SyncEventType,
   SyncListener,
   SyncStats,
   ConflictResolution,
-  OfflineQueueItem,
 } from '../../types/sync';
 import { ClipboardContent } from '../../types/clipboard';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 const STORAGE_KEY_CONFIG = '@syncclipboard:sync:config';
 const STORAGE_KEY_STATS = '@syncclipboard:sync:stats';
-const STORAGE_KEY_QUEUE = '@syncclipboard:sync:queue';
 const STORAGE_KEY_LAST_PROFILE_HASH = '@syncclipboard:sync:last_hash';
-
-/**
- * 扩展的错误接口，包含网络错误标志
- */
-interface ExtendedError extends Error {
-  isNetworkError?: boolean;
-}
 
 /**
  * 默认同步配置
@@ -50,8 +40,6 @@ interface ExtendedError extends Error {
 const DEFAULT_CONFIG: Partial<SyncConfig> = {
   interval: 5000, // 5秒
   conflictResolution: ConflictResolution.UseNewest,
-  enableOfflineQueue: true,
-  maxOfflineQueueSize: 100,
   syncLargeFiles: true,
   largeFileThreshold: 10 * 1024 * 1024, // 10MB
   maxRetries: 3,
@@ -85,7 +73,6 @@ export class SyncManager {
   private currentSyncAbortController: AbortController | null = null;
   private lastLocalProfileHash: string | null = null;
   private lastRemoteProfileHash: string | null = null;
-  private offlineQueue: OfflineQueueItem[] = [];
   private pendingUploadContent: ClipboardContent | null = null;
 
   private constructor() {
@@ -204,11 +191,6 @@ export class SyncManager {
 
     // 加载持久化数据
     await this.loadPersistedData();
-
-    // 处理离线队列
-    if (this.config.enableOfflineQueue && this.offlineQueue.length > 0) {
-      await this.processOfflineQueue();
-    }
   }
 
   /**
@@ -496,34 +478,11 @@ export class SyncManager {
       // 使用已经处理好的错误信息
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-      // 检查是否是网络错误（已由 putContent 处理）
-      const isNetworkError = (error as ExtendedError)?.isNetworkError || false;
-
-      // 如果启用离线队列且是网络错误，添加到队列
-      if (this.config.enableOfflineQueue && isNetworkError) {
-        const content = await this.clipboardManager.getClipboardContent();
-        if (content) {
-          const task: SyncTask = {
-            id: `upload-${Date.now()}`,
-            direction: SyncDirection.Upload,
-            content,
-            createdAt: Date.now(),
-            retries: 0,
-          };
-          await this.addToOfflineQueue(task);
-        }
-        return {
-          success: false,
-          direction: SyncDirection.Upload,
-          error: `网络错误，已添加到队列: ${errorMessage}`,
-        };
-      } else {
-        return {
-          success: false,
-          direction: SyncDirection.Upload,
-          error: errorMessage,
-        };
-      }
+      return {
+        success: false,
+        direction: SyncDirection.Upload,
+        error: errorMessage,
+      };
     }
   }
 
@@ -673,46 +632,6 @@ export class SyncManager {
   }
 
   /**
-   * 处理离线队列
-   */
-  private async processOfflineQueue(): Promise<void> {
-    if (!this.config?.enableOfflineQueue || this.offlineQueue.length === 0) {
-      return;
-    }
-
-    const maxRetries = this.config.maxRetries || 3;
-    const failedTasks: OfflineQueueItem[] = [];
-
-    for (const item of this.offlineQueue) {
-      try {
-        // 尝试执行任务
-        if (item.task.direction === SyncDirection.Upload) {
-          await this.upload();
-        } else if (item.task.direction === SyncDirection.Download) {
-          await this.download();
-        }
-
-        // 任务成功，不添加回队列
-      } catch (error) {
-        // 任务失败，增加重试次数
-        item.task.retries++;
-        item.task.lastError = error instanceof Error ? error.message : 'Unknown error';
-
-        // 如果未达到最大重试次数，保留在队列中
-        if (item.task.retries < maxRetries) {
-          failedTasks.push(item);
-        } else {
-          console.error(`Task ${item.taskId} exceeded max retries:`, error);
-        }
-      }
-    }
-
-    // 更新队列（只保留失败但未超过重试次数的任务）
-    this.offlineQueue = failedTasks;
-    await this.saveOfflineQueue();
-  }
-
-  /**
    * 解决冲突
    */
   private async resolveConflict(
@@ -748,46 +667,6 @@ export class SyncManager {
       default:
         return 'remote';
     }
-  }
-
-  /**
-   * 判断是否是网络错误
-   */
-  private isNetworkError(error: unknown): boolean {
-    if (error instanceof Error) {
-      const message = error.message.toLowerCase();
-      return (
-        message.includes('network') ||
-        message.includes('timeout') ||
-        message.includes('connection') ||
-        message.includes('econnrefused') ||
-        message.includes('offline')
-      );
-    }
-    return false;
-  }
-
-  /**
-   * 添加任务到离线队列
-   */
-  private async addToOfflineQueue(task: SyncTask): Promise<void> {
-    if (!this.config?.enableOfflineQueue) return;
-
-    const item: OfflineQueueItem = {
-      taskId: task.id,
-      task,
-      queuedAt: Date.now(),
-    };
-
-    this.offlineQueue.push(item);
-
-    // 限制队列大小
-    const maxSize = this.config.maxOfflineQueueSize || 100;
-    if (this.offlineQueue.length > maxSize) {
-      this.offlineQueue.shift(); // 移除最旧的任务
-    }
-
-    await this.saveOfflineQueue();
   }
 
   /**
@@ -878,12 +757,6 @@ export class SyncManager {
         this.stats = JSON.parse(statsJson);
       }
 
-      // 加载离线队列
-      const queueJson = await AsyncStorage.getItem(STORAGE_KEY_QUEUE);
-      if (queueJson) {
-        this.offlineQueue = JSON.parse(queueJson);
-      }
-
       // 加载最后的 profileHash 值
       this.lastLocalProfileHash = await AsyncStorage.getItem(STORAGE_KEY_LAST_PROFILE_HASH);
     } catch (error) {
@@ -898,22 +771,10 @@ export class SyncManager {
     try {
       await AsyncStorage.multiSet([
         [STORAGE_KEY_STATS, JSON.stringify(this.stats)],
-        [STORAGE_KEY_QUEUE, JSON.stringify(this.offlineQueue)],
         [STORAGE_KEY_LAST_PROFILE_HASH, this.lastLocalProfileHash || ''],
       ]);
     } catch (error) {
       console.error('Failed to save persisted data:', error);
-    }
-  }
-
-  /**
-   * 保存离线队列
-   */
-  private async saveOfflineQueue(): Promise<void> {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY_QUEUE, JSON.stringify(this.offlineQueue));
-    } catch (error) {
-      console.error('Failed to save offline queue:', error);
     }
   }
 
@@ -929,21 +790,6 @@ export class SyncManager {
    */
   public getStats(): SyncStats {
     return { ...this.stats };
-  }
-
-  /**
-   * 获取离线队列大小
-   */
-  public getOfflineQueueSize(): number {
-    return this.offlineQueue.length;
-  }
-
-  /**
-   * 清空离线队列
-   */
-  public async clearOfflineQueue(): Promise<void> {
-    this.offlineQueue = [];
-    await this.saveOfflineQueue();
   }
 
   /**

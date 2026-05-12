@@ -61,12 +61,6 @@ export interface SyncConfig {
   /** 冲突解决策略 */
   conflictResolution: ConflictResolution;
 
-  /** 是否启用离线队列 */
-  enableOfflineQueue: boolean;
-
-  /** 最大离线队列大小 */
-  maxOfflineQueueSize: number;
-
   /** 是否同步大文件 */
   syncLargeFiles: boolean;
 
@@ -78,29 +72,6 @@ export interface SyncConfig {
 
   /** 重试延迟（毫秒） */
   retryDelay: number;
-}
-
-/**
- * 同步任务
- */
-export interface SyncTask {
-  /** 任务ID */
-  id: string;
-
-  /** 同步方向 */
-  direction: SyncDirection;
-
-  /** 剪贴板内容 */
-  content: ClipboardContent;
-
-  /** 创建时间 */
-  createdAt: number;
-
-  /** 重试次数 */
-  retries: number;
-
-  /** 最后错误信息 */
-  lastError?: string;
 }
 
 /**
@@ -210,16 +181,3 @@ export interface SyncStats {
   averageDuration?: number;
 }
 
-/**
- * 离线队列项
- */
-export interface OfflineQueueItem {
-  /** 任务ID */
-  taskId: string;
-
-  /** 同步任务 */
-  task: SyncTask;
-
-  /** 添加到队列的时间 */
-  queuedAt: number;
-}
