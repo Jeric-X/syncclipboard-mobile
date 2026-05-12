@@ -5,6 +5,7 @@
 
 import { create } from 'zustand';
 import { ClipboardContent } from '../types/clipboard';
+import { clipboardMonitor } from '../services/clipboard/ClipboardMonitor';
 
 /**
  * 剪贴板状态接口
@@ -22,10 +23,15 @@ interface ClipboardState {
 /**
  * 创建剪贴板 Store
  */
-export const useClipboardStore = create<ClipboardState>((set) => ({
+export const uselocalClipboardStore = create<ClipboardState>((set) => ({
   currentContent: null,
 
   setCurrentContentDisplay: (content: ClipboardContent) => {
     set({ currentContent: content });
   },
 }));
+
+// 注册 callback：将剪贴板变化同步到 localClipboardStore
+clipboardMonitor.addCallback((content) => {
+  uselocalClipboardStore.getState().setCurrentContentDisplay(content);
+});

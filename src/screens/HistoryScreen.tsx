@@ -27,7 +27,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { TabView, TabBar, type Route } from 'react-native-tab-view';
 import { useTheme } from '@/hooks/useTheme';
 import { useHistoryStore } from '@/stores/historyStore';
-import { useClipboardStore } from '@/stores/clipboardStore';
+import { uselocalClipboardStore } from '@/stores/localClipboardStore';
 import { useSettingsStore } from '@/stores';
 import { historyStorage } from '@/storage';
 import { useTransferQueueStore } from '@/stores/transferQueueStore';
@@ -229,7 +229,7 @@ export function HistoryScreen() {
     };
     const result = await copyToLocalClipboard(content);
     if (result.success) {
-      useClipboardStore.getState().setCurrentContentDisplay(content);
+      uselocalClipboardStore.getState().setCurrentContentDisplay(content);
       // 更新 lastAccessed，使按访问时间排序时记录移到顶部
       historyStorage.updateLastAccessed(item.profileHash);
     }

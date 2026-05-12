@@ -10,7 +10,7 @@ import * as ClipboardProxy from '@/utils/clipboardProxy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/hooks/useTheme';
-import { useClipboardStore } from '@/stores/clipboardStore';
+import { uselocalClipboardStore } from '@/stores/localClipboardStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useClipboardSyncServiceStore } from '@/serviceState/ClipboardSyncState';
 import { ClipboardContent } from '@/types/clipboard';
@@ -46,7 +46,7 @@ export function HomeScreen() {
   const uploadingClipboard = useClipboardSyncServiceStore((s) => s.uploadingClipboard);
   const fileUploadProgress = useClipboardSyncServiceStore((s) => s.fileUploadProgress);
 
-  const { currentContent } = useClipboardStore();
+  const { currentContent } = uselocalClipboardStore();
   const { getActiveServer } = useSettingsStore();
 
   const activeServer = getActiveServer();
@@ -55,7 +55,7 @@ export function HomeScreen() {
   const copyRemoteToLocal = async (content: ClipboardContent, logPrefix: string = '') => {
     const result = await copyToLocalClipboard(content);
     if (result.success) {
-      useClipboardStore.getState().setCurrentContentDisplay(content);
+      uselocalClipboardStore.getState().setCurrentContentDisplay(content);
       getClipboardSyncService().recordLocalHash(content.profileHash || content.text || '');
       console.log(`[HomeScreen] ${logPrefix}Copy to local clipboard completed`);
     } else {

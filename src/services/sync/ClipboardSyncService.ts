@@ -660,8 +660,8 @@ class ClipboardSyncService {
     const { copyToLocalClipboard } = await import('../../utils/clipboard');
     const result = await copyToLocalClipboard(content);
     if (result.success) {
-      const { useClipboardStore } = require('../../stores/clipboardStore');
-      useClipboardStore.getState().setCurrentContentDisplay(content);
+      const { uselocalClipboardStore } = require('../../stores/localClipboardStore');
+      uselocalClipboardStore.getState().setCurrentContentDisplay(content);
       this.lastLocalProfileHash = content.profileHash || content.text || '';
       console.log(`[ClipboardSyncService] ${logPrefix}Copied to local clipboard`);
     } else {
@@ -744,8 +744,8 @@ class ClipboardSyncService {
 
   private _subscribeToClipboardChanges(): void {
     if (this.clipboardUnsub) return;
-    const { useClipboardStore } = require('../../stores/clipboardStore');
-    this.clipboardUnsub = useClipboardStore.subscribe(
+    const { uselocalClipboardStore } = require('../../stores/localClipboardStore');
+    this.clipboardUnsub = uselocalClipboardStore.subscribe(
       (state: { currentContent: unknown }, prevState: { currentContent: unknown }) => {
         if (state.currentContent !== prevState.currentContent && state.currentContent) {
           this._handleAutoUpload(state.currentContent as ClipboardContent);

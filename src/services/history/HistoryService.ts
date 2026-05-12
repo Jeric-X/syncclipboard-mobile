@@ -9,7 +9,7 @@ import type { ClipboardContent } from '@/types/clipboard';
 const LAST_CLIPBOARD_HASH_KEY = '@last_clipboard_hash';
 
 export class HistoryService {
-  private clipboardStoreUnsub: (() => void) | null = null;
+  private localClipboardStoreUnsub: (() => void) | null = null;
   private lastTrackedHash: string | null = null;
 
   /**
@@ -17,7 +17,7 @@ export class HistoryService {
    * 无需服务器配置，始终可调用，幂等。
    */
   startTracking(): void {
-    if (this.clipboardStoreUnsub) return;
+    if (this.localClipboardStoreUnsub) return;
 
     // 异步加载持久化 hash，初始化完成前 lastTrackedHash 为 null，
     // 第一次变化会写入历史（HistoryStorage.addItem 幂等去重）
@@ -37,11 +37,11 @@ export class HistoryService {
       })
       .catch(() => {});
 
-    const { useClipboardStore } = require('../../stores/clipboardStore');
+    const { uselocalClipboardStore } = require('../../stores/localClipboardStore');
     const { clipboardContentToItem } = require('../../utils/clipboard/dtoConvert');
     const { useHistoryStore } = require('../../stores/historyStore');
 
-    this.clipboardStoreUnsub = useClipboardStore.subscribe(
+    this.localClipboardStoreUnsub = uselocalClipboardStore.subscribe(
       (state: { currentContent: ClipboardContent | null }) => state.currentContent,
       async (content: ClipboardContent | null) => {
         if (!content) return;
@@ -80,9 +80,9 @@ export class HistoryService {
    * 停止追踪本地剪贴板内容变化。
    */
   stopTracking(): void {
-    if (this.clipboardStoreUnsub) {
-      this.clipboardStoreUnsub();
-      this.clipboardStoreUnsub = null;
+    if (this.localClipboardStoreUnsub) {
+      this.localClipboardStoreUnsub();
+      this.localClipboardStoreUnsub = null;
       console.log('[HistoryService] Local clipboard tracking stopped');
     }
   }
