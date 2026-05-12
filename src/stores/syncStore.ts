@@ -4,10 +4,7 @@
  */
 
 import { create } from 'zustand';
-import {
-  SyncDirection,
-  SyncResult,
-} from '../types/sync';
+import { SyncDirection, SyncResult } from '../types/sync';
 import { SyncManager } from '../services';
 import { configStorage } from '../storage';
 
@@ -21,9 +18,6 @@ interface SyncState {
 
   /** 是否已初始化 */
   isInitialized: boolean;
-
-  /** 错误信息 */
-  error: string | null;
 
   // 动作
   /** 初始化同步管理器 */
@@ -42,7 +36,6 @@ interface SyncState {
 const initialState = {
   manager: null,
   isInitialized: false,
-  error: null,
 };
 
 /**
@@ -56,74 +49,51 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       return;
     }
 
-    try {
-      const manager = SyncManager.getInstance();
-      const config = await configStorage.getConfig();
+    const manager = SyncManager.getInstance();
+    const config = await configStorage.getConfig();
 
-      // 获取激活的服务器配置
-      const activeServer = await configStorage.getActiveServer();
+    // 获取激活的服务器配置
+    const activeServer = await configStorage.getActiveServer();
 
-      if (!activeServer) {
-        set({
-          error: 'No active server configured',
-          isInitialized: false,
-        });
-        return;
-      }
-
-      // 初始化同步管理器
-      await manager.initialize({
-        server: activeServer,
-        interval: config.syncInterval,
-        conflictResolution: config.conflictResolution,
-        syncLargeFiles: config.syncLargeFiles,
-        largeFileThreshold: config.largeFileThreshold,
-        maxRetries: 3,
-        retryDelay: 2000,
-      });
-
-      set({
-        manager,
-        isInitialized: true,
-        error: null,
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to initialize sync';
-      set({ error: errorMessage, isInitialized: false });
+    if (!activeServer) {
+      throw new Error('No active server configured');
     }
+
+    // 初始化同步管理器
+    await manager.initialize({
+      server: activeServer,
+      interval: config.syncInterval,
+      conflictResolution: config.conflictResolution,
+      syncLargeFiles: config.syncLargeFiles,
+      largeFileThreshold: config.largeFileThreshold,
+      maxRetries: 3,
+      retryDelay: 2000,
+    });
+
+    set({
+      manager,
+      isInitialized: true,
+    });
   },
 
   sync: async (direction = SyncDirection.Both, signal?: AbortSignal) => {
     const { manager, isInitialized } = get();
 
     if (!isInitialized || !manager) {
-      const error = 'Sync manager not initialized';
-      set({ error });
       return {
         success: false,
         direction,
-        error,
+        error: 'Sync manager not initialized',
       };
     }
 
-    set({ error: null });
-
     try {
-      const result = await manager.sync(direction, false, signal);
-
-      set({
-        error: result.success ? null : result.error || 'Sync failed',
-      });
-
-      return result;
+      return await manager.sync(direction, false, signal);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Sync failed';
-      set({ error: errorMessage });
-
       return {
         success: false,
         direction,
-        error: errorMessage,
+        error: error instanceof Error ? error.message : 'Sync failed',
       };
     }
   },
@@ -138,4 +108,3 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     set(initialState);
   },
 }));
-

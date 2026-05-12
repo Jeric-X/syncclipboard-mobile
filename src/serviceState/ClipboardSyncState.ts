@@ -1,5 +1,5 @@
 /**
- * ClipboardSyncService Store
+ * ClipboardSyncState
  * 远程剪贴板状态（由 ClipboardSyncService 维护，UI 层只读）
  */
 
@@ -22,7 +22,7 @@ export interface FileUploadProgressInfo {
   progressInfo: ProgressInfo | null;
 }
 
-interface ClipboardSyncServiceState {
+interface ClipboardSyncStateShape {
   /** 当前远程剪贴板内容 */
   remoteContent: ClipboardContent | null;
   /** 是否正在加载远程内容 */
@@ -45,7 +45,7 @@ interface ClipboardSyncServiceState {
   setFileUploadProgress: (progress: FileUploadProgressInfo | null) => void;
 }
 
-export const useClipboardSyncServiceStore = create<ClipboardSyncServiceState>((set) => ({
+export const useClipboardSyncServiceStore = create<ClipboardSyncStateShape>((set) => ({
   remoteContent: null,
   loadingRemote: false,
   downloadingRemote: false,

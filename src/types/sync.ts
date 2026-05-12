@@ -180,4 +180,3 @@ export interface SyncStats {
   /** 平均同步耗时（毫秒） */
   averageDuration?: number;
 }
-

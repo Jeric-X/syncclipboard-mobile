@@ -22,6 +22,7 @@ import type { ProfileChangedEvent } from 'signalr-client';
 import type { ServerConfig } from '../../types/api';
 import type { ISyncClipboardAPI } from '../../api/clients/APIClient';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
+import { useClipboardSyncServiceStore } from '../../serviceState/ClipboardSyncState';
 
 class ClipboardSyncService {
   private static instance: ClipboardSyncService | null = null;
@@ -108,8 +109,6 @@ class ClipboardSyncService {
       await this._initializeHistorySyncService(activeServer);
     }
 
-    const { useClipboardSyncServiceStore } = require('../../stores/ClipboardSyncServiceStore');
-
     if (!activeServer) {
       useClipboardSyncServiceStore.getState().setRemoteContent(null);
       this._subscribeToClipboardChanges();
@@ -151,7 +150,6 @@ class ClipboardSyncService {
     await this._stopConnection();
     await this._destroySyncManager();
 
-    const { useClipboardSyncServiceStore } = require('../../stores/ClipboardSyncServiceStore');
     useClipboardSyncServiceStore.getState().setRemoteContent(null);
 
     this.activeServer = null;
@@ -277,8 +275,6 @@ class ClipboardSyncService {
     // 优先使用已知的 activeServer，若服务尚未 start 则从配置中读取
     const server = this.activeServer ?? (await this._readActiveServer());
 
-    const { useClipboardSyncServiceStore } = require('../../stores/ClipboardSyncServiceStore');
-
     if (!server) {
       useClipboardSyncServiceStore.getState().setRemoteContent(null);
       this.lastRemoteProfileHash = null;
@@ -329,7 +325,6 @@ class ClipboardSyncService {
    * 调用方无需传入 signal，服务内部管理取消逻辑。
    */
   async triggerUpload(): Promise<SyncResult> {
-    const { useClipboardSyncServiceStore } = require('../../stores/ClipboardSyncServiceStore');
     const { useSyncStore } = require('../../stores/syncStore');
 
     if (this._uploadAbortController) {
@@ -360,7 +355,6 @@ class ClipboardSyncService {
     if (this._uploadAbortController) {
       this._uploadAbortController.abort();
       this._uploadAbortController = null;
-      const { useClipboardSyncServiceStore } = require('../../stores/ClipboardSyncServiceStore');
       useClipboardSyncServiceStore.getState().setUploadingClipboard(false);
     }
   }
@@ -513,7 +507,6 @@ class ClipboardSyncService {
     apiClient: ISyncClipboardAPI,
     logPrefix: string = ''
   ): Promise<void> {
-    const { useClipboardSyncServiceStore } = require('../../stores/ClipboardSyncServiceStore');
     const { useSettingsStore } = require('../../stores/settingsStore');
     const { historyStorage } = require('../../storage/HistoryStorage');
     const config = useSettingsStore.getState().config;
@@ -680,7 +673,6 @@ class ClipboardSyncService {
   private _subscribeToTransferQueue(): void {
     if (this.transferQueueHandler) return;
     const { getHistoryTransferQueue } = require('../history/HistoryTransferQueue');
-    const { useClipboardSyncServiceStore } = require('../../stores/ClipboardSyncServiceStore');
     const { getProfileId } = require('@/utils');
     const queue = getHistoryTransferQueue();
 
@@ -745,7 +737,6 @@ class ClipboardSyncService {
     queue.offTaskStatusChanged(this.transferQueueHandler);
     this.transferQueueHandler = null;
     // 清除下载状态
-    const { useClipboardSyncServiceStore } = require('../../stores/ClipboardSyncServiceStore');
     const store = useClipboardSyncServiceStore.getState();
     store.setDownloadingRemote(false);
     store.setDownloadProgress(null);
@@ -774,7 +765,6 @@ class ClipboardSyncService {
   private _subscribeToHistoryChanges(): void {
     if (this.historyUnsub) return;
     const { useHistoryStore } = require('../../stores/historyStore');
-    const { useClipboardSyncServiceStore } = require('../../stores/ClipboardSyncServiceStore');
 
     this.historyUnsub = useHistoryStore.subscribe(
       (
@@ -920,7 +910,6 @@ class ClipboardSyncService {
    * 调用方无需传入 activeServer，服务内部从 store 读取。
    */
   async downloadRemoteFile(): Promise<void> {
-    const { useClipboardSyncServiceStore } = require('../../stores/ClipboardSyncServiceStore');
     const remoteContent = useClipboardSyncServiceStore.getState().remoteContent;
     const server = this.activeServer;
 
@@ -937,7 +926,6 @@ class ClipboardSyncService {
    * 取消当前正在进行的远程文件下载。
    */
   cancelRemoteFileDownload(): void {
-    const { useClipboardSyncServiceStore } = require('../../stores/ClipboardSyncServiceStore');
     const remoteContent = useClipboardSyncServiceStore.getState().remoteContent;
     const server = this.activeServer;
 
@@ -970,9 +958,8 @@ class ClipboardSyncService {
     const server = this.activeServer;
     if (!server) throw new Error('请先在设置中配置服务器');
 
-    const { useClipboardSyncServiceStore } = require('../../stores/ClipboardSyncServiceStore');
     const store = useClipboardSyncServiceStore.getState();
-    store.setFileUploadProgress({ stage: '正在处理文件…', progress: null });
+    store.setFileUploadProgress({ stage: '正在处理文件…', progressInfo: null });
 
     try {
       const { uploadFileAndAddToHistory } = await import('../../utils/uploadFile');
@@ -1001,7 +988,6 @@ class ClipboardSyncService {
     server: ServerConfig,
     remoteContent: import('../../types/clipboard').ClipboardContent
   ): Promise<void> {
-    const { useClipboardSyncServiceStore } = require('../../stores/ClipboardSyncServiceStore');
     const store = useClipboardSyncServiceStore.getState();
 
     store.setDownloadingRemote(true);

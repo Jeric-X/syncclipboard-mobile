@@ -12,7 +12,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/hooks/useTheme';
 import { useClipboardStore } from '@/stores/clipboardStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { useClipboardSyncServiceStore } from '@/stores/ClipboardSyncServiceStore';
+import { useClipboardSyncServiceStore } from '@/serviceState/ClipboardSyncState';
 import { ClipboardContent } from '@/types/clipboard';
 import { CurrentClipboardCard } from '@/components/CurrentClipboardCard';
 import { MessageToast } from '@/components/MessageToast';

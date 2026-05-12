@@ -36,8 +36,6 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
 
       // 确保 SyncManager 已初始化（冷启动时尚未经过正常启动流程）
       await useSyncStore.getState().initialize();
-      const initError = useSyncStore.getState().error;
-      if (initError) throw new Error(initError);
 
       const syncMgr = SyncManager.getInstance();
       const result = await syncMgr.sync(
