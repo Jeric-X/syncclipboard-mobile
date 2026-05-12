@@ -325,7 +325,7 @@ class ClipboardSyncService {
    * 调用方无需传入 signal，服务内部管理取消逻辑。
    */
   async triggerUpload(): Promise<SyncResult> {
-    const { useSyncStore } = require('../../stores/syncStore');
+    const { SyncManager } = require('./SyncManager');
 
     if (this._uploadAbortController) {
       this._uploadAbortController.abort();
@@ -335,9 +335,11 @@ class ClipboardSyncService {
     useClipboardSyncServiceStore.getState().setUploadingClipboard(true);
 
     try {
-      const result = await useSyncStore
-        .getState()
-        .sync(SyncDirection.Upload, this._uploadAbortController.signal);
+      const result = await SyncManager.getInstance().sync(
+        SyncDirection.Upload,
+        false,
+        this._uploadAbortController.signal
+      );
       if (result.success) {
         await this.fetchRemoteClipboard(true).catch(() => {});
       }
@@ -876,17 +878,15 @@ class ClipboardSyncService {
     if (this.isAutoSyncing) return;
     this.isAutoSyncing = true;
 
-    const { useSyncStore } = require('../../stores/syncStore');
-    useSyncStore
-      .getState()
-      .sync(SyncDirection.Upload)
+    const { SyncManager } = require('./SyncManager');
+    SyncManager.getInstance()
+      .sync(SyncDirection.Upload, true)
       .then((result: SyncResult) => {
         if (result.success && !result.skipped && Platform.OS === 'android') {
           const preview =
             content.type === 'Text' && content.text
               ? content.text.trim().replace(/\s+/g, ' ').slice(0, 30)
               : content.fileName || content.type;
-          const { SyncManager } = require('./SyncManager');
           SyncManager.getInstance().updateForegroundNotification(`已上传: ${preview}`);
           if (config?.syncToastEnabled !== false) {
             ToastAndroid.show(`已上传\n${preview}`, ToastAndroid.SHORT);

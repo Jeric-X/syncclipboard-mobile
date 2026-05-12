@@ -4,7 +4,6 @@
  */
 
 import { create } from 'zustand';
-import { SyncDirection, SyncResult } from '../types/sync';
 import { SyncManager } from '../services';
 import { configStorage } from '../storage';
 
@@ -22,9 +21,6 @@ interface SyncState {
   // 动作
   /** 初始化同步管理器 */
   initialize: () => Promise<void>;
-
-  /** 执行同步 */
-  sync: (direction?: SyncDirection, signal?: AbortSignal) => Promise<SyncResult>;
 
   /** 销毁 */
   destroy: () => Promise<void>;
@@ -74,28 +70,6 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       manager,
       isInitialized: true,
     });
-  },
-
-  sync: async (direction = SyncDirection.Both, signal?: AbortSignal) => {
-    const { manager, isInitialized } = get();
-
-    if (!isInitialized || !manager) {
-      return {
-        success: false,
-        direction,
-        error: 'Sync manager not initialized',
-      };
-    }
-
-    try {
-      return await manager.sync(direction, false, signal);
-    } catch (error) {
-      return {
-        success: false,
-        direction,
-        error: error instanceof Error ? error.message : 'Sync failed',
-      };
-    }
   },
 
   destroy: async () => {
