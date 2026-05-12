@@ -73,7 +73,7 @@ class BackgroundServiceManager {
    */
   isSignalRRunning(): boolean {
     try {
-      const { getClipboardSyncService } = require('../clipboard/ClipboardSyncService');
+      const { getClipboardSyncService } = require('./ClipboardSyncService');
       return getClipboardSyncService().isSignalRRunning();
     } catch {
       return false;
@@ -178,7 +178,7 @@ class BackgroundServiceManager {
   /** 启动/刷新 ClipboardSyncService */
   private async _startRemoteSync(): Promise<void> {
     try {
-      const { getClipboardSyncService } = require('../clipboard/ClipboardSyncService');
+      const { getClipboardSyncService } = require('./ClipboardSyncService');
       await getClipboardSyncService().refresh();
     } catch (e) {
       console.error('[BackgroundServiceManager] Failed to start/refresh remote sync:', e);

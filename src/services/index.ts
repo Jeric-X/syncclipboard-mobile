@@ -19,7 +19,7 @@ export type {
 export { SyncManager } from './sync/SyncManager';
 
 // Remote Clipboard Sync Service
-export { getClipboardSyncService as getClipboardSyncService } from './clipboard/ClipboardSyncService';
+export { getClipboardSyncService as getClipboardSyncService } from './sync/ClipboardSyncService';
 
 // Factory function to create appropriate API client
 import { SyncClipboardClient } from '../api/clients/SyncClipboardClient';

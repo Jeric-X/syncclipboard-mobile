@@ -21,7 +21,7 @@ import { SyncDirection, SyncResult } from '../../types/sync';
 import type { ProfileChangedEvent } from 'signalr-client';
 import type { ServerConfig } from '../../types/api';
 import type { ISyncClipboardAPI } from '../../api/clients/APIClient';
-import { clipboardMonitor } from './ClipboardMonitor';
+import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 
 class ClipboardSyncService {
   private static instance: ClipboardSyncService | null = null;
@@ -520,7 +520,7 @@ class ClipboardSyncService {
     const previousHash = this.lastRemoteProfileHash;
 
     const { resolveRemoteContent } = await import('../../utils/processRemoteContent');
-    const { SyncManager } = require('../sync/SyncManager');
+    const { SyncManager } = require('./SyncManager');
     const resolved = await resolveRemoteContent(content, currentHash, previousHash, hasData, {
       getLastUploadedHash: () => SyncManager.getInstance().getLastUploadedHash(),
       getHistoryItem: (profileHash: string) => historyStorage.getItem(profileHash),
@@ -896,7 +896,7 @@ class ClipboardSyncService {
             content.type === 'Text' && content.text
               ? content.text.trim().replace(/\s+/g, ' ').slice(0, 30)
               : content.fileName || content.type;
-          const { SyncManager } = require('../sync/SyncManager');
+          const { SyncManager } = require('./SyncManager');
           SyncManager.getInstance().updateForegroundNotification(`已上传: ${preview}`);
           if (config?.syncToastEnabled !== false) {
             ToastAndroid.show(`已上传\n${preview}`, ToastAndroid.SHORT);
