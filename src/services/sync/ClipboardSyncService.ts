@@ -24,6 +24,7 @@ import type { ISyncClipboardAPI } from '../../api/clients/APIClient';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import type { ClipboardSyncState, ClipboardSyncStateListener } from './SyncState';
 import { clipboardSyncState } from './SyncState';
+import { configService } from '../ConfigService';
 
 class ClipboardSyncService {
   private static instance: ClipboardSyncService | null = null;
@@ -106,11 +107,7 @@ class ClipboardSyncService {
     if (this._isStarted) return;
     this._isStarted = true;
 
-    const { useSettingsStore } = require('../../stores/settingsStore');
-    if (!useSettingsStore.getState().isLoaded) {
-      await useSettingsStore.getState().loadConfig();
-    }
-    const activeServer = useSettingsStore.getState().getActiveServer();
+    const activeServer = await configService.getActiveServer();
 
     // 初始化历史同步服务
     if (activeServer) {
@@ -170,8 +167,7 @@ class ClipboardSyncService {
    * 若连接已断开则重建。
    */
   async refresh(): Promise<void> {
-    const { useSettingsStore } = require('../../stores/settingsStore');
-    const newServer = useSettingsStore.getState().getActiveServer();
+    const newServer = await configService.getActiveServer();
     const serverChanged = JSON.stringify(newServer) !== JSON.stringify(this.activeServer);
 
     if (serverChanged) {
@@ -231,8 +227,7 @@ class ClipboardSyncService {
       }
     } else {
       // 轮询模式：若轮询已停止（进入后台时可能停止），重新启动
-      const { useSettingsStore } = require('../../stores/settingsStore');
-      const config = useSettingsStore.getState().config;
+      const config = await configService.getConfig();
       if (!this.pollingTag) {
         this._startPolling(config?.remotePollingInterval);
       }
@@ -243,8 +238,7 @@ class ClipboardSyncService {
   /** 应用切换到后台时调用 */
   async onAppBackground(): Promise<void> {
     this.isAppActive = false;
-    const { useSettingsStore } = require('../../stores/settingsStore');
-    const config = useSettingsStore.getState().config;
+    const config = await configService.getConfig();
     const bgDownloadEnabled = config?.enableBackgroundTasks && config?.enableBackgroundDownload;
 
     if (!bgDownloadEnabled) {
@@ -384,17 +378,12 @@ class ClipboardSyncService {
   // ─── 私有实现 ─────────────────────────────────────────────────────────────
 
   private async _readActiveServer(): Promise<ServerConfig | null> {
-    const { useSettingsStore } = require('../../stores/settingsStore');
-    if (!useSettingsStore.getState().isLoaded) {
-      await useSettingsStore.getState().loadConfig();
-    }
-    return useSettingsStore.getState().getActiveServer();
+    return configService.getActiveServer();
   }
 
   private async _initializeHistorySyncService(server: ServerConfig): Promise<void> {
     try {
-      const { useSettingsStore } = require('../../stores/settingsStore');
-      const config = useSettingsStore.getState().config;
+      const config = await configService.getConfig();
       if (config?.enableHistorySync) {
         const { getHistorySyncService } = require('../history/HistorySyncService');
         await getHistorySyncService().ensureInitialized(server);
@@ -406,8 +395,7 @@ class ClipboardSyncService {
   }
 
   private async _startConnection(server: ServerConfig): Promise<void> {
-    const { useSettingsStore } = require('../../stores/settingsStore');
-    const config = useSettingsStore.getState().config;
+    const config = await configService.getConfig();
 
     if (server.type === 'syncclipboard') {
       await this._connectSignalR(server);
@@ -498,9 +486,8 @@ class ClipboardSyncService {
     apiClient: ISyncClipboardAPI,
     logPrefix: string = ''
   ): Promise<void> {
-    const { useSettingsStore } = require('../../stores/settingsStore');
     const { historyStorage } = require('../../storage/HistoryStorage');
-    const config = useSettingsStore.getState().config;
+    const config = await configService.getConfig();
     const previousHash = this.lastRemoteProfileHash;
 
     const { resolveRemoteContent } = await import('../../utils/processRemoteContent');
@@ -701,8 +688,7 @@ class ClipboardSyncService {
         );
         if (fileUri && fileUri !== currentRemote.fileUri) {
           clipboardSyncState.setState({ remoteContent: { ...currentRemote, fileUri } });
-          const { useSettingsStore } = require('../../stores/settingsStore');
-          const config = useSettingsStore.getState().config;
+          const config = await configService.getConfig();
           if (config?.syncToastEnabled !== false) {
             ToastAndroid.show('文件已下载', ToastAndroid.SHORT);
           }
@@ -808,24 +794,21 @@ class ClipboardSyncService {
 
   private _subscribeToLocalPollingIntervalChanges(): void {
     if (this._localPollingIntervalUnsub) return;
-    const { useSettingsStore } = require('../../stores/settingsStore');
 
-    // 立即应用当前值
-    const currentInterval = useSettingsStore.getState().config?.localPollingInterval ?? 1000;
-    clipboardMonitor.updatePollingInterval(currentInterval);
+    // 立即应用当前值（configStorage 有内存缓存，Promise 即时 resolve）
+    configService.getConfig().then((config) => {
+      const currentInterval = config.localPollingInterval ?? 1000;
+      clipboardMonitor.updatePollingInterval(currentInterval);
+    });
 
-    this._localPollingIntervalUnsub = useSettingsStore.subscribe(
-      (
-        state: { config: { localPollingInterval?: number } | null | undefined },
-        prevState: { config: { localPollingInterval?: number } | null | undefined }
-      ) => {
-        const interval = state.config?.localPollingInterval ?? 1000;
-        const prevInterval = prevState.config?.localPollingInterval ?? 1000;
-        if (interval !== prevInterval) {
-          clipboardMonitor.updatePollingInterval(interval);
-        }
+    let prevInterval: number | undefined;
+    this._localPollingIntervalUnsub = configService.subscribe((config) => {
+      const interval = config.localPollingInterval ?? 1000;
+      if (interval !== prevInterval) {
+        prevInterval = interval;
+        clipboardMonitor.updatePollingInterval(interval);
       }
-    );
+    });
   }
 
   private _unsubscribeFromLocalPollingIntervalChanges(): void {
@@ -837,9 +820,8 @@ class ClipboardSyncService {
    * 本地剪贴板内容变化时触发自动上传。
    * 条件：autoSync 开启 或 后台上传启用。
    */
-  private _handleAutoUpload(content: ClipboardContent): void {
-    const { useSettingsStore } = require('../../stores/settingsStore');
-    const config = useSettingsStore.getState().config;
+  private async _handleAutoUpload(content: ClipboardContent): Promise<void> {
+    const config = await configService.getConfig();
 
     const autoSync = config?.autoSync ?? false;
     const bgUpload = config?.enableBackgroundTasks && config?.enableBackgroundUpload;

@@ -7,7 +7,7 @@ import { create } from 'zustand';
 import { AppConfig } from '../types/storage';
 import { ServerConfig } from '../types/api';
 import { ConflictResolution } from '../types/sync';
-import { configStorage } from '../storage/ConfigStorage';
+import { configService } from '../services/ConfigService';
 
 /**
  * 设置状态接口
@@ -163,7 +163,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   loadConfig: async () => {
     try {
-      const config = await configStorage.getConfig();
+      const config = await configService.getConfig();
       set({ config, isLoaded: true, error: null });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load config';
@@ -179,8 +179,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }));
 
     try {
-      await configStorage.updateConfig(updates);
-      set({ isSaving: false });
+      const config = await configService.updateConfig(updates);
+      set({ config, isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to update config';
       set({ error: errorMessage, isSaving: false });
@@ -191,8 +191,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ isSaving: true, error: null });
 
     try {
-      await configStorage.resetConfig();
-      const config = await configStorage.getConfig();
+      const config = await configService.resetConfig();
       set({ config, isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to reset config';
@@ -217,8 +216,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ isSaving: true, error: null });
 
     try {
-      await configStorage.addServer(server);
-      const config = await configStorage.getConfig();
+      const config = await configService.addServer(server);
       set({ config, isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to add server';
@@ -230,8 +228,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ isSaving: true, error: null });
 
     try {
-      await configStorage.updateServer(index, updates);
-      const config = await configStorage.getConfig();
+      const config = await configService.updateServer(index, updates);
       set({ config, isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to update server';
@@ -243,8 +240,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ isSaving: true, error: null });
 
     try {
-      await configStorage.deleteServer(index);
-      const config = await configStorage.getConfig();
+      const config = await configService.deleteServer(index);
       set({ config, isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete server';
@@ -256,8 +252,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ isSaving: true, error: null });
 
     try {
-      await configStorage.setActiveServer(index);
-      const config = await configStorage.getConfig();
+      const config = await configService.setActiveServer(index);
       set({ config, isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to set active server';
@@ -372,7 +367,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   exportConfig: async () => {
     try {
-      return await configStorage.exportConfig();
+      return await configService.exportConfig();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to export config';
       set({ error: errorMessage });
@@ -384,8 +379,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ isSaving: true, error: null });
 
     try {
-      await configStorage.importConfig(json);
-      const config = await configStorage.getConfig();
+      const config = await configService.importConfig(json);
       set({ config, isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to import config';

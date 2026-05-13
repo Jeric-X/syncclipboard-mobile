@@ -113,8 +113,8 @@ class BackgroundServiceManager {
 
     // 始终启动 HistoryService 本地历史追踪（无需服务器配置，始终运行）
     try {
-      const { getHistoryService } = require('../history/HistoryService');
-      getHistoryService().startTracking();
+      const { getHistoryTracker } = require('../history/HistoryService');
+      getHistoryTracker().startTracking();
     } catch (e) {
       console.error('[BackgroundServiceManager] Failed to start local history tracking:', e);
     }
