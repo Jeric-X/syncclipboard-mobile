@@ -97,12 +97,11 @@ export class HistoryStorage {
   private history: HistoryItem[] = [];
   private initialized = false;
   private maxHistorySize = 1000;
-  private changeCallbacks: Set<HistoryChangeCallback> = new Set();
+  private onChangeCallback: HistoryChangeCallback | null = null;
   private pendingChanges: { items: HistoryItem[]; action: 'add' | 'update' | 'delete' }[] = [];
   private notifyTimer: NodeJS.Timeout | null = null;
   private static readonly NOTIFY_BATCH_SIZE = 50;
   private static readonly NOTIFY_DELAY_MS = 100;
-  private silentMode = false;
   private sortConfig: HistorySort = { field: 'timestamp', order: 'desc' };
 
   private constructor() {}
@@ -252,29 +251,14 @@ export class HistoryStorage {
   }
 
   /**
-   * 注册变更回调
+   * 设置变更回调（由 HistoryService 注册，负责向所有订阅者分发通知）
    */
-  public addChangeCallback(callback: HistoryChangeCallback): void {
-    this.changeCallbacks.add(callback);
-  }
-
-  /**
-   * 移除变更回调
-   */
-  public removeChangeCallback(callback: HistoryChangeCallback): void {
-    this.changeCallbacks.delete(callback);
-  }
-
-  public beginSilentMode(): void {
-    this.silentMode = true;
-  }
-
-  public endSilentMode(): void {
-    this.silentMode = false;
+  public setOnChangeCallback(callback: HistoryChangeCallback | null): void {
+    this.onChangeCallback = callback;
   }
 
   private notifyChange(item: HistoryItem, action: 'add' | 'update' | 'delete'): void {
-    if (this.silentMode) {
+    if (!this.onChangeCallback) {
       return;
     }
 
@@ -297,14 +281,13 @@ export class HistoryStorage {
    * 立即批量通知变更
    */
   private notifyChangeBatch(items: HistoryItem[], action: 'add' | 'update' | 'delete'): void {
+    if (!this.onChangeCallback) return;
     // 浅拷贝，避免 store 中的旧引用和新通知指向同一对象导致比较失效
     const copied = items.map((item) => ({ ...item }));
-    for (const callback of this.changeCallbacks) {
-      try {
-        callback(copied, action);
-      } catch (error) {
-        console.error('[HistoryStorage] Error in change callback:', error);
-      }
+    try {
+      this.onChangeCallback(copied, action);
+    } catch (error) {
+      console.error('[HistoryStorage] Error in change callback:', error);
     }
   }
 
@@ -328,10 +311,10 @@ export class HistoryStorage {
     }
 
     // 通知每个分组
-    for (const [action, items] of groupedChanges) {
-      for (const callback of this.changeCallbacks) {
+    if (this.onChangeCallback) {
+      for (const [action, items] of groupedChanges) {
         try {
-          callback(items, action);
+          this.onChangeCallback(items, action);
         } catch (error) {
           console.error('[HistoryStorage] Error in change callback:', error);
         }

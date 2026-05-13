@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import { HistoryItem } from '../types/clipboard';
 import { HistoryFilter, HistorySort } from '../types/storage';
-import { historyStorage } from '../storage';
+import { historyService } from '../services/history/HistoryService';
 
 /**
  * 历史记录状态接口
@@ -141,7 +141,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
       const effectiveSort: HistorySort = sort || { field: 'timestamp', order: 'desc' };
 
-      const result = await historyStorage.searchItems(filter || undefined, effectiveSort);
+      const result = await historyService.searchItems(filter || undefined, effectiveSort);
       set({
         items: result.items,
         totalCount: result.total,
@@ -159,7 +159,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ isLoading: true, error: null, filter, sort: effectiveSort });
 
     try {
-      const result = await historyStorage.searchItems(filter, effectiveSort || undefined);
+      const result = await historyService.searchItems(filter, effectiveSort || undefined);
 
       set({
         items: result.items,
@@ -176,7 +176,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ error: null });
 
     try {
-      const savedItem = await historyStorage.addItem(item);
+      const savedItem = await historyService.addItem(item);
 
       // 更新最后添加时间戳
       set({ lastAddedTimestamp: Date.now() });
@@ -196,7 +196,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ error: null });
 
     try {
-      await historyStorage.addItems(items);
+      await historyService.addItems(items);
 
       set({ lastAddedTimestamp: Date.now() });
 
@@ -211,7 +211,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ error: null });
 
     try {
-      await historyStorage.updateItem(profileHash, updates);
+      await historyService.updateItem(profileHash, updates);
 
       // 更新本地状态
       set((state) => ({
@@ -229,7 +229,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ error: null });
 
     try {
-      await historyStorage.softDeleteItem(profileHash);
+      await historyService.softDeleteItem(profileHash);
       set({ lastDeletedHashes: [profileHash] });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete item';
@@ -241,7 +241,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ error: null });
 
     try {
-      await historyStorage.softDeleteItems(profileHashes);
+      await historyService.softDeleteItems(profileHashes);
       set({ lastDeletedHashes: profileHashes });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete items';
@@ -253,7 +253,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ error: null });
 
     try {
-      await historyStorage.toggleStar(profileHash);
+      await historyService.toggleStar(profileHash);
       // 状态更新由 handleStorageChange 处理
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to toggle star';
@@ -265,7 +265,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ error: null });
 
     try {
-      await historyStorage.togglePin(profileHash);
+      await historyService.togglePin(profileHash);
       // 状态更新由 handleStorageChange 处理
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to toggle pin';
@@ -275,7 +275,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
   incrementUseCount: async (profileHash: string) => {
     try {
-      await historyStorage.incrementUseCount(profileHash);
+      await historyService.incrementUseCount(profileHash);
 
       // 更新本地状态（可选）
       set((state) => ({
@@ -297,7 +297,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      await historyStorage.clear();
+      await historyService.clear();
       set({
         items: [],
         totalCount: 0,
@@ -318,7 +318,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   setSort: (sort: HistorySort | null) => {
     set({ sort });
     if (sort) {
-      historyStorage.setSortConfig(sort);
+      historyService.setSortConfig(sort);
     }
   },
 

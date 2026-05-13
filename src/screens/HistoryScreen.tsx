@@ -195,17 +195,16 @@ export function HistoryScreen() {
 
   // 监听 HistoryStorage 变更，实时更新 UI
   useEffect(() => {
-    const { HistoryStorage } = require('@/storage/HistoryStorage');
-    const storage = HistoryStorage.getInstance();
+    const { historyService } = require('@/services/history');
 
     const handleChange = (items: HistoryItem[], action: 'add' | 'update' | 'delete') => {
       handleStorageChange(items, action);
     };
 
-    storage.addChangeCallback(handleChange);
+    historyService.addChangeCallback(handleChange);
 
     return () => {
-      storage.removeChangeCallback(handleChange);
+      historyService.removeChangeCallback(handleChange);
     };
   }, [handleStorageChange]);
 
@@ -609,13 +608,14 @@ export function HistoryScreen() {
 
             const { HistoryStorage } = await import('@/storage/HistoryStorage');
             const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
+            const { historyService } = await import('@/services/history');
             const historyStorage = HistoryStorage.getInstance();
             const syncService = getHistorySyncService();
 
             const abortController = new AbortController();
             syncService.setReorganizeAbortController(abortController);
 
-            historyStorage.beginSilentMode();
+            historyService.beginSilentMode();
 
             try {
               await syncService.cleanupRemoteHistorys(abortController.signal);
@@ -631,7 +631,7 @@ export function HistoryScreen() {
             } finally {
               syncService.setReorganizeAbortController(null);
               setIsReorganizing(false);
-              historyStorage.endSilentMode();
+              historyService.endSilentMode();
               await useHistoryStore.getState().refresh();
             }
           }

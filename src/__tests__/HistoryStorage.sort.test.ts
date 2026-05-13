@@ -288,7 +288,7 @@ describe('HistoryStorage 排序', () => {
       await storage.addItem(createItem('x', 100, { lastAccessed: 100 }));
 
       const callback = jest.fn();
-      storage.addChangeCallback(callback);
+      storage.setOnChangeCallback(callback);
 
       await storage.updateLastAccessed('x');
 
@@ -300,7 +300,7 @@ describe('HistoryStorage 排序', () => {
         'update'
       );
 
-      storage.removeChangeCallback(callback);
+      storage.setOnChangeCallback(null);
     });
 
     it('按 timestamp 排序时，updateLastAccessed 不改变顺序', async () => {

@@ -11,6 +11,7 @@ import { HistoryStorage } from '../../storage/HistoryStorage';
 import { HistoryItem, HistorySyncStatus } from '@/types/clipboard';
 import { ServerConfig } from '@/types/api';
 import { getSignalRClient, type HistoryChangedEvent } from 'signalr-client';
+import { historyService } from './HistoryService';
 
 const MAX_TIME_DIFFERENCE_MS = 5 * 60 * 1000; // 5 分钟
 
@@ -70,7 +71,7 @@ export class HistorySyncService {
 
     // 注册本地存储变更回调，自动同步 NeedSync 记录
     this.storageChangeCallback = this.handleLocalHistoryChanged;
-    this.historyStorage.addChangeCallback(this.storageChangeCallback);
+    historyService.addChangeCallback(this.storageChangeCallback);
 
     // 加载上次同步时间
     await this.loadLastSyncTime();
@@ -99,7 +100,7 @@ export class HistorySyncService {
 
     // 移除本地存储变更回调
     if (this.storageChangeCallback) {
-      this.historyStorage.removeChangeCallback(this.storageChangeCallback);
+      historyService.removeChangeCallback(this.storageChangeCallback);
       this.storageChangeCallback = null;
     }
 

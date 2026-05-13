@@ -20,6 +20,7 @@ jest.mock('../storage', () => ({
     incrementUseCount: jest.fn(),
     clear: jest.fn(),
     setSortConfig: jest.fn(),
+    setOnChangeCallback: jest.fn(),
   },
 }));
 

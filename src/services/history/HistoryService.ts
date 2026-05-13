@@ -1,76 +1,106 @@
 /**
  * HistoryService
- * 本地历史记录服务 - 监听本地剪贴板变化并写入历史记录，无需服务器配置。
+ * 作为 historyStore 与 HistoryStorage 之间的中间层，封装所有历史记录的 CRUD 操作。
+ * 同时承担发布订阅职责：管理所有变更回调，HistoryStorage 不再直接维护订阅者列表。
  */
 
-import type { ClipboardContent } from '@/types/clipboard';
-import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
-import { loadLastTrackedHash, saveLastTrackedHash } from './lastTrackedHashStorage';
+import type { HistoryItem } from '@/types/clipboard';
+import type { HistoryFilter, HistorySort } from '@/types/storage';
+import type { HistoryChangeCallback } from '@/storage/HistoryStorage';
+import { historyStorage } from '@/storage';
 
-export class HistoryTracker {
-  private _clipboardCallback: ((content: ClipboardContent) => Promise<void>) | null = null;
-  private lastTrackedHash: string | null = null;
+/**
+ * HistoryService - 历史记录业务服务
+ * 作为 historyStore 和 HistoryStorage 之间的中间层，封装所有历史记录的 CRUD 操作，
+ * 并统一管理变更通知的发布订阅。
+ */
+export class HistoryService {
+  private changeCallbacks = new Set<HistoryChangeCallback>();
+  private silentMode = false;
 
-  /**
-   * 开始追踪本地剪贴板内容变化并添加到历史记录。
-   * 无需服务器配置，始终可调用，幂等。
-   */
-  startTracking(): void {
-    if (this._clipboardCallback) return;
-
-    // 异步加载持久化 hash，初始化完成前 lastTrackedHash 为 null，
-    // 第一次变化会写入历史（HistoryStorage.addItem 幂等去重）
-    loadLastTrackedHash()
-      .then((hash) => {
-        this.lastTrackedHash = hash;
-      })
-      .catch(() => {});
-
-    const { clipboardContentToItem } = require('../../utils/clipboard/dtoConvert');
-    const { useHistoryStore } = require('../../stores/historyStore');
-
-    const callback = async (content: ClipboardContent): Promise<void> => {
-      // hash 去重：与上次记录的 hash 相同则跳过
-      const currentHash = content.localClipboardHash ?? content.profileHash ?? null;
-      if (currentHash && currentHash === this.lastTrackedHash) return;
-
-      this.lastTrackedHash = currentHash;
-
-      // 持久化 hash
-      saveLastTrackedHash(content);
-
-      try {
-        const historyItem = clipboardContentToItem(content);
-        await useHistoryStore.getState().addItem(historyItem);
-      } catch (e) {
-        console.error('[HistoryService] Failed to add clipboard change to history:', e);
+  constructor() {
+    // 注册为 HistoryStorage 的唯一通知接收方，再由本服务向订阅者分发
+    historyStorage.setOnChangeCallback((items, action) => {
+      if (this.silentMode) return;
+      for (const cb of this.changeCallbacks) {
+        try {
+          cb(items, action);
+        } catch (error) {
+          console.error('[HistoryService] Error in change callback:', error);
+        }
       }
-    };
-
-    this._clipboardCallback = callback;
-    clipboardMonitor.addCallback(callback);
-
-    console.log('[HistoryService] Local clipboard tracking started');
+    });
   }
 
-  /**
-   * 停止追踪本地剪贴板内容变化。
-   */
-  stopTracking(): void {
-    if (this._clipboardCallback) {
-      clipboardMonitor.removeCallback(this._clipboardCallback);
-      this._clipboardCallback = null;
-      console.log('[HistoryService] Local clipboard tracking stopped');
-    }
+  // ── CRUD ──────────────────────────────────────────────
+
+  searchItems(
+    filter?: HistoryFilter,
+    sort?: HistorySort
+  ): Promise<{ items: HistoryItem[]; total: number }> {
+    return historyStorage.searchItems(filter, sort);
+  }
+
+  addItem(item: HistoryItem): Promise<HistoryItem> {
+    return historyStorage.addItem(item);
+  }
+
+  addItems(items: HistoryItem[]): Promise<void> {
+    return historyStorage.addItems(items);
+  }
+
+  updateItem(profileHash: string, updates: Partial<HistoryItem>): Promise<void> {
+    return historyStorage.updateItem(profileHash, updates);
+  }
+
+  softDeleteItem(profileHash: string): Promise<void> {
+    return historyStorage.softDeleteItem(profileHash);
+  }
+
+  softDeleteItems(profileHashes: string[]): Promise<void> {
+    return historyStorage.softDeleteItems(profileHashes);
+  }
+
+  toggleStar(profileHash: string): Promise<boolean> {
+    return historyStorage.toggleStar(profileHash);
+  }
+
+  togglePin(profileHash: string): Promise<boolean> {
+    return historyStorage.togglePin(profileHash);
+  }
+
+  incrementUseCount(profileHash: string): Promise<void> {
+    return historyStorage.incrementUseCount(profileHash);
+  }
+
+  clear(): Promise<void> {
+    return historyStorage.clear();
+  }
+
+  setSortConfig(sort: HistorySort): void {
+    historyStorage.setSortConfig(sort);
+  }
+
+  // ── 发布订阅 ─────────────────────────────────────────
+
+  addChangeCallback(callback: HistoryChangeCallback): void {
+    this.changeCallbacks.add(callback);
+  }
+
+  removeChangeCallback(callback: HistoryChangeCallback): void {
+    this.changeCallbacks.delete(callback);
+  }
+
+  /** 进入静默模式：暂停向订阅者分发通知 */
+  beginSilentMode(): void {
+    this.silentMode = true;
+  }
+
+  /** 退出静默模式：恢复通知分发 */
+  endSilentMode(): void {
+    this.silentMode = false;
   }
 }
 
-// 单例实例
-let historyTrackerInstance: HistoryTracker | null = null;
-
-export function getHistoryTracker(): HistoryTracker {
-  if (!historyTrackerInstance) {
-    historyTrackerInstance = new HistoryTracker();
-  }
-  return historyTrackerInstance;
-}
+/** HistoryService 单例 */
+export const historyService = new HistoryService();
