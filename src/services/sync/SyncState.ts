@@ -45,6 +45,38 @@ class ClipboardSyncStateManager {
     this._state = { ...this._state, ...patch };
     this._listeners.forEach((l) => l(this._state));
   }
+
+  setRemoteContent(content: ClipboardContent | null): void {
+    this.setState({ remoteContent: content });
+  }
+
+  setLoadingRemote(loading: boolean): void {
+    this.setState({ loadingRemote: loading });
+  }
+
+  setUploadingClipboard(uploading: boolean): void {
+    this.setState({ uploadingClipboard: uploading });
+  }
+
+  setDownloadingRemote(downloading: boolean): void {
+    this.setState({ downloadingRemote: downloading });
+  }
+
+  setDownloadProgress(progress: ProgressInfo | null): void {
+    this.setState({ downloadProgress: progress });
+  }
+
+  /** 同时清除 downloadingRemote 和 downloadProgress */
+  clearDownloadState(): void {
+    this.setState({ downloadingRemote: false, downloadProgress: null });
+  }
+
+  /** 在当前 remoteContent 上更新 fileUri；若 remoteContent 为 null 则不操作 */
+  updateRemoteContentFileUri(fileUri: string | undefined): void {
+    const { remoteContent } = this._state;
+    if (!remoteContent) return;
+    this.setState({ remoteContent: { ...remoteContent, fileUri } });
+  }
 }
 
 export const clipboardSyncState = new ClipboardSyncStateManager();

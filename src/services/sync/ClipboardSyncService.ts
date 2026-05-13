@@ -15,7 +15,12 @@
  */
 
 import { Platform, ToastAndroid } from 'react-native';
-import { ClipboardContent, HistoryItem, HistorySyncStatus } from '../../types/clipboard';
+import {
+  ClipboardContent,
+  ClipboardChangeCallback,
+  HistoryItem,
+  HistorySyncStatus,
+} from '../../types/clipboard';
 import { clipboardContentToItem } from '@/utils/clipboard/dtoConvert';
 import { SyncDirection, SyncResult } from '../../types/sync';
 import type { ProfileChangedEvent } from 'signalr-client';
@@ -116,7 +121,7 @@ class ClipboardSyncService {
     }
 
     if (!activeServer) {
-      clipboardSyncState.setState({ remoteContent: null });
+      clipboardSyncState.setRemoteContent(null);
       this._subscribeToClipboardChanges();
       return;
     }
@@ -155,7 +160,7 @@ class ClipboardSyncService {
     this._unsubscribeFromAppState();
     await this._stopConnection();
 
-    clipboardSyncState.setState({ remoteContent: null });
+    clipboardSyncState.setRemoteContent(null);
 
     this.activeServer = null;
     this.lastRemoteProfileHash = null;
@@ -277,13 +282,13 @@ class ClipboardSyncService {
     const server = this.activeServer ?? (await this._readActiveServer());
 
     if (!server) {
-      clipboardSyncState.setState({ remoteContent: null });
+      clipboardSyncState.setRemoteContent(null);
       this.lastRemoteProfileHash = null;
       return;
     }
 
     if (!silent) {
-      clipboardSyncState.setState({ loadingRemote: true });
+      clipboardSyncState.setLoadingRemote(true);
     }
 
     try {
@@ -303,19 +308,19 @@ class ClipboardSyncService {
           silent ? '' : 'Fetch: '
         );
       } else {
-        clipboardSyncState.setState({ remoteContent: null });
+        clipboardSyncState.setRemoteContent(null);
         this.lastRemoteProfileHash = null;
       }
     } catch (error) {
       if (!silent) {
-        clipboardSyncState.setState({ remoteContent: null });
+        clipboardSyncState.setRemoteContent(null);
         this.lastRemoteProfileHash = null;
         throw error; // 非静默模式：交由 UI 层处理错误展示
       }
       console.error('[ClipboardSyncService] Silent fetch failed:', error);
     } finally {
       if (!silent) {
-        clipboardSyncState.setState({ loadingRemote: false });
+        clipboardSyncState.setLoadingRemote(false);
       }
     }
   }
@@ -333,7 +338,7 @@ class ClipboardSyncService {
     }
 
     this._uploadAbortController = new AbortController();
-    clipboardSyncState.setState({ uploadingClipboard: true });
+    clipboardSyncState.setUploadingClipboard(true);
 
     try {
       const result = await SyncManager.getInstance().sync(
@@ -347,7 +352,7 @@ class ClipboardSyncService {
       return result;
     } finally {
       this._uploadAbortController = null;
-      clipboardSyncState.setState({ uploadingClipboard: false });
+      clipboardSyncState.setUploadingClipboard(false);
     }
   }
 
@@ -358,7 +363,7 @@ class ClipboardSyncService {
     if (this._uploadAbortController) {
       this._uploadAbortController.abort();
       this._uploadAbortController = null;
-      clipboardSyncState.setState({ uploadingClipboard: false });
+      clipboardSyncState.setUploadingClipboard(false);
     }
   }
 
@@ -506,9 +511,9 @@ class ClipboardSyncService {
     if (resolved.fileUriOnlyUpdate) {
       const prev = clipboardSyncState.getState().remoteContent;
       if (prev?.fileUri !== resolved.content.fileUri) {
-        clipboardSyncState.setState({
-          remoteContent: prev ? { ...prev, fileUri: resolved.content.fileUri } : resolved.content,
-        });
+        clipboardSyncState.setRemoteContent(
+          prev ? { ...prev, fileUri: resolved.content.fileUri } : resolved.content
+        );
       }
       return;
     }
@@ -519,7 +524,7 @@ class ClipboardSyncService {
         `[ClipboardSyncService] ${logPrefix}Remote hash matches last uploaded hash, skipping auto-download/copy`
       );
       this.lastRemoteProfileHash = currentHash;
-      clipboardSyncState.setState({ remoteContent: resolved.content });
+      clipboardSyncState.setRemoteContent(resolved.content);
       return;
     }
 
@@ -564,7 +569,7 @@ class ClipboardSyncService {
     }
 
     // 更新 UI 显示
-    clipboardSyncState.setState({ remoteContent: finalContent });
+    clipboardSyncState.setRemoteContent(finalContent);
 
     const isFirstLoad = previousHash === null;
     if (!isFirstLoad) {
@@ -664,14 +669,12 @@ class ClipboardSyncService {
         task.status === 'waitForRetry'
       ) {
         // 任务进行中：更新下载状态和进度
-        clipboardSyncState.setState({ downloadingRemote: true });
+        clipboardSyncState.setDownloadingRemote(true);
         if (task.status === 'running' && task.progress >= 0) {
-          clipboardSyncState.setState({
-            downloadProgress: {
-              progress: task.progress / 100,
-              bytesTransferred: task.bytesTransferred,
-              totalBytes: task.totalBytes || 0,
-            },
+          clipboardSyncState.setDownloadProgress({
+            progress: task.progress / 100,
+            bytesTransferred: task.bytesTransferred,
+            totalBytes: task.totalBytes || 0,
           });
         }
       } else if (task.status === 'completed') {
@@ -683,16 +686,16 @@ class ClipboardSyncService {
           currentRemote.fileName!
         );
         if (fileUri && fileUri !== currentRemote.fileUri) {
-          clipboardSyncState.setState({ remoteContent: { ...currentRemote, fileUri } });
+          clipboardSyncState.updateRemoteContentFileUri(fileUri);
           const config = await configService.getConfig();
           if (config?.syncToastEnabled !== false) {
             ToastAndroid.show('文件已下载', ToastAndroid.SHORT);
           }
         }
-        clipboardSyncState.setState({ downloadingRemote: false, downloadProgress: null });
+        clipboardSyncState.clearDownloadState();
       } else {
         // 失败或取消：清除下载状态
-        clipboardSyncState.setState({ downloadingRemote: false, downloadProgress: null });
+        clipboardSyncState.clearDownloadState();
       }
     };
 
@@ -707,19 +710,16 @@ class ClipboardSyncService {
     queue.offTaskStatusChanged(this.transferQueueHandler);
     this.transferQueueHandler = null;
     // 清除下载状态
-    clipboardSyncState.setState({ downloadingRemote: false, downloadProgress: null });
+    clipboardSyncState.clearDownloadState();
   }
 
   private _subscribeToClipboardChanges(): void {
     if (this.clipboardUnsub) return;
-    const { uselocalClipboardStore } = require('../../stores/localClipboardStore');
-    this.clipboardUnsub = uselocalClipboardStore.subscribe(
-      (state: { currentContent: unknown }, prevState: { currentContent: unknown }) => {
-        if (state.currentContent !== prevState.currentContent && state.currentContent) {
-          this._handleAutoUpload(state.currentContent as ClipboardContent);
-        }
-      }
-    );
+    const callback: ClipboardChangeCallback = (content) => {
+      this._handleAutoUpload(content);
+    };
+    clipboardMonitor.addCallback(callback);
+    this.clipboardUnsub = () => clipboardMonitor.removeCallback(callback);
   }
 
   private _unsubscribeFromClipboardChanges(): void {
@@ -743,7 +743,7 @@ class ClipboardSyncService {
       // clear 事件表示全清
       if (action === 'clear') {
         console.log('[ClipboardSyncService] History cleared, resetting remote content fileUri');
-        clipboardSyncState.setState({ remoteContent: { ...currentRemote, fileUri: undefined } });
+        clipboardSyncState.updateRemoteContentFileUri(undefined);
         return;
       }
 
@@ -753,7 +753,7 @@ class ClipboardSyncService {
           '[ClipboardSyncService] Remote content deleted from history, resetting fileUri:',
           currentRemote.profileHash
         );
-        clipboardSyncState.setState({ remoteContent: { ...currentRemote, fileUri: undefined } });
+        clipboardSyncState.updateRemoteContentFileUri(undefined);
       }
     };
 
