@@ -145,38 +145,3 @@ export interface SyncEvent {
  * 同步监听器回调
  */
 export type SyncListener = (event: SyncEvent) => void;
-
-/**
- * 同步统计
- */
-export interface SyncStats {
-  /** 总同步次数 */
-  totalSyncs: number;
-
-  /** 成功次数 */
-  successCount: number;
-
-  /** 失败次数 */
-  failureCount: number;
-
-  /** 上传次数 */
-  uploadCount: number;
-
-  /** 下载次数 */
-  downloadCount: number;
-
-  /** 跳过次数 */
-  skipCount: number;
-
-  /** 冲突次数 */
-  conflictCount: number;
-
-  /** 最后同步时间 */
-  lastSyncTime?: number;
-
-  /** 最后成功同步时间 */
-  lastSuccessTime?: number;
-
-  /** 平均同步耗时（毫秒） */
-  averageDuration?: number;
-}

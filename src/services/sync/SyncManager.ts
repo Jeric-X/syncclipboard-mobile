@@ -17,34 +17,18 @@ import { compareHash } from '../../utils/hash';
 import { isTextInvalid } from '../../utils/index';
 import type { ProgressInfo } from 'native-util';
 import {
-  SyncConfig,
   SyncStatus,
   SyncDirection,
   SyncResult,
   SyncEvent,
   SyncEventType,
   SyncListener,
-  SyncStats,
   ConflictResolution,
 } from '../../types/sync';
 import { ClipboardContent } from '../../types/clipboard';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { configStorage } from '../../storage';
 
-const STORAGE_KEY_CONFIG = '@syncclipboard:sync:config';
-const STORAGE_KEY_STATS = '@syncclipboard:sync:stats';
 const STORAGE_KEY_LAST_PROFILE_HASH = '@syncclipboard:sync:last_hash';
-
-/**
- * 默认同步配置
- */
-const DEFAULT_CONFIG: Partial<SyncConfig> = {
-  interval: 5000, // 5秒
-  conflictResolution: ConflictResolution.UseNewest,
-  syncLargeFiles: true,
-  largeFileThreshold: 10 * 1024 * 1024, // 10MB
-  maxRetries: 3,
-  retryDelay: 2000, // 2秒
-};
 
 /**
  * 同步管理器
@@ -52,21 +36,13 @@ const DEFAULT_CONFIG: Partial<SyncConfig> = {
 export class SyncManager {
   private static instance: SyncManager | null = null;
 
-  private config: SyncConfig | null = null;
   private apiClient: ISyncClipboardAPI | null = null;
+  private lastServerConfigKey: string | null = null;
   private clipboardManager = localClipboard;
 
   private status: SyncStatus = SyncStatus.Idle;
   private listeners: Map<string, SyncListener> = new Map();
-  private stats: SyncStats = {
-    totalSyncs: 0,
-    successCount: 0,
-    failureCount: 0,
-    uploadCount: 0,
-    downloadCount: 0,
-    skipCount: 0,
-    conflictCount: 0,
-  };
+  private persistedDataLoaded = false;
 
   private isSyncing = false;
   private currentSyncPromise: Promise<SyncResult> | null = null;
@@ -87,13 +63,6 @@ export class SyncManager {
       SyncManager.instance = new SyncManager();
     }
     return SyncManager.instance;
-  }
-
-  /**
-   * 获取当前 API 客户端（供外部服务使用）
-   */
-  public getAPIClient(): ISyncClipboardAPI | null {
-    return this.apiClient;
   }
 
   public setPendingUploadContent(content: ClipboardContent | null): void {
@@ -181,23 +150,34 @@ export class SyncManager {
   }
 
   /**
-   * 初始化同步管理器
+   * 获取或创建 API 客户端（服务器配置变更时自动重建）
    */
-  public async initialize(config: SyncConfig): Promise<void> {
-    this.config = { ...DEFAULT_CONFIG, ...config } as SyncConfig;
+  private async getOrCreateAPIClient(): Promise<ISyncClipboardAPI> {
+    const activeServer = await configStorage.getActiveServer();
+    if (!activeServer) {
+      throw new ConfigurationError('No active server configured');
+    }
+    const serverKey = JSON.stringify(activeServer);
+    if (!this.apiClient || serverKey !== this.lastServerConfigKey) {
+      this.apiClient = this.createAPIClient(activeServer);
+      this.lastServerConfigKey = serverKey;
+    }
+    return this.apiClient;
+  }
 
-    // 创建 API 客户端
-    this.apiClient = this.createAPIClient(config.server);
-
-    // 加载持久化数据
+  /**
+   * 确保持久化数据已加载（首次调用时懒加载）
+   */
+  private async ensurePersistedDataLoaded(): Promise<void> {
+    if (this.persistedDataLoaded) return;
     await this.loadPersistedData();
+    this.persistedDataLoaded = true;
   }
 
   /**
    * 销毁同步管理器
    */
   public async destroy(): Promise<void> {
-    await this.savePersistedData();
     this.listeners.clear();
   }
 
@@ -211,9 +191,7 @@ export class SyncManager {
     onProgress?: (info: ProgressInfo) => void,
     onPreview?: (preview: string) => void
   ): Promise<SyncResult> {
-    if (!this.config || !this.apiClient) {
-      throw new Error('SyncManager not initialized');
-    }
+    await this.ensurePersistedDataLoaded();
 
     if (this.isSyncing) {
       if (isAuto) {
@@ -280,9 +258,6 @@ export class SyncManager {
 
         result.duration = Date.now() - startTime;
 
-        // 更新统计信息
-        this.updateStats(result);
-
         // 发送完成事件
         this.emitEvent({
           type: SyncEventType.Completed,
@@ -326,7 +301,6 @@ export class SyncManager {
           duration: Date.now() - startTime,
         };
 
-        this.updateStats(result);
         this.emitEvent({
           type: SyncEventType.Failed,
           result,
@@ -357,10 +331,8 @@ export class SyncManager {
     onProgress?: (info: ProgressInfo) => void,
     onPreview?: (preview: string) => void
   ): Promise<SyncResult> {
-    if (!this.apiClient || !this.config) {
-      throw new Error('SyncManager not initialized');
-    }
-
+    const apiClient = await this.getOrCreateAPIClient();
+    const appConfig = await configStorage.getConfig();
     try {
       // 优先使用已缓存的内容（来自 ClipboardMonitor 回调，避免后台时重新创建悬浮窗）
       let localContent =
@@ -409,8 +381,8 @@ export class SyncManager {
 
       // 检查是否是大文件（仅在自动同步时）
       if (isAuto && localContent.fileSize) {
-        const isLargeFile = localContent.fileSize > this.config.largeFileThreshold;
-        if (isLargeFile && !this.config.syncLargeFiles) {
+        const isLargeFile = localContent.fileSize > appConfig.largeFileThreshold;
+        if (isLargeFile && !appConfig.syncLargeFiles) {
           return {
             success: false,
             direction: SyncDirection.Upload,
@@ -446,7 +418,7 @@ export class SyncManager {
 
       // 使用 putContent 统一处理：先上传数据（如果有），再上传配置
       try {
-        await this.apiClient.putContent(localContent, { signal, onProgress });
+        await apiClient.putContent(localContent, { signal, onProgress });
       } catch (uploadError) {
         // 上传失败，回滚 hash
         this.lastLocalProfileHash = previousProfileHash;
@@ -495,13 +467,11 @@ export class SyncManager {
     onProgress?: (info: ProgressInfo) => void,
     onPreview?: (preview: string) => void
   ): Promise<SyncResult> {
-    if (!this.apiClient || !this.config) {
-      throw new Error('SyncManager not initialized');
-    }
-
+    const apiClient = await this.getOrCreateAPIClient();
+    const appConfig = await configStorage.getConfig();
     try {
       // 获取远程剪贴板配置
-      const profile = await this.apiClient.getClipboard(signal);
+      const profile = await apiClient.getClipboard(signal);
 
       if (!profile || !profile.hash) {
         return {
@@ -548,7 +518,11 @@ export class SyncManager {
           !compareHash(localContent.profileHash, this.lastLocalProfileHash)
         ) {
           // 本地和远程都有修改，存在冲突
-          const resolution = await this.resolveConflict(localContent, profile);
+          const resolution = await this.resolveConflict(
+            localContent,
+            profile,
+            appConfig.conflictResolution
+          );
 
           if (resolution === 'local') {
             // 使用本地版本，上传覆盖远程
@@ -574,8 +548,7 @@ export class SyncManager {
       // 如果有文件数据，优先从历史记录读取缓存，否则下载并保存到历史记录
       if (profile.hasData && profile.dataName) {
         // 检查文件大小是否超过"允许自动同步的数据大小"限制
-        const autoDownloadMaxSize =
-          useSettingsStore.getState().config?.autoDownloadMaxSize ?? 5 * 1024 * 1024;
+        const autoDownloadMaxSize = appConfig.autoDownloadMaxSize;
         if (profile.size && profile.size > autoDownloadMaxSize) {
           console.log(
             `[SyncManager] File too large (${profile.size} bytes > ${autoDownloadMaxSize} bytes), skipping auto-download`
@@ -590,7 +563,7 @@ export class SyncManager {
         const { downloadAndAddToHistory } = await import('../../utils/remoteClipboard');
         const updatedContent = await downloadAndAddToHistory(
           content,
-          this.apiClient,
+          apiClient,
           true,
           signal,
           onProgress
@@ -636,13 +609,10 @@ export class SyncManager {
    */
   private async resolveConflict(
     localContent: ClipboardContent,
-    remoteProfile: ProfileDto
+    remoteProfile: ProfileDto,
+    conflictResolution: ConflictResolution
   ): Promise<'local' | 'remote' | 'skip'> {
-    if (!this.config) {
-      return 'remote';
-    }
-
-    switch (this.config.conflictResolution) {
+    switch (conflictResolution) {
       case ConflictResolution.UseLocal:
         return 'local';
 
@@ -711,52 +681,10 @@ export class SyncManager {
   }
 
   /**
-   * 更新统计信息
-   */
-  private updateStats(result: SyncResult): void {
-    this.stats.totalSyncs++;
-    this.stats.lastSyncTime = Date.now();
-
-    if (result.success) {
-      this.stats.successCount++;
-      this.stats.lastSuccessTime = Date.now();
-
-      if (result.direction === SyncDirection.Upload) {
-        this.stats.uploadCount++;
-      } else if (result.direction === SyncDirection.Download) {
-        this.stats.downloadCount++;
-      }
-    } else {
-      this.stats.failureCount++;
-    }
-
-    if (result.skipped) {
-      this.stats.skipCount++;
-    }
-
-    if (result.hasConflict) {
-      this.stats.conflictCount++;
-    }
-
-    // 更新平均耗时
-    if (result.duration) {
-      const currentAvg = this.stats.averageDuration || 0;
-      const totalCount = this.stats.successCount;
-      this.stats.averageDuration = (currentAvg * (totalCount - 1) + result.duration) / totalCount;
-    }
-  }
-
-  /**
    * 加载持久化数据
    */
   private async loadPersistedData(): Promise<void> {
     try {
-      // 加载统计信息
-      const statsJson = await AsyncStorage.getItem(STORAGE_KEY_STATS);
-      if (statsJson) {
-        this.stats = JSON.parse(statsJson);
-      }
-
       // 加载最后的 profileHash 值
       this.lastLocalProfileHash = await AsyncStorage.getItem(STORAGE_KEY_LAST_PROFILE_HASH);
     } catch (error) {
@@ -769,10 +697,7 @@ export class SyncManager {
    */
   private async savePersistedData(): Promise<void> {
     try {
-      await AsyncStorage.multiSet([
-        [STORAGE_KEY_STATS, JSON.stringify(this.stats)],
-        [STORAGE_KEY_LAST_PROFILE_HASH, this.lastLocalProfileHash || ''],
-      ]);
+      await AsyncStorage.setItem(STORAGE_KEY_LAST_PROFILE_HASH, this.lastLocalProfileHash || '');
     } catch (error) {
       console.error('Failed to save persisted data:', error);
     }
@@ -783,32 +708,5 @@ export class SyncManager {
    */
   public getStatus(): SyncStatus {
     return this.status;
-  }
-
-  /**
-   * 获取统计信息
-   */
-  public getStats(): SyncStats {
-    return { ...this.stats };
-  }
-
-  /**
-   * 更新配置
-   */
-  public async updateConfig(config: Partial<SyncConfig>): Promise<void> {
-    if (!this.config) {
-      throw new Error('SyncManager not initialized');
-    }
-
-    this.config = { ...this.config, ...config };
-
-    await AsyncStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(this.config));
-  }
-
-  /**
-   * 获取配置
-   */
-  public getConfig(): SyncConfig | null {
-    return this.config ? { ...this.config } : null;
   }
 }

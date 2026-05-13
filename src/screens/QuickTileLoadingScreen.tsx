@@ -3,7 +3,6 @@ import { ToastAndroid, Linking } from 'react-native';
 import { SyncDirection } from '@/types/sync';
 import { ClipboardContent } from '@/types/clipboard';
 import { SyncManager } from '@/services/sync/SyncManager';
-import { useSyncStore } from '@/stores/syncStore';
 import { openFile, shareFile, saveFile, saveToGallery } from '@/utils/fileActions';
 import { isTextInvalid } from '@/utils/index';
 import { QuickLoadingPage, SuccessButtonConfig } from '@/components/QuickLoadingPage';
@@ -33,9 +32,6 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
       setFileContent(null);
       setProgress(null);
       setPreviewText(undefined);
-
-      // 确保 SyncManager 已初始化（冷启动时尚未经过正常启动流程）
-      await useSyncStore.getState().initialize();
 
       const syncMgr = SyncManager.getInstance();
       const result = await syncMgr.sync(

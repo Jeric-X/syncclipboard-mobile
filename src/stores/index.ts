@@ -4,7 +4,6 @@
  */
 
 export { uselocalClipboardStore } from './localClipboardStore';
-export { useSyncStore } from './syncStore';
 export { useHistoryStore } from './historyStore';
 export { useSettingsStore } from './settingsStore';
 export { useClipboardSyncServiceStore as useClipboardSyncServiceStore } from '../serviceState/ClipboardSyncState';

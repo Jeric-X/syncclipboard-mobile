@@ -101,9 +101,6 @@ class ClipboardSyncService {
     }
     const activeServer = useSettingsStore.getState().getActiveServer();
 
-    // 初始化 SyncManager
-    await this._initializeSyncManager();
-
     // 初始化历史同步服务
     if (activeServer) {
       await this._initializeHistorySyncService(activeServer);
@@ -148,7 +145,6 @@ class ClipboardSyncService {
     this._unsubscribeFromTransferQueue();
     this._unsubscribeFromAppState();
     await this._stopConnection();
-    await this._destroySyncManager();
 
     useClipboardSyncServiceStore.getState().setRemoteContent(null);
 
@@ -382,24 +378,6 @@ class ClipboardSyncService {
       await useSettingsStore.getState().loadConfig();
     }
     return useSettingsStore.getState().getActiveServer();
-  }
-
-  private async _initializeSyncManager(): Promise<void> {
-    try {
-      const { useSyncStore } = require('../../stores/syncStore');
-      await useSyncStore.getState().initialize();
-    } catch (e) {
-      console.error('[ClipboardSyncService] Failed to initialize SyncManager:', e);
-    }
-  }
-
-  private async _destroySyncManager(): Promise<void> {
-    try {
-      const { useSyncStore } = require('../../stores/syncStore');
-      await useSyncStore.getState().destroy();
-    } catch (e) {
-      console.error('[ClipboardSyncService] Failed to destroy SyncManager:', e);
-    }
   }
 
   private async _initializeHistorySyncService(server: ServerConfig): Promise<void> {
