@@ -22,7 +22,8 @@ import type { ProfileChangedEvent } from 'signalr-client';
 import type { ServerConfig } from '../../types/api';
 import type { ISyncClipboardAPI } from '../../api/clients/APIClient';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
-import { useClipboardSyncServiceStore } from '../../serviceState/ClipboardSyncState';
+import type { ClipboardSyncState, ClipboardSyncStateListener } from './SyncState';
+import { clipboardSyncState } from './SyncState';
 
 class ClipboardSyncService {
   private static instance: ClipboardSyncService | null = null;
@@ -85,6 +86,16 @@ class ClipboardSyncService {
     return ClipboardSyncService.instance;
   }
 
+  /** 获取当前同步状态快照（委托给 clipboardSyncState 单例） */
+  public getState(): ClipboardSyncState {
+    return clipboardSyncState.getState();
+  }
+
+  /** 订阅同步状态变化（委托给 clipboardSyncState 单例） */
+  public subscribe(listener: ClipboardSyncStateListener): () => void {
+    return clipboardSyncState.subscribe(listener);
+  }
+
   // ─── 生命周期（由 BackgroundServiceManager 调用）──────────────────────────
 
   /**
@@ -107,7 +118,7 @@ class ClipboardSyncService {
     }
 
     if (!activeServer) {
-      useClipboardSyncServiceStore.getState().setRemoteContent(null);
+      clipboardSyncState.setState({ remoteContent: null });
       this._subscribeToClipboardChanges();
       return;
     }
@@ -146,7 +157,7 @@ class ClipboardSyncService {
     this._unsubscribeFromAppState();
     await this._stopConnection();
 
-    useClipboardSyncServiceStore.getState().setRemoteContent(null);
+    clipboardSyncState.setState({ remoteContent: null });
 
     this.activeServer = null;
     this.lastRemoteProfileHash = null;
@@ -272,13 +283,13 @@ class ClipboardSyncService {
     const server = this.activeServer ?? (await this._readActiveServer());
 
     if (!server) {
-      useClipboardSyncServiceStore.getState().setRemoteContent(null);
+      clipboardSyncState.setState({ remoteContent: null });
       this.lastRemoteProfileHash = null;
       return;
     }
 
     if (!silent) {
-      useClipboardSyncServiceStore.getState().setLoadingRemote(true);
+      clipboardSyncState.setState({ loadingRemote: true });
     }
 
     try {
@@ -298,19 +309,19 @@ class ClipboardSyncService {
           silent ? '' : 'Fetch: '
         );
       } else {
-        useClipboardSyncServiceStore.getState().setRemoteContent(null);
+        clipboardSyncState.setState({ remoteContent: null });
         this.lastRemoteProfileHash = null;
       }
     } catch (error) {
       if (!silent) {
-        useClipboardSyncServiceStore.getState().setRemoteContent(null);
+        clipboardSyncState.setState({ remoteContent: null });
         this.lastRemoteProfileHash = null;
         throw error; // 非静默模式：交由 UI 层处理错误展示
       }
       console.error('[ClipboardSyncService] Silent fetch failed:', error);
     } finally {
       if (!silent) {
-        useClipboardSyncServiceStore.getState().setLoadingRemote(false);
+        clipboardSyncState.setState({ loadingRemote: false });
       }
     }
   }
@@ -328,7 +339,7 @@ class ClipboardSyncService {
     }
 
     this._uploadAbortController = new AbortController();
-    useClipboardSyncServiceStore.getState().setUploadingClipboard(true);
+    clipboardSyncState.setState({ uploadingClipboard: true });
 
     try {
       const result = await SyncManager.getInstance().sync(
@@ -342,7 +353,7 @@ class ClipboardSyncService {
       return result;
     } finally {
       this._uploadAbortController = null;
-      useClipboardSyncServiceStore.getState().setUploadingClipboard(false);
+      clipboardSyncState.setState({ uploadingClipboard: false });
     }
   }
 
@@ -353,7 +364,7 @@ class ClipboardSyncService {
     if (this._uploadAbortController) {
       this._uploadAbortController.abort();
       this._uploadAbortController = null;
-      useClipboardSyncServiceStore.getState().setUploadingClipboard(false);
+      clipboardSyncState.setState({ uploadingClipboard: false });
     }
   }
 
@@ -508,12 +519,11 @@ class ClipboardSyncService {
 
     // fileUri 更新（后台已下载文件），只更新显示
     if (resolved.fileUriOnlyUpdate) {
-      const store = useClipboardSyncServiceStore.getState();
-      const prev = store.remoteContent;
+      const prev = clipboardSyncState.getState().remoteContent;
       if (prev?.fileUri !== resolved.content.fileUri) {
-        store.setRemoteContent(
-          prev ? { ...prev, fileUri: resolved.content.fileUri } : resolved.content
-        );
+        clipboardSyncState.setState({
+          remoteContent: prev ? { ...prev, fileUri: resolved.content.fileUri } : resolved.content,
+        });
       }
       return;
     }
@@ -524,7 +534,7 @@ class ClipboardSyncService {
         `[ClipboardSyncService] ${logPrefix}Remote hash matches last uploaded hash, skipping auto-download/copy`
       );
       this.lastRemoteProfileHash = currentHash;
-      useClipboardSyncServiceStore.getState().setRemoteContent(resolved.content);
+      clipboardSyncState.setState({ remoteContent: resolved.content });
       return;
     }
 
@@ -569,7 +579,7 @@ class ClipboardSyncService {
     }
 
     // 更新 UI 显示
-    useClipboardSyncServiceStore.getState().setRemoteContent(finalContent);
+    clipboardSyncState.setState({ remoteContent: finalContent });
 
     const isFirstLoad = previousHash === null;
     if (!isFirstLoad) {
@@ -659,13 +669,11 @@ class ClipboardSyncService {
     const handler = async (task: import('../history/HistoryTransferQueue').TransferTask) => {
       if (task.type !== 'download') return;
 
-      const currentRemote = useClipboardSyncServiceStore.getState().remoteContent;
+      const currentRemote = clipboardSyncState.getState().remoteContent;
       if (!currentRemote?.profileHash) return;
 
       const profileId = getProfileId(currentRemote.type, currentRemote.profileHash);
       if (task.profileId !== profileId) return;
-
-      const store = useClipboardSyncServiceStore.getState();
 
       if (
         task.status === 'running' ||
@@ -673,12 +681,14 @@ class ClipboardSyncService {
         task.status === 'waitForRetry'
       ) {
         // 任务进行中：更新下载状态和进度
-        store.setDownloadingRemote(true);
+        clipboardSyncState.setState({ downloadingRemote: true });
         if (task.status === 'running' && task.progress >= 0) {
-          store.setDownloadProgress({
-            progress: task.progress / 100,
-            bytesTransferred: task.bytesTransferred,
-            totalBytes: task.totalBytes || 0,
+          clipboardSyncState.setState({
+            downloadProgress: {
+              progress: task.progress / 100,
+              bytesTransferred: task.bytesTransferred,
+              totalBytes: task.totalBytes || 0,
+            },
           });
         }
       } else if (task.status === 'completed') {
@@ -690,19 +700,17 @@ class ClipboardSyncService {
           currentRemote.fileName!
         );
         if (fileUri && fileUri !== currentRemote.fileUri) {
-          store.setRemoteContent({ ...currentRemote, fileUri });
+          clipboardSyncState.setState({ remoteContent: { ...currentRemote, fileUri } });
           const { useSettingsStore } = require('../../stores/settingsStore');
           const config = useSettingsStore.getState().config;
           if (config?.syncToastEnabled !== false) {
             ToastAndroid.show('文件已下载', ToastAndroid.SHORT);
           }
         }
-        store.setDownloadingRemote(false);
-        store.setDownloadProgress(null);
+        clipboardSyncState.setState({ downloadingRemote: false, downloadProgress: null });
       } else {
         // 失败或取消：清除下载状态
-        store.setDownloadingRemote(false);
-        store.setDownloadProgress(null);
+        clipboardSyncState.setState({ downloadingRemote: false, downloadProgress: null });
       }
     };
 
@@ -717,9 +725,7 @@ class ClipboardSyncService {
     queue.offTaskStatusChanged(this.transferQueueHandler);
     this.transferQueueHandler = null;
     // 清除下载状态
-    const store = useClipboardSyncServiceStore.getState();
-    store.setDownloadingRemote(false);
-    store.setDownloadProgress(null);
+    clipboardSyncState.setState({ downloadingRemote: false, downloadProgress: null });
   }
 
   private _subscribeToClipboardChanges(): void {
@@ -759,7 +765,7 @@ class ClipboardSyncService {
         const { historyCleared, lastDeletedHashes } = state;
         if (!historyCleared && lastDeletedHashes.length === 0) return;
 
-        const currentRemote = useClipboardSyncServiceStore.getState().remoteContent;
+        const currentRemote = clipboardSyncState.getState().remoteContent;
         if (!currentRemote?.profileHash) {
           useHistoryStore.getState().clearDeletedState();
           return;
@@ -767,9 +773,7 @@ class ClipboardSyncService {
 
         if (historyCleared) {
           console.log('[ClipboardSyncService] History cleared, resetting remote content fileUri');
-          useClipboardSyncServiceStore
-            .getState()
-            .setRemoteContent({ ...currentRemote, fileUri: undefined });
+          clipboardSyncState.setState({ remoteContent: { ...currentRemote, fileUri: undefined } });
           useHistoryStore.getState().clearDeletedState();
           return;
         }
@@ -781,9 +785,9 @@ class ClipboardSyncService {
               '[ClipboardSyncService] Remote content deleted from history, resetting fileUri:',
               currentRemote.profileHash
             );
-            useClipboardSyncServiceStore
-              .getState()
-              .setRemoteContent({ ...currentRemote, fileUri: undefined });
+            clipboardSyncState.setState({
+              remoteContent: { ...currentRemote, fileUri: undefined },
+            });
           }
           useHistoryStore.getState().clearDeletedState();
         }
@@ -888,7 +892,7 @@ class ClipboardSyncService {
    * 调用方无需传入 activeServer，服务内部从 store 读取。
    */
   async downloadRemoteFile(): Promise<void> {
-    const remoteContent = useClipboardSyncServiceStore.getState().remoteContent;
+    const remoteContent = clipboardSyncState.getState().remoteContent;
     const server = this.activeServer;
 
     if (!server || !remoteContent) return;
@@ -904,7 +908,7 @@ class ClipboardSyncService {
    * 取消当前正在进行的远程文件下载。
    */
   cancelRemoteFileDownload(): void {
-    const remoteContent = useClipboardSyncServiceStore.getState().remoteContent;
+    const remoteContent = clipboardSyncState.getState().remoteContent;
     const server = this.activeServer;
 
     if (!server) return;
@@ -936,8 +940,14 @@ class ClipboardSyncService {
     const server = this.activeServer;
     if (!server) throw new Error('请先在设置中配置服务器');
 
-    const store = useClipboardSyncServiceStore.getState();
-    store.setFileUploadProgress({ stage: '正在处理文件…', progressInfo: null });
+    clipboardSyncState.setState({
+      fileUploadProgress: {
+        stage: '正在处理文件…',
+        progress: 0,
+        bytesTransferred: 0,
+        totalBytes: 0,
+      },
+    });
 
     try {
       const { uploadFileAndAddToHistory } = await import('../../utils/uploadFile');
@@ -950,14 +960,19 @@ class ClipboardSyncService {
         {
           signal,
           onProgress: (stage: string, progressInfo?: import('native-util').ProgressInfo) => {
-            useClipboardSyncServiceStore
-              .getState()
-              .setFileUploadProgress({ stage, progressInfo: progressInfo ?? null });
+            clipboardSyncState.setState({
+              fileUploadProgress: {
+                stage,
+                progress: progressInfo?.progress ?? 0,
+                bytesTransferred: progressInfo?.bytesTransferred ?? 0,
+                totalBytes: progressInfo?.totalBytes ?? 0,
+              },
+            });
           },
         }
       );
     } finally {
-      useClipboardSyncServiceStore.getState().setFileUploadProgress(null);
+      clipboardSyncState.setState({ fileUploadProgress: null });
     }
   }
 
@@ -966,10 +981,7 @@ class ClipboardSyncService {
     server: ServerConfig,
     remoteContent: import('../../types/clipboard').ClipboardContent
   ): Promise<void> {
-    const store = useClipboardSyncServiceStore.getState();
-
-    store.setDownloadingRemote(true);
-    store.setDownloadProgress(null);
+    clipboardSyncState.setState({ downloadingRemote: true, downloadProgress: null });
 
     const abortController = new AbortController();
     this._downloadAbortController = abortController;
@@ -985,14 +997,16 @@ class ClipboardSyncService {
         remoteContent.hasData || false,
         abortController.signal,
         (info: import('native-util').ProgressInfo) => {
-          useClipboardSyncServiceStore.getState().setDownloadProgress({
-            progress: info.progress,
-            bytesTransferred: info.bytesTransferred,
-            totalBytes: info.totalBytes,
+          clipboardSyncState.setState({
+            downloadProgress: {
+              progress: info.progress,
+              bytesTransferred: info.bytesTransferred,
+              totalBytes: info.totalBytes,
+            },
           });
         }
       );
-      useClipboardSyncServiceStore.getState().setRemoteContent(updatedContent);
+      clipboardSyncState.setState({ remoteContent: updatedContent });
       return;
     } catch (error) {
       const err = error as Error;
@@ -1004,8 +1018,7 @@ class ClipboardSyncService {
       throw error;
     } finally {
       this._downloadAbortController = null;
-      useClipboardSyncServiceStore.getState().setDownloadingRemote(false);
-      useClipboardSyncServiceStore.getState().setDownloadProgress(null);
+      clipboardSyncState.setState({ downloadingRemote: false, downloadProgress: null });
     }
   }
 

@@ -418,7 +418,7 @@ export function HomeScreen() {
             successText="上传成功"
             failureText="上传失败"
             onComplete={handleFileUploadComplete}
-            progress={fileUploadProgress?.progressInfo}
+            progress={fileUploadProgress}
             previewText={fileUploadPayload.fileName}
             previewImage={
               fileUploadPayload.mimeType?.startsWith('image/') ? fileUploadPayload.uri : undefined
