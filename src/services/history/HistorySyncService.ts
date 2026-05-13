@@ -12,6 +12,7 @@ import { HistoryItem, HistorySyncStatus } from '@/types/clipboard';
 import { ServerConfig } from '@/types/api';
 import { getSignalRClient, type HistoryChangedEvent } from 'signalr-client';
 import { historyService } from './HistoryService';
+import type { HistoryChangeAction } from '@/storage/HistoryStorage';
 
 const MAX_TIME_DIFFERENCE_MS = 5 * 60 * 1000; // 5 分钟
 
@@ -42,7 +43,7 @@ export class HistorySyncService {
   private reorganizeAbortController: AbortController | null = null;
   private progressCallbacks: Set<SyncProgressCallback> = new Set();
   private storageChangeCallback:
-    | ((items: HistoryItem[], action: 'add' | 'update' | 'delete') => void)
+    | ((items: HistoryItem[], action: HistoryChangeAction) => void)
     | null = null;
 
   constructor() {
@@ -711,7 +712,7 @@ export class HistorySyncService {
    */
   private handleLocalHistoryChanged = async (
     items: HistoryItem[],
-    action: 'add' | 'update' | 'delete'
+    action: HistoryChangeAction
   ): Promise<void> => {
     if (!this.historyAPI || !(await this.isHistorySyncEnabled())) return;
 

@@ -55,12 +55,14 @@ const MIGRATIONS: Record<number, MigrationFunction> = {
 };
 
 /**
+ * 历史记录变更事件类型
+ */
+export type HistoryChangeAction = 'add' | 'update' | 'delete' | 'clear';
+
+/**
  * 历史记录存储服务
  */
-export type HistoryChangeCallback = (
-  items: HistoryItem[],
-  action: 'add' | 'update' | 'delete'
-) => void;
+export type HistoryChangeCallback = (items: HistoryItem[], action: HistoryChangeAction) => void;
 
 /**
  * 规范化 ClipboardItem，确保所有字段都有默认值
@@ -98,7 +100,7 @@ export class HistoryStorage {
   private initialized = false;
   private maxHistorySize = 1000;
   private onChangeCallback: HistoryChangeCallback | null = null;
-  private pendingChanges: { items: HistoryItem[]; action: 'add' | 'update' | 'delete' }[] = [];
+  private pendingChanges: { items: HistoryItem[]; action: HistoryChangeAction }[] = [];
   private notifyTimer: NodeJS.Timeout | null = null;
   private static readonly NOTIFY_BATCH_SIZE = 50;
   private static readonly NOTIFY_DELAY_MS = 100;
@@ -257,7 +259,7 @@ export class HistoryStorage {
     this.onChangeCallback = callback;
   }
 
-  private notifyChange(item: HistoryItem, action: 'add' | 'update' | 'delete'): void {
+  private notifyChange(item: HistoryItem, action: HistoryChangeAction): void {
     if (!this.onChangeCallback) {
       return;
     }
@@ -280,7 +282,7 @@ export class HistoryStorage {
   /**
    * 立即批量通知变更
    */
-  private notifyChangeBatch(items: HistoryItem[], action: 'add' | 'update' | 'delete'): void {
+  private notifyChangeBatch(items: HistoryItem[], action: HistoryChangeAction): void {
     if (!this.onChangeCallback) return;
     // 浅拷贝，避免 store 中的旧引用和新通知指向同一对象导致比较失效
     const copied = items.map((item) => ({ ...item }));
@@ -303,7 +305,7 @@ export class HistoryStorage {
     if (this.pendingChanges.length === 0) return;
 
     // 按操作类型分组
-    const groupedChanges = new Map<'add' | 'update' | 'delete', HistoryItem[]>();
+    const groupedChanges = new Map<HistoryChangeAction, HistoryItem[]>();
     for (const change of this.pendingChanges) {
       const existing = groupedChanges.get(change.action) || [];
       existing.push(...change.items);

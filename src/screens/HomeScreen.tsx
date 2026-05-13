@@ -55,7 +55,6 @@ export function HomeScreen() {
   const copyRemoteToLocal = async (content: ClipboardContent, logPrefix: string = '') => {
     const result = await copyToLocalClipboard(content);
     if (result.success) {
-      uselocalClipboardStore.getState().setCurrentContentDisplay(content);
       getClipboardSyncService().recordLocalHash(content.profileHash || content.text || '');
       console.log(`[HomeScreen] ${logPrefix}Copy to local clipboard completed`);
     } else {

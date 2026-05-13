@@ -105,6 +105,8 @@ export async function copyToLocalClipboard(content: ClipboardContent): Promise<C
     const result = await copyClipboardItem(contentToCopy, localClipboard);
     if (result.success) {
       await clipboardMonitor.setLastContent(contentToCopy);
+      const { uselocalClipboardStore } = await import('@/stores/localClipboardStore');
+      uselocalClipboardStore.getState().setCurrentContentDisplay(contentToCopy);
     }
     return result;
   } catch (error) {

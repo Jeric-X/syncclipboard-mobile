@@ -1,9 +1,6 @@
 import { create } from 'zustand';
-
-interface ErrorInfo {
-  title: string;
-  message: string;
-}
+import { errorService } from '../services/ErrorService';
+import type { ErrorInfo } from '../services/ErrorService';
 
 interface ErrorState {
   error: ErrorInfo | null;
@@ -13,19 +10,20 @@ interface ErrorState {
   showNetworkError: (operation: string, detail?: string) => void;
 }
 
-export const useErrorStore = create<ErrorState>((set) => ({
-  error: null,
+export const useErrorStore = create<ErrorState>((set) => {
+  // store 订阅 errorService，由 service 层驱动状态更新
+  errorService.subscribe((error) => {
+    set({ error });
+  });
 
-  setError: (error) => set({ error }),
+  return {
+    error: null,
 
-  clearError: () => set({ error: null }),
+    setError: (error) => errorService.setError(error),
 
-  showNetworkError: (operation: string, detail?: string) => {
-    set({
-      error: {
-        title: `${operation}失败`,
-        message: detail || '网络连接失败，请检查网络设置',
-      },
-    });
-  },
-}));
+    clearError: () => errorService.clearError(),
+
+    showNetworkError: (operation: string, detail?: string) =>
+      errorService.showNetworkError(operation, detail),
+  };
+});

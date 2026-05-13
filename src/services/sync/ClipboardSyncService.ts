@@ -15,7 +15,7 @@
  */
 
 import { Platform, ToastAndroid } from 'react-native';
-import { ClipboardContent, HistorySyncStatus } from '../../types/clipboard';
+import { ClipboardContent, HistoryItem, HistorySyncStatus } from '../../types/clipboard';
 import { clipboardContentToItem } from '@/utils/clipboard/dtoConvert';
 import { SyncDirection, SyncResult } from '../../types/sync';
 import type { ProfileChangedEvent } from 'signalr-client';
@@ -25,6 +25,7 @@ import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import type { ClipboardSyncState, ClipboardSyncStateListener } from './SyncState';
 import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
+import { errorService } from '../ErrorService';
 
 class ClipboardSyncService {
   private static instance: ClipboardSyncService | null = null;
@@ -262,9 +263,8 @@ class ClipboardSyncService {
     try {
       await this.fetchRemoteClipboard(false);
     } catch (error) {
-      const { useErrorStore } = require('../../stores/errorStore');
       const errorMessage = error instanceof Error ? error.message : '刷新失败';
-      useErrorStore.getState().setError({ title: '刷新失败', message: errorMessage });
+      errorService.setError({ title: '刷新失败', message: errorMessage });
     }
   }
 
@@ -403,9 +403,8 @@ class ClipboardSyncService {
       this._startPolling(config?.remotePollingInterval);
       // 立即获取一次（非静默，显示加载状态；错误写入 errorStore）
       await this.fetchRemoteClipboard(false).catch((error: Error) => {
-        const { useErrorStore } = require('../../stores/errorStore');
         const errorMessage = error?.message ?? '无法连接到服务器';
-        useErrorStore.getState().setError({ title: '连接失败', message: errorMessage });
+        errorService.setError({ title: '连接失败', message: errorMessage });
       });
     }
   }
@@ -454,9 +453,8 @@ class ClipboardSyncService {
       console.log('[ClipboardSyncService] SignalR connected');
       // 连接后立即获取一次（非静默；错误写入 errorStore）
       await this.fetchRemoteClipboard(false).catch((error: Error) => {
-        const { useErrorStore } = require('../../stores/errorStore');
         const errorMessage = error?.message ?? '无法连接到服务器';
-        useErrorStore.getState().setError({ title: '连接失败', message: errorMessage });
+        errorService.setError({ title: '连接失败', message: errorMessage });
       });
     } catch (e) {
       console.error('[ClipboardSyncService] Failed to connect SignalR:', e);
@@ -486,7 +484,7 @@ class ClipboardSyncService {
     apiClient: ISyncClipboardAPI,
     logPrefix: string = ''
   ): Promise<void> {
-    const { historyStorage } = require('../../storage/HistoryStorage');
+    const { historyService } = require('../history/HistoryService');
     const config = await configService.getConfig();
     const previousHash = this.lastRemoteProfileHash;
 
@@ -494,7 +492,7 @@ class ClipboardSyncService {
     const { SyncManager } = require('./SyncManager');
     const resolved = await resolveRemoteContent(content, currentHash, previousHash, hasData, {
       getLastUploadedHash: () => SyncManager.getInstance().getLastUploadedHash(),
-      getHistoryItem: (profileHash: string) => historyStorage.getItem(profileHash),
+      getHistoryItem: (profileHash: string) => historyService.getItem(profileHash),
       getHistoryFileUri: async (type: string, profileHash: string, fileName: string) => {
         const { getHistoryFileUri } = await import('../../utils/fileStorage');
         return getHistoryFileUri(type, profileHash, fileName);
@@ -574,12 +572,12 @@ class ClipboardSyncService {
       // （有文件数据的情况已由 downloadAndAddToHistory 处理）
       if (!hasData) {
         try {
-          const { useHistoryStore } = require('../../stores/historyStore');
+          const { historyService } = require('../history/HistoryService');
           const historyItem = clipboardContentToItem(finalContent, {
             hasData: false,
             syncStatus: HistorySyncStatus.Synced,
           });
-          await useHistoryStore.getState().addItem(historyItem);
+          await historyService.addItem(historyItem);
           console.log(
             `[ClipboardSyncService] ${logPrefix}Added remote clipboard (no file) to history`
           );
@@ -637,8 +635,6 @@ class ClipboardSyncService {
     const { copyToLocalClipboard } = await import('../../utils/clipboard');
     const result = await copyToLocalClipboard(content);
     if (result.success) {
-      const { uselocalClipboardStore } = require('../../stores/localClipboardStore');
-      uselocalClipboardStore.getState().setCurrentContentDisplay(content);
       this.lastLocalProfileHash = content.profileHash || content.text || '';
       console.log(`[ClipboardSyncService] ${logPrefix}Copied to local clipboard`);
     } else {
@@ -736,49 +732,33 @@ class ClipboardSyncService {
    */
   private _subscribeToHistoryChanges(): void {
     if (this.historyUnsub) return;
-    const { useHistoryStore } = require('../../stores/historyStore');
+    const { historyService } = require('../history/HistoryService');
 
-    this.historyUnsub = useHistoryStore.subscribe(
-      (
-        state: { lastDeletedHashes: string[]; historyCleared: boolean },
-        prevState: { lastDeletedHashes: string[]; historyCleared: boolean }
-      ) => {
-        const hasNewDeletions =
-          state.lastDeletedHashes !== prevState.lastDeletedHashes ||
-          state.historyCleared !== prevState.historyCleared;
-        if (!hasNewDeletions) return;
+    const handler = (items: HistoryItem[], action: string) => {
+      if (action !== 'delete' && action !== 'clear') return;
 
-        const { historyCleared, lastDeletedHashes } = state;
-        if (!historyCleared && lastDeletedHashes.length === 0) return;
+      const currentRemote = clipboardSyncState.getState().remoteContent;
+      if (!currentRemote?.profileHash) return;
 
-        const currentRemote = clipboardSyncState.getState().remoteContent;
-        if (!currentRemote?.profileHash) {
-          useHistoryStore.getState().clearDeletedState();
-          return;
-        }
-
-        if (historyCleared) {
-          console.log('[ClipboardSyncService] History cleared, resetting remote content fileUri');
-          clipboardSyncState.setState({ remoteContent: { ...currentRemote, fileUri: undefined } });
-          useHistoryStore.getState().clearDeletedState();
-          return;
-        }
-
-        if (lastDeletedHashes.length > 0) {
-          const deletedSet = new Set(lastDeletedHashes.map((h: string) => h.toLowerCase()));
-          if (deletedSet.has(currentRemote.profileHash.toLowerCase())) {
-            console.log(
-              '[ClipboardSyncService] Remote content deleted from history, resetting fileUri:',
-              currentRemote.profileHash
-            );
-            clipboardSyncState.setState({
-              remoteContent: { ...currentRemote, fileUri: undefined },
-            });
-          }
-          useHistoryStore.getState().clearDeletedState();
-        }
+      // clear 事件表示全清
+      if (action === 'clear') {
+        console.log('[ClipboardSyncService] History cleared, resetting remote content fileUri');
+        clipboardSyncState.setState({ remoteContent: { ...currentRemote, fileUri: undefined } });
+        return;
       }
-    );
+
+      const deletedSet = new Set(items.map((i) => i.profileHash.toLowerCase()));
+      if (deletedSet.has(currentRemote.profileHash.toLowerCase())) {
+        console.log(
+          '[ClipboardSyncService] Remote content deleted from history, resetting fileUri:',
+          currentRemote.profileHash
+        );
+        clipboardSyncState.setState({ remoteContent: { ...currentRemote, fileUri: undefined } });
+      }
+    };
+
+    historyService.addChangeCallback(handler);
+    this.historyUnsub = () => historyService.removeChangeCallback(handler);
   }
 
   private _unsubscribeFromHistoryChanges(): void {
@@ -1014,7 +994,7 @@ class ClipboardSyncService {
     const { getProfileId } = require('@/utils');
     const { HistorySyncStatus } = require('../../types/clipboard');
     const { getHistoryTransferQueue } = require('../history/HistoryTransferQueue');
-    const { useHistoryStore } = require('../../stores/historyStore');
+    const { historyService } = require('../history/HistoryService');
 
     const profileId = getProfileId(remoteContent.type, remoteContent.profileHash);
     const queue = getHistoryTransferQueue();
@@ -1025,7 +1005,7 @@ class ClipboardSyncService {
         hasRemoteData: true,
         isLocalFileReady: false,
       });
-      await useHistoryStore.getState().addItem(historyItem);
+      await historyService.addItem(historyItem);
     } catch (e) {
       console.error('[ClipboardSyncService] Failed to add history item before download:', e);
     }

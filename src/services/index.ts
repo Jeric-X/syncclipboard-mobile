@@ -18,6 +18,10 @@ export type {
 // Sync Manager
 export { SyncManager } from './sync/SyncManager';
 
+// Error Service
+export { errorService } from './ErrorService';
+export type { ErrorInfo } from './ErrorService';
+
 // Remote Clipboard Sync Service
 export { getClipboardSyncService as getClipboardSyncService } from './sync/ClipboardSyncService';
 

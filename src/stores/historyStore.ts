@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import { HistoryItem } from '../types/clipboard';
 import { HistoryFilter, HistorySort } from '../types/storage';
 import { historyService } from '../services/history/HistoryService';
+import type { HistoryChangeAction } from '../storage/HistoryStorage';
 
 /**
  * 历史记录状态接口
@@ -105,7 +106,7 @@ interface HistoryState {
   refresh: () => Promise<void>;
 
   /** 处理存储变更（实时更新） */
-  handleStorageChange: (items: HistoryItem[], action: 'add' | 'update' | 'delete') => void;
+  handleStorageChange: (items: HistoryItem[], action: HistoryChangeAction) => void;
 
   /** 重置 */
   reset: () => void;
@@ -363,7 +364,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     await get().loadItems();
   },
 
-  handleStorageChange: (changedItems: HistoryItem[], action: 'add' | 'update' | 'delete') => {
+  handleStorageChange: (changedItems: HistoryItem[], action: HistoryChangeAction) => {
     const { items, filter } = get();
 
     // 检查是否匹配当前筛选条件

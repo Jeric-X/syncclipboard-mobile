@@ -31,7 +31,6 @@ export class HistoryService {
       }
     });
   }
-
   // ── CRUD ──────────────────────────────────────────────
 
   searchItems(
@@ -39,6 +38,10 @@ export class HistoryService {
     sort?: HistorySort
   ): Promise<{ items: HistoryItem[]; total: number }> {
     return historyStorage.searchItems(filter, sort);
+  }
+
+  getItem(profileHash: string): Promise<HistoryItem | null> {
+    return historyStorage.getItem(profileHash);
   }
 
   addItem(item: HistoryItem): Promise<HistoryItem> {
@@ -74,7 +77,18 @@ export class HistoryService {
   }
 
   clear(): Promise<void> {
-    return historyStorage.clear();
+    return historyStorage.clear().then(() => {
+      // 向订阅者发送 clear 事件
+      if (!this.silentMode) {
+        for (const cb of this.changeCallbacks) {
+          try {
+            cb([], 'clear');
+          } catch (error) {
+            console.error('[HistoryService] Error in clear callback:', error);
+          }
+        }
+      }
+    });
   }
 
   setSortConfig(sort: HistorySort): void {

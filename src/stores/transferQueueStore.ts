@@ -5,8 +5,8 @@ import {
   TransferTaskStatus,
   getHistoryTransferQueue,
 } from '@/services/history/HistoryTransferQueue';
-import { useErrorStore } from './errorStore';
 import { useMessageStore } from './messageStore';
+import { errorService } from '../services/ErrorService';
 
 interface TransferQueueState {
   tasks: TransferTask[];
@@ -61,7 +61,7 @@ export const useTransferQueueStore = create<TransferQueueState>((set, get) => ({
 
       if (task.status === 'failed' && task.errorMessage && !task.userCancelled) {
         const operationName = task.type === 'download' ? '下载' : '上传';
-        useErrorStore.getState().showNetworkError(operationName, task.errorMessage);
+        errorService.showNetworkError(operationName, task.errorMessage);
         useMessageStore
           .getState()
           .showMessage(`${operationName}失败: ${task.errorMessage}`, 'error');
