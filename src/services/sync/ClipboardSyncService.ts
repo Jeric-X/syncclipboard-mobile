@@ -234,14 +234,14 @@ class ClipboardSyncService {
           errorService.setError({ title: '连接失败', message: errorMessage });
         });
       } else {
-        await this.fetchRemoteClipboard(true);
+        await remoteClipboardMonitor.refresh();
       }
     } else {
       const config = await configService.getConfig();
       if (!remoteClipboardMonitor.isPolling()) {
         await remoteClipboardMonitor.connect(this.activeServer, config?.remotePollingInterval);
       }
-      await this.fetchRemoteClipboard(true);
+      await remoteClipboardMonitor.refresh();
     }
   }
 
@@ -349,7 +349,7 @@ class ClipboardSyncService {
         this._uploadAbortController.signal
       );
       if (result.success) {
-        await this.fetchRemoteClipboard(true).catch(() => {});
+        await remoteClipboardMonitor.refresh().catch(() => {});
       }
       return result;
     } finally {
@@ -727,7 +727,7 @@ class ClipboardSyncService {
             ToastAndroid.show(`已上传\n${preview}`, ToastAndroid.SHORT);
           }
           // 上传成功后静默刷新远程显示
-          this.fetchRemoteClipboard(true).catch(() => {});
+          remoteClipboardMonitor.refresh().catch(() => {});
         }
       })
       .catch((e: Error) => console.error('[ClipboardSyncService] Auto-upload failed:', e))

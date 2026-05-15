@@ -129,6 +129,14 @@ class RemoteClipboardMonitor {
     }
   }
 
+  /**
+   * 立即主动拉取一次远程剪贴板并通知回调。
+   * 与轮询逻辑复用同一实现，会自动跳过内容未变化的情况。
+   */
+  async refresh(): Promise<void> {
+    await this._fetchAndNotify();
+  }
+
   private async _fetchAndNotify(): Promise<void> {
     if (!this._server) return;
     try {
