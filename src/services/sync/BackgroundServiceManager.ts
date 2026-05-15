@@ -16,6 +16,22 @@
  */
 
 import { Platform } from 'react-native';
+import * as ForegroundService from 'foreground-service';
+import { setTimer, clearTimer } from 'native-timer';
+import { configService } from '../ConfigService';
+import { backgroundRuntimeState } from '../BackgroundRuntimeState';
+
+/**
+ * 由 App 层注入的生命周期回调接口。
+ * 将 native 事件（ForegroundService stop/tempStop）中转到 UI 状态层（settingsStore），
+ * 使 BackgroundServiceManager 本身不依赖任何 Zustand store。
+ */
+export interface BackgroundServiceLifecycleCallbacks {
+  /** 用户从通知栏点击「停止」时触发，应将 enableBackgroundTasks 设为 false */
+  onForegroundServiceStop(): void;
+  /** 用户从通知栏点击「临时停止」时触发，应设置 isTempDisabledBackgroundTasks */
+  onForegroundServiceTempStop(): void;
+}
 
 class BackgroundServiceManager {
   private static instance: BackgroundServiceManager | null = null;
@@ -24,8 +40,13 @@ class BackgroundServiceManager {
   private heartbeatTag: string | null = null;
   private stopSub: { remove(): void } | null = null;
   private tempStopSub: { remove(): void } | null = null;
-  /** 取消对 settingsStore 的订阅 */
-  private settingsUnsub: (() => void) | null = null;
+  /** 取消对 configService 的订阅 */
+  private configUnsub: (() => void) | null = null;
+  /** 取消对 backgroundRuntimeState 的订阅 */
+  private runtimeUnsub: (() => void) | null = null;
+
+  /** 由 App 层注入的生命周期回调 */
+  private lifecycleCallbacks: BackgroundServiceLifecycleCallbacks | null = null;
 
   private constructor() {}
 
@@ -36,13 +57,20 @@ class BackgroundServiceManager {
     return BackgroundServiceManager.instance;
   }
 
+  /**
+   * 注入 App 层生命周期回调（应在 start() 之前调用）。
+   * 若未注入则 ForegroundService 的 stop/tempStop 事件不会更新 store，
+   * 但 BackgroundServiceManager 自身逻辑仍正常工作。
+   */
+  setLifecycleCallbacks(callbacks: BackgroundServiceLifecycleCallbacks): void {
+    this.lifecycleCallbacks = callbacks;
+  }
+
   // ─── 工具 ───────────────────────────────────────────────
 
-  private getShouldRunBackground(): boolean {
-    const { useSettingsStore } = require('../../stores/settingsStore');
-    const state = useSettingsStore.getState();
-    const config = state.config;
-    const tempDisabled = state.isTempDisabledBackgroundTasks;
+  private async getShouldRunBackground(): Promise<boolean> {
+    const config = await configService.getConfig();
+    const tempDisabled = backgroundRuntimeState.isTempDisabled();
     return (
       !tempDisabled &&
       !!config?.enableBackgroundTasks &&
@@ -54,10 +82,9 @@ class BackgroundServiceManager {
    * 更新静态短信接收器状态。
    * SMS 转发不受后台任务总开关控制，仅由 enableSmsForwarding 决定。
    */
-  private _updateSmsReceiver(): void {
+  private async _updateSmsReceiver(): Promise<void> {
     try {
-      const { useSettingsStore } = require('../../stores/settingsStore');
-      const config = useSettingsStore.getState().config;
+      const config = await configService.getConfig();
       const { setStaticReceiverEnabled } = require('sms-forwarder');
       setStaticReceiverEnabled(!!config?.enableSmsForwarding);
     } catch (e) {
@@ -89,15 +116,12 @@ class BackgroundServiceManager {
    * - 始终订阅配置变化以支持动态重启
    */
   async start(): Promise<void> {
-    // 等待配置加载完成
-    const { useSettingsStore } = require('../../stores/settingsStore');
-    if (!useSettingsStore.getState().isLoaded) {
-      await useSettingsStore.getState().loadConfig();
-    }
+    // 确保配置已初始化（configStorage 内部做幂等保护）
+    await configService.getConfig();
 
     // SMS 转发始终独立管理（Android 专属）
     if (Platform.OS === 'android') {
-      this._updateSmsReceiver();
+      await this._updateSmsReceiver();
     }
 
     // 始终启动剪贴板监控（无论是否启用后台任务，UI 需要感知本地剪贴板变化）
@@ -124,7 +148,7 @@ class BackgroundServiceManager {
 
     // 后台专用服务（前台通知 + 心跳，Android 专属）
     if (Platform.OS === 'android') {
-      if (this.getShouldRunBackground()) {
+      if (await this.getShouldRunBackground()) {
         if (!this.running) {
           this.running = true;
           await this._startBackgroundOnlyServices();
@@ -135,7 +159,7 @@ class BackgroundServiceManager {
     }
 
     // 始终订阅配置变化（不再因 getShouldRunBackground() 为 false 而跳过）
-    this._subscribeToConfigChanges();
+    this._subscribeToChanges();
   }
 
   /**
@@ -152,7 +176,7 @@ class BackgroundServiceManager {
   async refresh(): Promise<void> {
     // SMS 转发（Android 专属）
     if (Platform.OS === 'android') {
-      this._updateSmsReceiver();
+      await this._updateSmsReceiver();
     }
 
     // 刷新远程同步服务（处理服务器变更、连接类型切换等）
@@ -160,7 +184,7 @@ class BackgroundServiceManager {
 
     // 后台专用服务（Android 专属）
     if (Platform.OS === 'android') {
-      if (this.getShouldRunBackground()) {
+      if (await this.getShouldRunBackground()) {
         if (!this.running) {
           this.running = true;
           await this._startBackgroundOnlyServices();
@@ -187,20 +211,19 @@ class BackgroundServiceManager {
 
   /** 启动后台专用服务（前台通知、心跳、剪贴板监控） */
   private async _startBackgroundOnlyServices(): Promise<void> {
-    const { useSettingsStore } = require('../../stores/settingsStore');
-    const config = useSettingsStore.getState().config;
+    const config = await configService.getConfig();
 
     // 1. 按需启动前台常驻通知服务
     if (config?.enableForegroundNotification) {
       try {
-        const ForegroundService = require('foreground-service');
         ForegroundService.startService();
 
         this.stopSub = ForegroundService.addStopListener(() => {
-          useSettingsStore.getState().setEnableBackgroundTasks(false);
+          this.lifecycleCallbacks?.onForegroundServiceStop();
         });
         this.tempStopSub = ForegroundService.addTempStopListener(() => {
-          useSettingsStore.getState().setTempDisabledBackgroundTasks(true);
+          backgroundRuntimeState.setTempDisabled(true);
+          this.lifecycleCallbacks?.onForegroundServiceTempStop();
         });
       } catch (e) {
         console.error('[BackgroundServiceManager] Failed to start foreground service:', e);
@@ -212,8 +235,7 @@ class BackgroundServiceManager {
       const { useStatisticsStore } = require('../../stores/statisticsStore');
       await useStatisticsStore.getState().recordBackgroundTaskStart();
 
-      const { setTimer: st } = require('native-timer');
-      this.heartbeatTag = st(() => {
+      this.heartbeatTag = setTimer(() => {
         useStatisticsStore.getState().updateHeartbeat();
       }, 60_000);
     } catch (e) {
@@ -225,19 +247,18 @@ class BackgroundServiceManager {
 
   /** 更新后台专用服务（配置变化时调用） */
   private async _updateBackgroundOnlyServices(): Promise<void> {
-    const { useSettingsStore } = require('../../stores/settingsStore');
-    const config = useSettingsStore.getState().config;
+    const config = await configService.getConfig();
 
     try {
-      const ForegroundService = require('foreground-service');
       const isRunning = ForegroundService.isRunning();
       if (config?.enableForegroundNotification && !isRunning) {
         ForegroundService.startService();
         this.stopSub = ForegroundService.addStopListener(() => {
-          useSettingsStore.getState().setEnableBackgroundTasks(false);
+          this.lifecycleCallbacks?.onForegroundServiceStop();
         });
         this.tempStopSub = ForegroundService.addTempStopListener(() => {
-          useSettingsStore.getState().setTempDisabledBackgroundTasks(true);
+          backgroundRuntimeState.setTempDisabled(true);
+          this.lifecycleCallbacks?.onForegroundServiceTempStop();
         });
       } else if (!config?.enableForegroundNotification && isRunning) {
         this._cleanupListeners();
@@ -257,14 +278,12 @@ class BackgroundServiceManager {
 
     if (this.heartbeatTag) {
       try {
-        const { clearTimer } = require('native-timer');
         clearTimer(this.heartbeatTag);
       } catch {}
       this.heartbeatTag = null;
     }
 
     try {
-      const ForegroundService = require('foreground-service');
       ForegroundService.stopService();
     } catch {}
   }
@@ -276,27 +295,28 @@ class BackgroundServiceManager {
     this.tempStopSub = null;
   }
 
-  private _subscribeToConfigChanges(): void {
-    if (this.settingsUnsub) return;
-    const { useSettingsStore } = require('../../stores/settingsStore');
-    this.settingsUnsub = useSettingsStore.subscribe(
-      (
-        state: { config: unknown; isTempDisabledBackgroundTasks: boolean },
-        prevState: { config: unknown; isTempDisabledBackgroundTasks: boolean }
-      ) => {
-        if (
-          state.config !== prevState.config ||
-          state.isTempDisabledBackgroundTasks !== prevState.isTempDisabledBackgroundTasks
-        ) {
-          this.refresh().catch((e) =>
-            console.error('[BackgroundServiceManager] refresh failed:', e)
-          );
-        }
-      }
-    );
+  /**
+   * 订阅 configService 配置变化 + backgroundRuntimeState 临时禁用变化。
+   * 任意一方变化时触发 refresh()，替代原先直接订阅 settingsStore 的方式。
+   */
+  private _subscribeToChanges(): void {
+    if (this.configUnsub) return;
+
+    this.configUnsub = configService.subscribe(() => {
+      this.refresh().catch((e) =>
+        console.error('[BackgroundServiceManager] refresh (config change) failed:', e)
+      );
+    });
+
+    this.runtimeUnsub = backgroundRuntimeState.subscribe(() => {
+      this.refresh().catch((e) =>
+        console.error('[BackgroundServiceManager] refresh (runtime state change) failed:', e)
+      );
+    });
   }
 }
 
 export function getBackgroundServiceManager(): BackgroundServiceManager {
   return BackgroundServiceManager.getInstance();
 }
+

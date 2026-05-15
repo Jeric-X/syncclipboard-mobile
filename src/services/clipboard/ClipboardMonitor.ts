@@ -19,6 +19,13 @@ export class ClipboardMonitor {
   private appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
   private lastContent: ClipboardContent | null = null;
 
+  /**
+   * 注入的回调，用于查询"后台上传是否已启用"。
+   * 避免直接依赖 settingsStore（服务层不应反向依赖 UI 状态层）。
+   * 若未注入则默认视为未启用。
+   */
+  private getBgUploadEnabled: () => boolean = () => false;
+
   // 配置选项
   private options: Required<ClipboardMonitorOptions> = {
     pollingInterval: 1000, // iOS 默认 1 秒轮询
@@ -34,6 +41,14 @@ export class ClipboardMonitor {
     if (options) {
       this.options = { ...this.options, ...options };
     }
+  }
+
+  /**
+   * 注入"后台上传是否启用"判断函数。
+   * 应在服务启动时由外部（BackgroundServiceManager / ClipboardSyncService）调用一次。
+   */
+  setBackgroundUploadChecker(fn: () => boolean): void {
+    this.getBgUploadEnabled = fn;
   }
 
   /**
@@ -230,11 +245,7 @@ export class ClipboardMonitor {
       }
     } else if (nextAppState === 'background' || nextAppState === 'inactive') {
       // 后台上传启用时不停止轮询
-      const { useSettingsStore } = require('@/stores/settingsStore');
-      const bgUploadEnabled =
-        useSettingsStore.getState().config?.enableBackgroundTasks &&
-        useSettingsStore.getState().config?.enableBackgroundUpload;
-      if (!bgUploadEnabled) {
+      if (!this.getBgUploadEnabled()) {
         // 应用进入后台，停止监听
         console.log(
           '[ClipboardMonitor] Background upload disabled, stopping polling (app went to background/inactive)'
@@ -279,10 +290,7 @@ export class ClipboardMonitor {
     if (this.options.stopOnBackground) {
       const currentState = AppState.currentState;
       if (currentState === 'background' || currentState === 'inactive') {
-        const { useSettingsStore } = require('@/stores/settingsStore');
-        const config = useSettingsStore.getState().config;
-        const bgUploadEnabled = config?.enableBackgroundTasks && config?.enableBackgroundUpload;
-        if (!bgUploadEnabled) {
+        if (!this.getBgUploadEnabled()) {
           return;
         }
       }

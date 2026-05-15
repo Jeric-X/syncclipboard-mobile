@@ -12,7 +12,10 @@ import { initLogger } from './src/utils/Logger';
 import { useTheme } from './src/hooks/useTheme';
 import { setDynamicShortcuts } from 'shortcut';
 import { moveTaskToBack, setExcludeFromRecents } from 'native-util';
-import { getBackgroundServiceManager } from './src/services/sync/BackgroundServiceManager';
+import {
+  getBackgroundServiceManager,
+  type BackgroundServiceLifecycleCallbacks,
+} from './src/services/sync/BackgroundServiceManager';
 
 const QUICK_UPLOAD_URL = 'syncclipboard://quick-upload';
 const QUICK_DOWNLOAD_URL = 'syncclipboard://quick-download';
@@ -78,6 +81,15 @@ export default function App() {
   // 启动所有服务（冷启动时保证剪贴板监控、远程同步、后台任务正常运行，后续由 BackgroundServiceManager 维护）
   useEffect(() => {
     if (!isLoaded) return;
+
+    // 注入 App 层生命周期回调（ForegroundService 的 stop/tempStop 事件 → 更新 settingsStore）
+    const lifecycleCallbacks: BackgroundServiceLifecycleCallbacks = {
+      onForegroundServiceStop: () => useSettingsStore.getState().setEnableBackgroundTasks(false),
+      onForegroundServiceTempStop: () =>
+        useSettingsStore.getState().setTempDisabledBackgroundTasks(true),
+    };
+    getBackgroundServiceManager().setLifecycleCallbacks(lifecycleCallbacks);
+
     getBackgroundServiceManager()
       .start()
       .catch(() => {});

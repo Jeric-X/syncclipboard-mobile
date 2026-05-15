@@ -6,6 +6,8 @@
 import type { ClipboardContent } from '@/types/clipboard';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import { loadLastTrackedHash, saveLastTrackedHash } from './lastTrackedHashStorage';
+import { clipboardContentToItem } from '../../utils/clipboard/dtoConvert';
+import { historyService } from './HistoryService';
 
 export class HistoryTracker {
   private _clipboardCallback: ((content: ClipboardContent) => Promise<void>) | null = null;
@@ -26,9 +28,6 @@ export class HistoryTracker {
       })
       .catch(() => {});
 
-    const { clipboardContentToItem } = require('../../utils/clipboard/dtoConvert');
-    const { useHistoryStore } = require('../../stores/historyStore');
-
     const callback = async (content: ClipboardContent): Promise<void> => {
       // hash 去重：与上次记录的 hash 相同则跳过
       const currentHash = content.localClipboardHash ?? content.profileHash ?? null;
@@ -41,7 +40,7 @@ export class HistoryTracker {
 
       try {
         const historyItem = clipboardContentToItem(content);
-        await useHistoryStore.getState().addItem(historyItem);
+        await historyService.addItem(historyItem);
       } catch (e) {
         console.error('[HistoryTracker] Failed to add clipboard change to history:', e);
       }

@@ -8,6 +8,7 @@ import { AppConfig } from '../types/storage';
 import { ServerConfig } from '../types/api';
 import { ConflictResolution } from '../types/sync';
 import { configService } from '../services/ConfigService';
+import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
 
 /**
  * 设置状态接口
@@ -336,12 +337,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setEnableBackgroundTasks: async (enabled: boolean) => {
     if (enabled) {
       // 用户主动开启时清除临时停止标志
+      backgroundRuntimeState.setTempDisabled(false);
       set({ isTempDisabledBackgroundTasks: false });
     }
     await get().updateConfig({ enableBackgroundTasks: enabled });
   },
 
   setTempDisabledBackgroundTasks: (disabled: boolean) => {
+    backgroundRuntimeState.setTempDisabled(disabled);
     set({ isTempDisabledBackgroundTasks: disabled });
   },
 

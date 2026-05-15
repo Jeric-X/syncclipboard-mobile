@@ -259,6 +259,30 @@ export const STORAGE_KEYS = {
 
   /** 上次同步时间 */
   LAST_SYNC: '@syncclipboard:last_sync',
+
+  /** SyncManager 上次成功上传的 profileHash */
+  SYNC_LAST_HASH: '@syncclipboard:sync:last_hash',
+
+  /** HistorySyncService 上次完整同步时间（ms）*/
+  HISTORY_LAST_SYNC_TIME: '@syncclipboard:history:last_sync_time',
+
+  /** HistoryScreen 排序字段 */
+  HISTORY_SORT_FIELD: '@syncclipboard:history:sort_field',
+
+  /** 认证凭据（AuthService 缓存） */
+  AUTH_CREDENTIALS: '@syncclipboard:credentials',
+
+  /** 用户选择的主题模式 */
+  THEME_MODE: '@syncclipboard:theme_mode',
+
+  /** HistoryTracker 上次记录的 clipboard hash */
+  HISTORY_TRACKER_LAST_HASH: '@last_clipboard_hash',
+
+  /** SecureStorage 前缀 */
+  SECURE_PREFIX: '@syncclipboard:secure:',
+
+  /** useHistoryDisplaySettings 存储键 */
+  HISTORY_DISPLAY_SETTINGS: '@syncclipboard:history_display_settings',
 } as const;
 
 /**

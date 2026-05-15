@@ -9,10 +9,7 @@ import { Platform } from 'react-native';
 import { STORAGE_KEYS } from '../types/storage';
 import type { AppConfig } from '../types/storage';
 import type { ServerConfig, ProfileDto } from '../types/api';
-import { SyncClipboardClient } from '../api/clients/SyncClipboardClient';
-import { WebDAVClient } from '../api/clients/WebDAVClient';
-import { S3Client } from '../api/clients/S3Client';
-import { AuthService } from '../api/AuthService';
+import { createAPIClient } from '../api/ClientFactory';
 import type { ISyncClipboardAPI } from '../api/clients/APIClient';
 import { sha256 } from 'js-sha256';
 
@@ -50,33 +47,6 @@ async function loadConfig(): Promise<AppConfig | null> {
     console.error('[SmsUploadTask] Failed to load config:', e);
     return null;
   }
-}
-
-/**
- * 根据服务器配置创建 API 客户端
- */
-function createAPIClient(server: ServerConfig): ISyncClipboardAPI {
-  const { type, url, username, password } = server;
-
-  if (type === 'syncclipboard') {
-    const authService = username && password ? new AuthService(username, password) : undefined;
-    return new SyncClipboardClient({ baseURL: url, authService });
-  }
-
-  if (type === 's3') {
-    return new S3Client({
-      serviceURL: url || undefined,
-      region: server.region,
-      bucketName: server.bucketName!,
-      objectPrefix: server.objectPrefix,
-      forcePathStyle: server.forcePathStyle,
-      accessKeyId: username!,
-      secretAccessKey: password!,
-    });
-  }
-
-  // 非 SyncClipboard/S3 服务器，使用 WebDAV 客户端
-  return new WebDAVClient({ baseURL: url, username: username!, password: password! });
 }
 
 /**

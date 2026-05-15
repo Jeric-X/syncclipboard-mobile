@@ -13,6 +13,11 @@ import { ServerConfig } from '@/types/api';
 import { getSignalRClient, type HistoryChangedEvent } from 'signalr-client';
 import { historyService } from './HistoryService';
 import type { HistoryChangeAction } from '@/storage/HistoryStorage';
+import {
+  getHistoryLastSyncTime,
+  setHistoryLastSyncTime,
+  removeHistoryLastSyncTime,
+} from '../../storage/SyncStateStorage';
 
 const MAX_TIME_DIFFERENCE_MS = 5 * 60 * 1000; // 5 分钟
 
@@ -931,11 +936,7 @@ export class HistorySyncService {
    */
   private async loadLastSyncTime(): Promise<void> {
     try {
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-      const timeStr = await AsyncStorage.getItem('@syncclipboard:history:last_sync_time');
-      if (timeStr) {
-        this.lastSyncTime = parseInt(timeStr, 10);
-      }
+      this.lastSyncTime = await getHistoryLastSyncTime();
     } catch (error) {
       console.warn('[HistorySyncService] Failed to load last sync time:', error);
     }
@@ -946,14 +947,10 @@ export class HistorySyncService {
    */
   private async saveLastSyncTime(): Promise<void> {
     try {
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
       if (this.lastSyncTime) {
-        await AsyncStorage.setItem(
-          '@syncclipboard:history:last_sync_time',
-          this.lastSyncTime.toString()
-        );
+        await setHistoryLastSyncTime(this.lastSyncTime);
       } else {
-        await AsyncStorage.removeItem('@syncclipboard:history:last_sync_time');
+        await removeHistoryLastSyncTime();
       }
     } catch (error) {
       console.warn('[HistorySyncService] Failed to save last sync time:', error);

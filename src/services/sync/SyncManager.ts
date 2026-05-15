@@ -3,13 +3,9 @@
  * 同步管理器 - 管理剪贴板内容的上传和下载
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { SyncClipboardClient } from '../../api/clients/SyncClipboardClient';
 import { ISyncClipboardAPI } from '../../api/clients/APIClient';
-import { WebDAVClient } from '../../api/clients/WebDAVClient';
-import { S3Client } from '../../api/clients/S3Client';
-import { AuthService } from '../../api/AuthService';
+import { createAPIClient } from '../../api/ClientFactory';
 import { localClipboard } from '../clipboard/LocalClipboard';
 import { ConfigurationError } from '@/errors';
 import { ServerConfig, ProfileDto } from '../../types/api';
@@ -27,8 +23,7 @@ import {
 } from '../../types/sync';
 import { ClipboardContent } from '../../types/clipboard';
 import { configStorage } from '../../storage';
-
-const STORAGE_KEY_LAST_PROFILE_HASH = '@syncclipboard:sync:last_hash';
+import { getLastSyncHash, setLastSyncHash } from '../../storage/SyncStateStorage';
 
 /**
  * 同步管理器
@@ -110,45 +105,6 @@ export class SyncManager {
   /**
    * 创建 API 客户端
    */
-  private createAPIClient(config: ServerConfig): ISyncClipboardAPI {
-    const { type, url, username, password } = config;
-
-    if (type === 'syncclipboard') {
-      if (!url) {
-        throw new ConfigurationError('Server URL is required');
-      }
-      const authService = username && password ? new AuthService(username, password) : undefined;
-      return new SyncClipboardClient({ baseURL: url, authService });
-    }
-
-    if (type === 's3') {
-      if (!config.bucketName) {
-        throw new ConfigurationError('Bucket name is required for S3');
-      }
-      if (!username || !password) {
-        throw new ConfigurationError('Access Key ID and Secret Access Key are required for S3');
-      }
-      return new S3Client({
-        serviceURL: url || undefined,
-        region: config.region,
-        bucketName: config.bucketName,
-        objectPrefix: config.objectPrefix,
-        forcePathStyle: config.forcePathStyle,
-        accessKeyId: username,
-        secretAccessKey: password,
-      });
-    }
-
-    // 非 SyncClipboard/S3 服务器，使用 WebDAV 客户端
-    if (!url) {
-      throw new ConfigurationError('Server URL is required');
-    }
-    if (!username || !password) {
-      throw new ConfigurationError('Username and password are required for WebDAV');
-    }
-    return new WebDAVClient({ baseURL: url, username, password });
-  }
-
   /**
    * 获取或创建 API 客户端（服务器配置变更时自动重建）
    */
@@ -159,7 +115,7 @@ export class SyncManager {
     }
     const serverKey = JSON.stringify(activeServer);
     if (!this.apiClient || serverKey !== this.lastServerConfigKey) {
-      this.apiClient = this.createAPIClient(activeServer);
+      this.apiClient = createAPIClient(activeServer);
       this.lastServerConfigKey = serverKey;
     }
     return this.apiClient;
@@ -429,7 +385,7 @@ export class SyncManager {
 
       // 持久化 profileHash
       if (currentProfileHash) {
-        await AsyncStorage.setItem(STORAGE_KEY_LAST_PROFILE_HASH, currentProfileHash);
+        await setLastSyncHash(currentProfileHash);
       }
 
       return {
@@ -686,7 +642,7 @@ export class SyncManager {
   private async loadPersistedData(): Promise<void> {
     try {
       // 加载最后的 profileHash 值
-      this.lastLocalProfileHash = await AsyncStorage.getItem(STORAGE_KEY_LAST_PROFILE_HASH);
+      this.lastLocalProfileHash = await getLastSyncHash();
     } catch (error) {
       console.error('Failed to load persisted data:', error);
     }
@@ -697,7 +653,7 @@ export class SyncManager {
    */
   private async savePersistedData(): Promise<void> {
     try {
-      await AsyncStorage.setItem(STORAGE_KEY_LAST_PROFILE_HASH, this.lastLocalProfileHash || '');
+      await setLastSyncHash(this.lastLocalProfileHash || '');
     } catch (error) {
       console.error('Failed to save persisted data:', error);
     }
