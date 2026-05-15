@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ClipboardSyncService
  * 管理远程剪贴板同步（前台显示 + 后台同步）。
  *
@@ -14,7 +14,7 @@
  * HomeScreen 通过 useClipboardSyncServiceStore 读取状态，通过公开方法触发用户操作。
  */
 
-import { Platform, ToastAndroid } from 'react-native';
+import { Platform, ToastAndroid, AppState } from 'react-native';
 import {
   ClipboardContent,
   ClipboardChangeCallback,
@@ -32,6 +32,12 @@ import { configService } from '../ConfigService';
 import { errorService } from '../ErrorService';
 import { remoteClipboardMonitor } from './RemoteClipboardMonitor';
 import type { RemoteClipboardChangedCallback } from './RemoteClipboardMonitor';
+import { createAPIClient } from '../../api/ClientFactory';
+import { SyncManager } from './SyncManager';
+import { historyService } from '../history/HistoryService';
+import { getProfileId } from '@/utils';
+import { getHistoryTransferQueue } from '../history/HistoryTransferQueue';
+import { getHistoryFileUri } from '../../utils/fileStorage';
 
 class ClipboardSyncService {
   private static instance: ClipboardSyncService | null = null;
@@ -59,7 +65,6 @@ class ClipboardSyncService {
     try {
       if (!this.activeServer) return;
       const currentHash = content.profileHash || content.text || '';
-      const { createAPIClient } = require('../index');
       const apiClient = createAPIClient(this.activeServer);
       await this._processRemoteClipboardContent(
         content,
@@ -101,6 +106,17 @@ class ClipboardSyncService {
   async start(): Promise<void> {
     if (this._isStarted) return;
     this._isStarted = true;
+
+    // 注入"后台上传是否启用"同步判断函数，解除 ClipboardMonitor 对 settingsStore 的依赖。
+    // 维护一个本地缓存标志，由 configService 订阅同步更新。
+    let bgUploadEnabled = false;
+    configService.getConfig().then((cfg) => {
+      bgUploadEnabled = !!(cfg?.enableBackgroundTasks && cfg?.enableBackgroundUpload);
+    });
+    configService.subscribe((cfg) => {
+      bgUploadEnabled = !!(cfg?.enableBackgroundTasks && cfg?.enableBackgroundUpload);
+    });
+    clipboardMonitor.setBackgroundUploadChecker(() => bgUploadEnabled);
 
     const activeServer = await configService.getActiveServer();
 
@@ -194,7 +210,6 @@ class ClipboardSyncService {
 
   private _subscribeToAppState(): void {
     if (this._appStateSub) return;
-    const { AppState } = require('react-native');
     this._lastAppState = AppState.currentState ?? 'active';
     this._appStateSub = AppState.addEventListener('change', async (nextAppState: string) => {
       if (this._lastAppState.match(/inactive|background/) && nextAppState === 'active') {
@@ -285,7 +300,6 @@ class ClipboardSyncService {
     }
 
     try {
-      const { createAPIClient } = require('../index');
       const apiClient = createAPIClient(server);
       const profile = await apiClient.getClipboard();
 
@@ -326,8 +340,6 @@ class ClipboardSyncService {
    * 调用方无需传入 signal，服务内部管理取消逻辑。
    */
   async triggerUpload(): Promise<SyncResult> {
-    const { SyncManager } = require('./SyncManager');
-
     if (this._uploadAbortController) {
       this._uploadAbortController.abort();
     }
@@ -418,12 +430,10 @@ class ClipboardSyncService {
     apiClient: ISyncClipboardAPI,
     logPrefix: string = ''
   ): Promise<void> {
-    const { historyService } = require('../history/HistoryService');
     const config = await configService.getConfig();
     const previousHash = this.lastRemoteProfileHash;
 
     const { resolveRemoteContent } = await import('../../utils/processRemoteContent');
-    const { SyncManager } = require('./SyncManager');
     const resolved = await resolveRemoteContent(content, currentHash, previousHash, hasData, {
       getLastUploadedHash: () => SyncManager.getInstance().getLastUploadedHash(),
       getHistoryItem: (profileHash: string) => historyService.getItem(profileHash),
@@ -506,7 +516,6 @@ class ClipboardSyncService {
       // （有文件数据的情况已由 downloadAndAddToHistory 处理）
       if (!hasData) {
         try {
-          const { historyService } = require('../history/HistoryService');
           const historyItem = clipboardContentToItem(finalContent, {
             hasData: false,
             syncStatus: HistorySyncStatus.Synced,
@@ -579,8 +588,6 @@ class ClipboardSyncService {
 
   private _subscribeToTransferQueue(): void {
     if (this.transferQueueHandler) return;
-    const { getHistoryTransferQueue } = require('../history/HistoryTransferQueue');
-    const { getProfileId } = require('@/utils');
     const queue = getHistoryTransferQueue();
 
     const handler = async (task: import('../history/HistoryTransferQueue').TransferTask) => {
@@ -608,7 +615,6 @@ class ClipboardSyncService {
         }
       } else if (task.status === 'completed') {
         // 下载完成：更新 remoteContent 的 fileUri 并清除下载状态
-        const { getHistoryFileUri } = require('../../utils/fileStorage');
         const fileUri = await getHistoryFileUri(
           currentRemote.type,
           currentRemote.profileHash,
@@ -634,7 +640,6 @@ class ClipboardSyncService {
 
   private _unsubscribeFromTransferQueue(): void {
     if (!this.transferQueueHandler) return;
-    const { getHistoryTransferQueue } = require('../history/HistoryTransferQueue');
     const queue = getHistoryTransferQueue();
     queue.offTaskStatusChanged(this.transferQueueHandler);
     this.transferQueueHandler = null;
@@ -661,8 +666,6 @@ class ClipboardSyncService {
    */
   private _subscribeToHistoryChanges(): void {
     if (this.historyUnsub) return;
-    const { historyService } = require('../history/HistoryService');
-
     const handler = (items: HistoryItem[], action: string) => {
       if (action !== 'delete' && action !== 'clear') return;
 
@@ -751,7 +754,6 @@ class ClipboardSyncService {
     if (this.isAutoSyncing) return;
     this.isAutoSyncing = true;
 
-    const { SyncManager } = require('./SyncManager');
     SyncManager.getInstance()
       .sync(SyncDirection.Upload, true)
       .then((result: SyncResult) => {
@@ -811,8 +813,6 @@ class ClipboardSyncService {
       }
     } else {
       if (remoteContent?.profileHash) {
-        const { getProfileId } = require('../../utils/clipboard');
-        const { getHistoryTransferQueue } = require('../history/HistoryTransferQueue');
         const profileId = getProfileId(remoteContent.type, remoteContent.profileHash);
         getHistoryTransferQueue().cancelTask(profileId, 'download');
       }
@@ -878,7 +878,6 @@ class ClipboardSyncService {
     this._downloadAbortController = abortController;
 
     try {
-      const { createAPIClient } = require('../index');
       const { downloadAndAddToHistory } = await import('../../utils/remoteClipboard');
 
       const apiClient = createAPIClient(server);
@@ -919,11 +918,6 @@ class ClipboardSyncService {
     remoteContent: import('../../types/clipboard').ClipboardContent
   ): Promise<void> {
     if (!remoteContent.profileHash) return;
-
-    const { getProfileId } = require('@/utils');
-    const { HistorySyncStatus } = require('../../types/clipboard');
-    const { getHistoryTransferQueue } = require('../history/HistoryTransferQueue');
-    const { historyService } = require('../history/HistoryService');
 
     const profileId = getProfileId(remoteContent.type, remoteContent.profileHash);
     const queue = getHistoryTransferQueue();

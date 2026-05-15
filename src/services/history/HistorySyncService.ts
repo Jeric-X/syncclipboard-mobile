@@ -1090,6 +1090,16 @@ export class HistorySyncService {
   }
 
   async ensureInitialized(serverConfig: ServerConfig): Promise<boolean> {
+    const { createHistoryAPI } = await import('../../api/history/HistoryAPIFactory');
+    const historyAPI = createHistoryAPI(serverConfig);
+
+    if (!historyAPI) {
+      console.log(
+        `[HistorySyncService] Server type "${serverConfig.type}" does not support history sync`
+      );
+      return false;
+    }
+
     if (this.isInitialized()) {
       const serverChanged =
         this.serverConfig?.url !== serverConfig.url ||
@@ -1097,43 +1107,12 @@ export class HistorySyncService {
 
       if (serverChanged) {
         console.log('[HistorySyncService] Server changed, switching...');
-        const { SyncClipboardClient } = await import('../../api/clients/SyncClipboardClient');
-        const { AuthService } = await import('../../api/AuthService');
-        const authService =
-          serverConfig.username && serverConfig.password
-            ? new AuthService(serverConfig.username, serverConfig.password)
-            : undefined;
-
-        const historyAPI = new SyncClipboardClient({
-          baseURL: serverConfig.url,
-          authService,
-        });
-
-        await this.switchServer({
-          serverConfig,
-          historyAPI,
-        });
+        await this.switchServer({ serverConfig, historyAPI });
       }
       return true;
     }
 
-    const { SyncClipboardClient } = await import('../../api/clients/SyncClipboardClient');
-    const { AuthService } = await import('../../api/AuthService');
-    const authService =
-      serverConfig.username && serverConfig.password
-        ? new AuthService(serverConfig.username, serverConfig.password)
-        : undefined;
-
-    const historyAPI = new SyncClipboardClient({
-      baseURL: serverConfig.url,
-      authService,
-    });
-
-    await this.initialize({
-      serverConfig,
-      historyAPI,
-    });
-
+    await this.initialize({ serverConfig, historyAPI });
     return true;
   }
 }

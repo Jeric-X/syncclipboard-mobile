@@ -126,7 +126,7 @@ class BackgroundServiceManager {
 
     // 始终启动剪贴板监控（无论是否启用后台任务，UI 需要感知本地剪贴板变化）
     try {
-      const { clipboardMonitor } = require('../../services/clipboard/ClipboardMonitor');
+      const { clipboardMonitor } = require('../clipboard/ClipboardMonitor');
       if (!clipboardMonitor.isActive()) {
         await clipboardMonitor.start();
         await clipboardMonitor.triggerCheck();
@@ -135,9 +135,9 @@ class BackgroundServiceManager {
       console.error('[BackgroundServiceManager] Failed to start clipboard monitoring:', e);
     }
 
-    // 始终启动 HistoryService 本地历史追踪（无需服务器配置，始终运行）
+    // 始终启动 HistoryTracker 本地历史追踪（无需服务器配置，始终运行）
     try {
-      const { getHistoryTracker } = require('../history/HistoryService');
+      const { getHistoryTracker } = require('../history/HistoryTracker');
       getHistoryTracker().startTracking();
     } catch (e) {
       console.error('[BackgroundServiceManager] Failed to start local history tracking:', e);

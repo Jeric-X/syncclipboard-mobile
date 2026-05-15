@@ -4,3 +4,4 @@
  */
 
 export type { IHistoryAPI } from './IHistoryAPI';
+export { createHistoryAPI } from './HistoryAPIFactory';

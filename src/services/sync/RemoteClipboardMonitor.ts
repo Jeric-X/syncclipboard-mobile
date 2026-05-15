@@ -7,6 +7,10 @@
 import type { ClipboardContent } from '../../types/clipboard';
 import type { ServerConfig } from '../../types/api';
 import type { ProfileChangedEvent } from 'signalr-client';
+import { getSignalRClient } from 'signalr-client';
+import { setTimer, clearTimer } from 'native-timer';
+import { createAPIClient } from '../../api/ClientFactory';
+import { profileDtoToContent } from '../../utils/clipboard/dtoConvert';
 
 /** 远程剪贴板变化回调：仅在内容哈希变化时触发 */
 export type RemoteClipboardChangedCallback = (content: ClipboardContent) => void;
@@ -78,7 +82,6 @@ class RemoteClipboardMonitor {
   isSignalRConnected(): boolean {
     if (!this._signalRConnected) return false;
     try {
-      const { getSignalRClient } = require('signalr-client');
       return getSignalRClient().isConnected();
     } catch {
       return false;
@@ -91,7 +94,6 @@ class RemoteClipboardMonitor {
 
   private readonly _signalREventCallback = (event: ProfileChangedEvent): void => {
     try {
-      const { profileDtoToContent } = require('../../utils/clipboard/dtoConvert');
       const profile = {
         type: event.type as 'Text' | 'Image' | 'File' | 'Group',
         hash: event.hash,
@@ -113,7 +115,6 @@ class RemoteClipboardMonitor {
   private _startPolling(interval?: number): void {
     if (this.pollingTag) return;
     try {
-      const { setTimer } = require('native-timer');
       const pollingInterval = interval ?? 3000;
       this.pollingTag = setTimer(
         () => {
@@ -131,11 +132,9 @@ class RemoteClipboardMonitor {
   private async _fetchAndNotify(): Promise<void> {
     if (!this._server) return;
     try {
-      const { createAPIClient } = require('../index');
       const apiClient = createAPIClient(this._server);
       const profile = await apiClient.getClipboard();
       if (!profile) return;
-      const { profileDtoToContent } = require('../../utils/clipboard/dtoConvert');
       const content: ClipboardContent = profileDtoToContent(profile);
       const hash = content.profileHash || content.text || '';
       if (hash === this._lastContentHash) return;
@@ -149,7 +148,6 @@ class RemoteClipboardMonitor {
   private _stopPolling(): void {
     if (!this.pollingTag) return;
     try {
-      const { clearTimer } = require('native-timer');
       clearTimer(this.pollingTag);
     } catch {}
     this.pollingTag = null;
@@ -159,7 +157,6 @@ class RemoteClipboardMonitor {
   private async _connectSignalR(server: ServerConfig): Promise<void> {
     if (this._signalRConnected) return;
     try {
-      const { getSignalRClient } = require('signalr-client');
       const client = getSignalRClient();
       client.onRemoteClipboardChanged(this._signalREventCallback);
       await client.connect(server);
@@ -174,7 +171,6 @@ class RemoteClipboardMonitor {
     if (!this._signalRConnected) return;
     this._signalRConnected = false;
     try {
-      const { getSignalRClient } = require('signalr-client');
       const client = getSignalRClient();
       client.offRemoteClipboardChanged(this._signalREventCallback);
       await client.disconnect();
