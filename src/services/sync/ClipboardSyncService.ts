@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ClipboardSyncService
  * 管理远程剪贴板同步（前台显示 + 后台同步）。
  *
@@ -29,7 +29,6 @@ import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import type { ClipboardSyncState, ClipboardSyncStateListener } from './SyncState';
 import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
-import { errorService } from '../ErrorService';
 import { remoteClipboardMonitor } from './RemoteClipboardMonitor';
 import type { RemoteClipboardChangedCallback } from './RemoteClipboardMonitor';
 import { getAPIClient } from '../ClientFactory';
@@ -229,10 +228,6 @@ class ClipboardSyncService {
     if (this.activeServer.type === 'syncclipboard') {
       if (!remoteClipboardMonitor.isSignalRConnected()) {
         await remoteClipboardMonitor.connect(this.activeServer);
-        await this.fetchRemoteClipboard(false).catch((error: Error) => {
-          const errorMessage = error?.message ?? '无法连接到服务器';
-          errorService.setError({ title: '连接失败', message: errorMessage });
-        });
       } else {
         await remoteClipboardMonitor.refresh();
       }
@@ -263,70 +258,10 @@ class ClipboardSyncService {
    * 错误通过 useErrorStore 上报，不向上抛出，UI 只需 await 并控制 refreshing 状态。
    */
   async refreshContent(): Promise<void> {
-    // 更新本地剪贴板内容
     await clipboardMonitor.triggerCheck();
 
-    // 如有活跃服务器，刷新远程内容
     if (!this.activeServer) return;
-    try {
-      await this.fetchRemoteClipboard(false);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '刷新失败';
-      errorService.setError({ title: '刷新失败', message: errorMessage });
-    }
-  }
-
-  /**
-   * 获取远程剪贴板（下拉刷新或初始加载）。
-   * silent=false 时设置 loadingRemote 状态，出错时向上抛出异常供 UI 处理。
-   */
-  async fetchRemoteClipboard(silent: boolean = false): Promise<void> {
-    // 优先使用已知的 activeServer，若服务尚未 start 则从配置中读取
-    const server = this.activeServer ?? (await this._readActiveServer());
-
-    if (!server) {
-      clipboardSyncState.setRemoteContent(null);
-      this.lastRemoteProfileHash = null;
-      return;
-    }
-
-    if (!silent) {
-      clipboardSyncState.setLoadingRemote(true);
-    }
-
-    try {
-      const apiClient = await getAPIClient();
-      const profile = await apiClient.getClipboard();
-
-      if (profile) {
-        const { profileDtoToContent } = await import('../../utils/clipboard/dtoConvert');
-        const content = profileDtoToContent(profile);
-        const currentHash = content.profileHash || content.text || '';
-        // 同步监听器哈希，避免拉取后的轮询/SignalR 重复触发回调
-        remoteClipboardMonitor.setLastContentHash(currentHash);
-        await this._processRemoteClipboardContent(
-          content,
-          currentHash,
-          profile.hasData,
-          apiClient,
-          silent ? '' : 'Fetch: '
-        );
-      } else {
-        clipboardSyncState.setRemoteContent(null);
-        this.lastRemoteProfileHash = null;
-      }
-    } catch (error) {
-      if (!silent) {
-        clipboardSyncState.setRemoteContent(null);
-        this.lastRemoteProfileHash = null;
-        throw error; // 非静默模式：交由 UI 层处理错误展示
-      }
-      console.error('[ClipboardSyncService] Silent fetch failed:', error);
-    } finally {
-      if (!silent) {
-        clipboardSyncState.setLoadingRemote(false);
-      }
-    }
+    await remoteClipboardMonitor.refresh();
   }
 
   /**
@@ -377,6 +312,13 @@ class ClipboardSyncService {
     this.lastLocalProfileHash = hash;
   }
 
+  /**
+   * 清除同步错误。
+   */
+  clearSyncError(): void {
+    clipboardSyncState.clearSyncError();
+  }
+
   // ─── 私有实现 ─────────────────────────────────────────────────────────────
 
   private async _readActiveServer(): Promise<ServerConfig | null> {
@@ -399,20 +341,12 @@ class ClipboardSyncService {
   private async _startConnection(server: ServerConfig): Promise<void> {
     const config = await configService.getConfig();
     await remoteClipboardMonitor.connect(server, config?.remotePollingInterval);
-    await this.fetchRemoteClipboard(false).catch((error: Error) => {
-      const errorMessage = error?.message ?? '无法连接到服务器';
-      errorService.setError({ title: '连接失败', message: errorMessage });
-    });
   }
 
   private async _stopConnection(): Promise<void> {
     await remoteClipboardMonitor.disconnect();
   }
 
-  /**
-   * 处理远程剪贴板内容变化的核心逻辑。
-   * 包含哈希检测、自动下载、历史记录写入、自动复制等所有业务规则。
-   */
   private async _processRemoteClipboardContent(
     content: ClipboardContent,
     currentHash: string,
@@ -423,45 +357,65 @@ class ClipboardSyncService {
     const config = await configService.getConfig();
     const previousHash = this.lastRemoteProfileHash;
 
-    const { resolveRemoteContent } = await import('../../utils/processRemoteContent');
-    const resolved = await resolveRemoteContent(content, currentHash, previousHash, hasData, {
-      getLastUploadedHash: () => SyncManager.getInstance().getLastUploadedHash(),
-      getHistoryItem: (profileHash: string) => historyService.getItem(profileHash),
-      getHistoryFileUri: async (type: string, profileHash: string, fileName: string) => {
-        const { getHistoryFileUri } = await import('../../utils/fileStorage');
-        return getHistoryFileUri(type, profileHash, fileName);
-      },
-    });
-
-    // 没有变化，不处理
-    if (!resolved) return;
-
-    // fileUri 更新（后台已下载文件），只更新显示
-    if (resolved.fileUriOnlyUpdate) {
-      const prev = clipboardSyncState.getState().remoteContent;
-      if (prev?.fileUri !== resolved.content.fileUri) {
-        clipboardSyncState.setRemoteContent(
-          prev ? { ...prev, fileUri: resolved.content.fileUri } : resolved.content
-        );
+    if (previousHash === currentHash) {
+      if (hasData && content.profileHash && content.fileName) {
+        try {
+          const { getHistoryFileUri } = await import('../../utils/fileStorage');
+          const fileUri = await getHistoryFileUri(
+            content.type,
+            content.profileHash,
+            content.fileName
+          );
+          if (fileUri) {
+            const prev = clipboardSyncState.getState().remoteContent;
+            if (prev?.fileUri !== fileUri) {
+              clipboardSyncState.setRemoteContent(
+                prev ? { ...prev, fileUri } : { ...content, fileUri }
+              );
+            }
+          }
+        } catch {}
       }
       return;
     }
 
-    // 是本地刚上传的内容，跳过自动下载/复制，仅更新显示
-    if (resolved.isJustUploaded) {
+    const lastUploadedHash = SyncManager.getInstance().getLastUploadedHash();
+    const { compareHash } = await import('../../utils/hash');
+    const isJustUploaded = !!(lastUploadedHash && compareHash(currentHash, lastUploadedHash));
+
+    let finalContent = content;
+    let foundInHistory = false;
+
+    if (hasData && content.profileHash) {
+      try {
+        const historyItem = await historyService.getItem(content.profileHash);
+        if (historyItem && content.fileName) {
+          const { getHistoryFileUri } = await import('../../utils/fileStorage');
+          const fileUri = await getHistoryFileUri(
+            content.type,
+            content.profileHash,
+            content.fileName
+          );
+          if (fileUri) {
+            finalContent = { ...content, fileUri };
+            foundInHistory = true;
+          }
+        }
+      } catch {}
+    }
+
+    if (isJustUploaded) {
       console.log(
         `[ClipboardSyncService] ${logPrefix}Remote hash matches last uploaded hash, skipping auto-download/copy`
       );
       this.lastRemoteProfileHash = currentHash;
-      clipboardSyncState.setRemoteContent(resolved.content);
+      clipboardSyncState.setRemoteContent(finalContent);
       return;
     }
 
     this.lastRemoteProfileHash = currentHash;
 
-    let finalContent = resolved.content;
     let skipAutoCopyDueToLargeFile = false;
-    const foundInHistory = resolved.foundInHistory;
 
     if (foundInHistory) {
       console.log(
@@ -469,7 +423,6 @@ class ClipboardSyncService {
       );
     }
 
-    // 自动下载（文件大小在限制内时）
     if (!foundInHistory) {
       const autoDownloadMaxSize = config?.autoDownloadMaxSize ?? 5 * 1024 * 1024;
       const hasFileData = hasData && content.fileName && content.fileSize !== undefined;
@@ -497,13 +450,10 @@ class ClipboardSyncService {
       }
     }
 
-    // 更新 UI 显示
     clipboardSyncState.setRemoteContent(finalContent);
 
     const isFirstLoad = previousHash === null;
     if (!isFirstLoad) {
-      // 没有文件数据时，添加不含文件的历史记录
-      // （有文件数据的情况已由 downloadAndAddToHistory 处理）
       if (!hasData) {
         try {
           const historyItem = clipboardContentToItem(finalContent, {
@@ -519,7 +469,6 @@ class ClipboardSyncService {
         }
       }
 
-      // 自动复制：autoSync 开启 或 后台下载启用时
       const autoSyncEnabled = config?.autoSync ?? false;
       const bgDownloadEnabled = !!(
         config?.enableBackgroundTasks && config?.enableBackgroundDownload

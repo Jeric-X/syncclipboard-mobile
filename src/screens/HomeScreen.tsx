@@ -45,6 +45,7 @@ export function HomeScreen() {
   const downloadProgress = useClipboardSyncServiceStore((s) => s.downloadProgress);
   const uploadingClipboard = useClipboardSyncServiceStore((s) => s.uploadingClipboard);
   const fileUploadProgress = useClipboardSyncServiceStore((s) => s.fileUploadProgress);
+  const syncError = useClipboardSyncServiceStore((s) => s.syncError);
 
   const { currentContent } = uselocalClipboardStore();
   const { getActiveServer } = useSettingsStore();
@@ -282,6 +283,24 @@ export function HomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {syncError && (
+        <View style={[styles.syncErrorBanner, { backgroundColor: theme.colors.errorBackground }]}>
+          <View style={styles.syncErrorContent}>
+            <Text style={[styles.syncErrorTitle, { color: theme.colors.errorTitle }]}>
+              {syncError.title}
+            </Text>
+            <Text style={[styles.syncErrorMessage, { color: theme.colors.errorText }]}>
+              {syncError.message}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.syncErrorClose}
+            onPress={() => getClipboardSyncService().clearSyncError()}
+          >
+            <Text style={[styles.syncErrorCloseText, { color: theme.colors.errorTitle }]}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -441,6 +460,31 @@ const styles = StyleSheet.create({
   },
   fullScreenOverlay: {
     ...StyleSheet.absoluteFill,
+  },
+  syncErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  syncErrorContent: {
+    flex: 1,
+  },
+  syncErrorTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  syncErrorMessage: {
+    fontSize: 12,
+  },
+  syncErrorClose: {
+    padding: 8,
+  },
+  syncErrorCloseText: {
+    fontSize: 18,
+    fontWeight: '600',
   },
 
   infoLabelSpaced: {

@@ -14,6 +14,7 @@ export interface ClipboardSyncState {
   downloadProgress: ProgressInfo | null;
   uploadingClipboard: boolean;
   fileUploadProgress: ProgressInfo | null;
+  syncError: { title: string; message: string } | null;
 }
 
 export type ClipboardSyncStateListener = (state: ClipboardSyncState) => void;
@@ -26,6 +27,7 @@ class ClipboardSyncStateManager {
     downloadProgress: null,
     uploadingClipboard: false,
     fileUploadProgress: null,
+    syncError: null,
   };
   private _listeners = new Set<ClipboardSyncStateListener>();
 
@@ -76,6 +78,16 @@ class ClipboardSyncStateManager {
     const { remoteContent } = this._state;
     if (!remoteContent) return;
     this.setState({ remoteContent: { ...remoteContent, fileUri } });
+  }
+
+  /** 设置同步错误 */
+  setSyncError(error: { title: string; message: string } | null): void {
+    this.setState({ syncError: error });
+  }
+
+  /** 清除同步错误 */
+  clearSyncError(): void {
+    this.setState({ syncError: null });
   }
 }
 

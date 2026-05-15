@@ -11,6 +11,7 @@ import { getSignalRClient } from 'signalr-client';
 import { setTimer, clearTimer } from 'native-timer';
 import { getAPIClient } from '../ClientFactory';
 import { profileDtoToContent } from '../../utils/clipboard/dtoConvert';
+import { clipboardSyncState } from './SyncState';
 
 /** 远程剪贴板变化回调：仅在内容哈希变化时触发 */
 export type RemoteClipboardChangedCallback = (content: ClipboardContent) => void;
@@ -148,8 +149,11 @@ class RemoteClipboardMonitor {
       if (hash === this._lastContentHash) return;
       this._lastContentHash = hash;
       this.notifyCallbacks(content);
+      clipboardSyncState.clearSyncError();
     } catch (e) {
       console.error('[RemoteClipboardMonitor] Failed to fetch and notify:', e);
+      const errorMessage = e instanceof Error ? e.message : '获取远程剪贴板失败';
+      clipboardSyncState.setSyncError({ title: '同步失败', message: errorMessage });
     }
   }
 
@@ -170,8 +174,13 @@ class RemoteClipboardMonitor {
       await client.connect(server);
       this._signalRConnected = true;
       console.log('[RemoteClipboardMonitor] SignalR connected');
+      await this.refresh().catch((e) => {
+        console.error('[RemoteClipboardMonitor] Initial refresh failed:', e);
+      });
     } catch (e) {
       console.error('[RemoteClipboardMonitor] Failed to connect SignalR:', e);
+      const errorMessage = e instanceof Error ? e.message : '无法连接到服务器';
+      clipboardSyncState.setSyncError({ title: '连接失败', message: errorMessage });
     }
   }
 
