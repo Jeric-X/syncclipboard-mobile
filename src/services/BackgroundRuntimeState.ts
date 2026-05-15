@@ -5,8 +5,8 @@
  * 将 isTempDisabledBackgroundTasks 从 settingsStore 中剥离到此独立模块，
  * 使 BackgroundServiceManager 不再反向依赖 UI 状态层（Zustand store）。
  *
- * settingsStore 仍持有该布尔值以驱动 UI 显示，但写入路径统一走此模块，
- * 再由 settingsStore 镜像同步。
+ * settingsStore 在模块加载时订阅此单例，将变化镜像到 isTempDisabledBackgroundTasks，
+ * 以驱动 UI 响应；BackgroundServiceManager 直接写入并订阅此模块，无需感知 store。
  */
 
 type Listener = () => void;
@@ -22,7 +22,8 @@ class BackgroundRuntimeStateClass {
 
   /**
    * 设置临时禁用状态，并通知所有订阅者。
-   * 由 ForegroundService 的 tempStop 事件触发（经由注入回调中转）。
+   * 由 BackgroundServiceManager 中 ForegroundService.addTempStopListener 直接调用；
+   * settingsStore 订阅此通知并将变化镜像到 isTempDisabledBackgroundTasks UI 状态。
    */
   setTempDisabled(value: boolean): void {
     if (this._isTempDisabled === value) return;

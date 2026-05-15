@@ -395,3 +395,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ error: null });
   },
 }));
+
+/**
+ * 订阅 backgroundRuntimeState 变化，将临时禁用状态同步到 settingsStore。
+ *
+ * backgroundRuntimeState 是真正的写入源头（由 BackgroundServiceManager 的
+ * ForegroundService.addTempStopListener 驱动），settingsStore 只作镜像以驱动 UI。
+ * 模块加载时立即注册，生命周期与应用相同，无需取消订阅。
+ */
+backgroundRuntimeState.subscribe(() => {
+  useSettingsStore.setState({
+    isTempDisabledBackgroundTasks: backgroundRuntimeState.isTempDisabled(),
+  });
+});

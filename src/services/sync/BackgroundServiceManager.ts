@@ -21,18 +21,6 @@ import { setTimer, clearTimer } from 'native-timer';
 import { configService } from '../ConfigService';
 import { backgroundRuntimeState } from '../BackgroundRuntimeState';
 
-/**
- * 由 App 层注入的生命周期回调接口。
- * 将 native 事件（ForegroundService stop/tempStop）中转到 UI 状态层（settingsStore），
- * 使 BackgroundServiceManager 本身不依赖任何 Zustand store。
- */
-export interface BackgroundServiceLifecycleCallbacks {
-  /** 用户从通知栏点击「停止」时触发，应将 enableBackgroundTasks 设为 false */
-  onForegroundServiceStop(): void;
-  /** 用户从通知栏点击「临时停止」时触发，应设置 isTempDisabledBackgroundTasks */
-  onForegroundServiceTempStop(): void;
-}
-
 class BackgroundServiceManager {
   private static instance: BackgroundServiceManager | null = null;
 
@@ -45,9 +33,6 @@ class BackgroundServiceManager {
   /** 取消对 backgroundRuntimeState 的订阅 */
   private runtimeUnsub: (() => void) | null = null;
 
-  /** 由 App 层注入的生命周期回调 */
-  private lifecycleCallbacks: BackgroundServiceLifecycleCallbacks | null = null;
-
   private constructor() {}
 
   static getInstance(): BackgroundServiceManager {
@@ -55,15 +40,6 @@ class BackgroundServiceManager {
       BackgroundServiceManager.instance = new BackgroundServiceManager();
     }
     return BackgroundServiceManager.instance;
-  }
-
-  /**
-   * 注入 App 层生命周期回调（应在 start() 之前调用）。
-   * 若未注入则 ForegroundService 的 stop/tempStop 事件不会更新 store，
-   * 但 BackgroundServiceManager 自身逻辑仍正常工作。
-   */
-  setLifecycleCallbacks(callbacks: BackgroundServiceLifecycleCallbacks): void {
-    this.lifecycleCallbacks = callbacks;
   }
 
   // ─── 工具 ───────────────────────────────────────────────
@@ -219,11 +195,12 @@ class BackgroundServiceManager {
         ForegroundService.startService();
 
         this.stopSub = ForegroundService.addStopListener(() => {
-          this.lifecycleCallbacks?.onForegroundServiceStop();
+          configService.updateConfig({ enableBackgroundTasks: false }).catch((e) => {
+            console.error('[BackgroundServiceManager] Failed to disable background tasks:', e);
+          });
         });
         this.tempStopSub = ForegroundService.addTempStopListener(() => {
           backgroundRuntimeState.setTempDisabled(true);
-          this.lifecycleCallbacks?.onForegroundServiceTempStop();
         });
       } catch (e) {
         console.error('[BackgroundServiceManager] Failed to start foreground service:', e);
@@ -254,11 +231,12 @@ class BackgroundServiceManager {
       if (config?.enableForegroundNotification && !isRunning) {
         ForegroundService.startService();
         this.stopSub = ForegroundService.addStopListener(() => {
-          this.lifecycleCallbacks?.onForegroundServiceStop();
+          configService.updateConfig({ enableBackgroundTasks: false }).catch((e) => {
+            console.error('[BackgroundServiceManager] Failed to disable background tasks:', e);
+          });
         });
         this.tempStopSub = ForegroundService.addTempStopListener(() => {
           backgroundRuntimeState.setTempDisabled(true);
-          this.lifecycleCallbacks?.onForegroundServiceTempStop();
         });
       } else if (!config?.enableForegroundNotification && isRunning) {
         this._cleanupListeners();
