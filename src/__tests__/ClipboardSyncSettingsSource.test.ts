@@ -1,10 +1,12 @@
+import { DEFAULT_APP_CONFIG, type AppConfig } from '../types/storage';
+
 describe('ClipboardSyncSettingsSource', () => {
   beforeEach(() => {
     jest.resetModules();
     jest.clearAllMocks();
   });
 
-  it('ensureLoaded should load config when settings not loaded', async () => {
+  it('should call loadConfig when isLoaded is false', async () => {
     const loadConfig = jest.fn().mockResolvedValue(undefined);
     const state = {
       isLoaded: false,
@@ -31,8 +33,12 @@ describe('ClipboardSyncSettingsSource', () => {
   });
 
   it('should expose active server and config from settings store', () => {
-    const server = { type: 'syncclipboard', url: 'https://example.com' };
-    const config = { localPollingInterval: 1500 };
+    const server = {
+      type: 'syncclipboard' as const,
+      name: 'test-server',
+      url: 'https://example.com',
+    };
+    const config: AppConfig = { ...DEFAULT_APP_CONFIG, localPollingInterval: 1500 };
     const state = {
       isLoaded: true,
       loadConfig: jest.fn(),
@@ -58,12 +64,11 @@ describe('ClipboardSyncSettingsSource', () => {
 
   it('subscribeConfig should forward config snapshots and return unsubscribe', () => {
     const unsubscribe = jest.fn();
-    let listener:
-      | ((
-          state: { config: { localPollingInterval: number } | null },
-          prevState: { config: { localPollingInterval: number } | null }
-        ) => void)
-      | undefined;
+    type ConfigSubscriber = (
+      state: { config: AppConfig | null },
+      prevState: { config: AppConfig | null }
+    ) => void;
+    let listener: ConfigSubscriber | undefined;
 
     const subscribe = jest.fn((cb) => {
       listener = cb;
@@ -74,7 +79,7 @@ describe('ClipboardSyncSettingsSource', () => {
       isLoaded: true,
       loadConfig: jest.fn(),
       getActiveServer: jest.fn(),
-      config: { localPollingInterval: 1000 },
+      config: { ...DEFAULT_APP_CONFIG, localPollingInterval: 1000 },
     };
 
     jest.doMock('../stores/settingsStore', () => ({
@@ -95,13 +100,13 @@ describe('ClipboardSyncSettingsSource', () => {
     if (!listener) return;
 
     listener(
-      { config: { localPollingInterval: 2000 } },
-      { config: { localPollingInterval: 1000 } }
+      { config: { ...DEFAULT_APP_CONFIG, localPollingInterval: 2000 } },
+      { config: { ...DEFAULT_APP_CONFIG, localPollingInterval: 1000 } }
     );
 
     expect(handler).toHaveBeenCalledWith(
-      { localPollingInterval: 2000 },
-      { localPollingInterval: 1000 }
+      { ...DEFAULT_APP_CONFIG, localPollingInterval: 2000 },
+      { ...DEFAULT_APP_CONFIG, localPollingInterval: 1000 }
     );
     expect(unsub).toBe(unsubscribe);
   });

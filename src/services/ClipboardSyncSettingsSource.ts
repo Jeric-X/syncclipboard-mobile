@@ -2,6 +2,12 @@ import type { ServerConfig } from '../types/api';
 import type { AppConfig } from '../types/storage';
 import { useSettingsStore } from '../stores/settingsStore';
 
+function extractConfigFromSettingsState(state: unknown): AppConfig | null {
+  return state && typeof state === 'object' && 'config' in state
+    ? ((state as { config: AppConfig | null }).config ?? null)
+    : null;
+}
+
 export interface ClipboardSyncSettingsSource {
   ensureLoaded(): Promise<void>;
   getActiveServer(): ServerConfig | null;
@@ -21,10 +27,10 @@ export function createSettingsStoreClipboardSyncSettingsSource(): ClipboardSyncS
     getActiveServer: () => useSettingsStore.getState().getActiveServer(),
     getConfig: () => useSettingsStore.getState().config ?? null,
     subscribeConfig: (listener) =>
-      useSettingsStore.subscribe(
-        (state: { config: AppConfig | null }, prevState: { config: AppConfig | null }) => {
-          listener(state.config ?? null, prevState.config ?? null);
-        }
-      ),
+      useSettingsStore.subscribe((state: unknown, prevState: unknown) => {
+        const config = extractConfigFromSettingsState(state);
+        const prevConfig = extractConfigFromSettingsState(prevState);
+        listener(config, prevConfig);
+      }),
   };
 }
