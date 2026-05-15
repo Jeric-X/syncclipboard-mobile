@@ -65,7 +65,7 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
         if (!text) throw new Error('分享的文字内容为空');
         setLoadingText('正在上传文字…');
         setPreviewText(text.slice(0, 100));
-        await uploadTextAndAddToHistory(text, activeServer, { signal });
+        await uploadTextAndAddToHistory(text, { signal });
         clearSharedPayloads();
         return;
       }
@@ -84,20 +84,13 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
         setPreviewImage(payload.contentUri);
       }
 
-      await uploadFileAndAddToHistory(
-        payload.contentUri,
-        fileName,
-        contentMime,
-        undefined,
-        activeServer,
-        {
-          signal,
-          onProgress: (stage, info) => {
-            setLoadingText(stage);
-            setProgress(info ?? null);
-          },
-        }
-      );
+      await uploadFileAndAddToHistory(payload.contentUri, fileName, contentMime, undefined, {
+        signal,
+        onProgress: (stage, info) => {
+          setLoadingText(stage);
+          setProgress(info ?? null);
+        },
+      });
       clearSharedPayloads();
     },
     [resolvedSharedPayloads, activeServer, resolveError]

@@ -71,19 +71,6 @@ class BackgroundServiceManager {
   // ─── 公开 API ─────────────────────────────────────────────
 
   /**
-   * 后台 SignalR 是否正在运行（委托给 ClipboardSyncService）。
-   * @deprecated 直接使用 getClipboardSyncService().isSignalRRunning()
-   */
-  isSignalRRunning(): boolean {
-    try {
-      const { getClipboardSyncService } = require('./ClipboardSyncService');
-      return getClipboardSyncService().isSignalRRunning();
-    } catch {
-      return false;
-    }
-  }
-
-  /**
    * 启动所有服务（幂等）。
    * 由任意 Activity 入口调用。
    * - 始终启动剪贴板监控（前台 UI 需要）
@@ -297,4 +284,3 @@ class BackgroundServiceManager {
 export function getBackgroundServiceManager(): BackgroundServiceManager {
   return BackgroundServiceManager.getInstance();
 }
-

@@ -20,7 +20,7 @@ export const ProcessTextScreen: React.FC<ProcessTextScreenProps> = ({ text, onCo
   const task = useCallback(
     async (signal: AbortSignal) => {
       if (!activeServer) throw new Error('请先在设置中配置服务器');
-      await uploadTextAndAddToHistory(text, activeServer, { signal });
+      await uploadTextAndAddToHistory(text, { signal });
     },
     [text, activeServer]
   );

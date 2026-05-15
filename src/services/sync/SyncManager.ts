@@ -4,11 +4,9 @@
  */
 
 import { Platform } from 'react-native';
-import { ISyncClipboardAPI } from '../../api/clients/APIClient';
-import { createAPIClient } from '../../api/ClientFactory';
+import { getAPIClient } from '../ClientFactory';
 import { localClipboard } from '../clipboard/LocalClipboard';
-import { ConfigurationError } from '@/errors';
-import { ServerConfig, ProfileDto } from '../../types/api';
+import { ProfileDto } from '../../types/api';
 import { compareHash } from '../../utils/hash';
 import { isTextInvalid } from '../../utils/index';
 import type { ProgressInfo } from 'native-util';
@@ -31,8 +29,6 @@ import { getLastSyncHash, setLastSyncHash } from '../../storage/SyncStateStorage
 export class SyncManager {
   private static instance: SyncManager | null = null;
 
-  private apiClient: ISyncClipboardAPI | null = null;
-  private lastServerConfigKey: string | null = null;
   private clipboardManager = localClipboard;
 
   private status: SyncStatus = SyncStatus.Idle;
@@ -100,25 +96,6 @@ export class SyncManager {
       .catch(() => {
         // foreground service module not available
       });
-  }
-
-  /**
-   * 创建 API 客户端
-   */
-  /**
-   * 获取或创建 API 客户端（服务器配置变更时自动重建）
-   */
-  private async getOrCreateAPIClient(): Promise<ISyncClipboardAPI> {
-    const activeServer = await configStorage.getActiveServer();
-    if (!activeServer) {
-      throw new ConfigurationError('No active server configured');
-    }
-    const serverKey = JSON.stringify(activeServer);
-    if (!this.apiClient || serverKey !== this.lastServerConfigKey) {
-      this.apiClient = createAPIClient(activeServer);
-      this.lastServerConfigKey = serverKey;
-    }
-    return this.apiClient;
   }
 
   /**
@@ -287,7 +264,7 @@ export class SyncManager {
     onProgress?: (info: ProgressInfo) => void,
     onPreview?: (preview: string) => void
   ): Promise<SyncResult> {
-    const apiClient = await this.getOrCreateAPIClient();
+    const apiClient = await getAPIClient();
     const appConfig = await configStorage.getConfig();
     try {
       // 优先使用已缓存的内容（来自 ClipboardMonitor 回调，避免后台时重新创建悬浮窗）
@@ -423,7 +400,7 @@ export class SyncManager {
     onProgress?: (info: ProgressInfo) => void,
     onPreview?: (preview: string) => void
   ): Promise<SyncResult> {
-    const apiClient = await this.getOrCreateAPIClient();
+    const apiClient = await getAPIClient();
     const appConfig = await configStorage.getConfig();
     try {
       // 获取远程剪贴板配置

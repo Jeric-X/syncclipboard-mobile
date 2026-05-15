@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ClipboardSyncService
  * 管理远程剪贴板同步（前台显示 + 后台同步）。
  *
@@ -32,7 +32,7 @@ import { configService } from '../ConfigService';
 import { errorService } from '../ErrorService';
 import { remoteClipboardMonitor } from './RemoteClipboardMonitor';
 import type { RemoteClipboardChangedCallback } from './RemoteClipboardMonitor';
-import { createAPIClient } from '../../api/ClientFactory';
+import { getAPIClient } from '../ClientFactory';
 import { SyncManager } from './SyncManager';
 import { historyService } from '../history/HistoryService';
 import { getProfileId } from '@/utils';
@@ -65,7 +65,7 @@ class ClipboardSyncService {
     try {
       if (!this.activeServer) return;
       const currentHash = content.profileHash || content.text || '';
-      const apiClient = createAPIClient(this.activeServer);
+      const apiClient = await getAPIClient();
       await this._processRemoteClipboardContent(
         content,
         currentHash,
@@ -146,9 +146,6 @@ class ClipboardSyncService {
     // 订阅历史记录删除事件（用于重置 remoteContent 的 fileUri）
     this._subscribeToHistoryChanges();
 
-    // 订阅 localPollingInterval 配置变化（更新 ClipboardMonitor 轮询间隔）
-    this._subscribeToLocalPollingIntervalChanges();
-
     // 订阅传输队列状态变化（同步到 store，供 UI 展示）
     this._subscribeToTransferQueue();
 
@@ -163,7 +160,6 @@ class ClipboardSyncService {
     this._isStarted = false;
     this._unsubscribeFromClipboardChanges();
     this._unsubscribeFromHistoryChanges();
-    this._unsubscribeFromLocalPollingIntervalChanges();
     this._unsubscribeFromTransferQueue();
     this._unsubscribeFromAppState();
     remoteClipboardMonitor.removeCallback(this._remoteChangeCallback);
@@ -197,7 +193,6 @@ class ClipboardSyncService {
       // 确保订阅存在（幂等）
       this._subscribeToClipboardChanges();
       this._subscribeToHistoryChanges();
-      this._subscribeToLocalPollingIntervalChanges();
       this._subscribeToTransferQueue();
       this._subscribeToAppState();
     }
@@ -300,7 +295,7 @@ class ClipboardSyncService {
     }
 
     try {
-      const apiClient = createAPIClient(server);
+      const apiClient = await getAPIClient();
       const profile = await apiClient.getClipboard();
 
       if (profile) {
@@ -380,11 +375,6 @@ class ClipboardSyncService {
    */
   recordLocalHash(hash: string): void {
     this.lastLocalProfileHash = hash;
-  }
-
-  /** 后台 SignalR 是否连接中（供 HomeScreen 断开 SignalR 时判断是否可以真正 disconnect）。 */
-  isSignalRRunning(): boolean {
-    return remoteClipboardMonitor.isSignalRConnected();
   }
 
   // ─── 私有实现 ─────────────────────────────────────────────────────────────
@@ -699,36 +689,6 @@ class ClipboardSyncService {
   }
 
   /**
-   * 订阅 localPollingInterval 配置变化，同步更新 ClipboardMonitor 的本地轮询间隔。
-   * 初始化时立即应用一次当前值。
-   */
-  private _localPollingIntervalUnsub: (() => void) | null = null;
-
-  private _subscribeToLocalPollingIntervalChanges(): void {
-    if (this._localPollingIntervalUnsub) return;
-
-    // 立即应用当前值（configStorage 有内存缓存，Promise 即时 resolve）
-    configService.getConfig().then((config) => {
-      const currentInterval = config.localPollingInterval ?? 1000;
-      clipboardMonitor.updatePollingInterval(currentInterval);
-    });
-
-    let prevInterval: number | undefined;
-    this._localPollingIntervalUnsub = configService.subscribe((config) => {
-      const interval = config.localPollingInterval ?? 1000;
-      if (interval !== prevInterval) {
-        prevInterval = interval;
-        clipboardMonitor.updatePollingInterval(interval);
-      }
-    });
-  }
-
-  private _unsubscribeFromLocalPollingIntervalChanges(): void {
-    this._localPollingIntervalUnsub?.();
-    this._localPollingIntervalUnsub = null;
-  }
-
-  /**
    * 本地剪贴板内容变化时触发自动上传。
    * 条件：autoSync 开启 或 后台上传启用。
    */
@@ -791,9 +751,9 @@ class ClipboardSyncService {
     if (!server || !remoteContent) return;
 
     if (server.type !== 'syncclipboard') {
-      await this._downloadForWebDAV(server, remoteContent);
+      await this._downloadForWebDAV(remoteContent);
     } else {
-      await this._downloadForSyncClipboard(server, remoteContent);
+      await this._downloadForSyncClipboard(remoteContent);
     }
   }
 
@@ -847,7 +807,6 @@ class ClipboardSyncService {
         payload.fileName,
         payload.mimeType,
         payload.fileSize,
-        server,
         {
           signal,
           onProgress: (stage: string, progressInfo?: import('native-util').ProgressInfo) => {
@@ -869,7 +828,6 @@ class ClipboardSyncService {
 
   /** WebDAV/S3 直接下载，进度通过 store 更新 */
   private async _downloadForWebDAV(
-    server: ServerConfig,
     remoteContent: import('../../types/clipboard').ClipboardContent
   ): Promise<void> {
     clipboardSyncState.setState({ downloadingRemote: true, downloadProgress: null });
@@ -880,7 +838,7 @@ class ClipboardSyncService {
     try {
       const { downloadAndAddToHistory } = await import('../../utils/remoteClipboard');
 
-      const apiClient = createAPIClient(server);
+      const apiClient = await getAPIClient();
       const updatedContent = await downloadAndAddToHistory(
         remoteContent,
         apiClient,
@@ -914,7 +872,6 @@ class ClipboardSyncService {
 
   /** SyncClipboard 服务器：加入下载队列 */
   private async _downloadForSyncClipboard(
-    _server: ServerConfig,
     remoteContent: import('../../types/clipboard').ClipboardContent
   ): Promise<void> {
     if (!remoteContent.profileHash) return;

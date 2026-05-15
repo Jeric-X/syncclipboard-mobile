@@ -25,5 +25,5 @@ export type { ErrorInfo } from './ErrorService';
 // Remote Clipboard Sync Service
 export { getClipboardSyncService as getClipboardSyncService } from './sync/ClipboardSyncService';
 
-// API client factory – re-exported from the canonical location for backwards compatibility
-export { createAPIClient } from '../api/ClientFactory';
+// API client factory
+export { getAPIClient, createClientFromConfig } from './ClientFactory';

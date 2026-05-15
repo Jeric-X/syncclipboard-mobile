@@ -8,8 +8,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { STORAGE_KEYS } from '../types/storage';
 import type { AppConfig } from '../types/storage';
-import type { ServerConfig, ProfileDto } from '../types/api';
-import { createAPIClient } from '../api/ClientFactory';
+import type { ProfileDto } from '../types/api';
+import { getAPIClient } from '../services/ClientFactory';
 import type { ISyncClipboardAPI } from '../api/clients/APIClient';
 import { sha256 } from 'js-sha256';
 
@@ -176,7 +176,7 @@ export default async function SmsUploadTask(taskData?: SmsTaskData): Promise<voi
 
   // 5. 创建 API 客户端并上传
   try {
-    const client = createAPIClient(server);
+    const client = await getAPIClient();
     const profileHash = calculateHash(code);
     await updateNotification(`正在上传验证码：${code}`);
     await uploadWithRetry(client, code, profileHash);

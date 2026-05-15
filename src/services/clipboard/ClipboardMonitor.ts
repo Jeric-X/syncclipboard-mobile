@@ -7,6 +7,7 @@ import { AppState, AppStateStatus, Platform } from 'react-native';
 import { LocalClipboard } from './LocalClipboard';
 import { ClipboardContent, ClipboardChangeCallback, ClipboardMonitorOptions } from '@/types';
 import { setTimer, clearTimer } from 'native-timer';
+import { configService } from '../ConfigService';
 
 /**
  * 剪贴板监听器类
@@ -34,6 +35,7 @@ export class ClipboardMonitor {
 
   private isChecking: boolean = false;
   private checkGeneration: number = 0;
+  private _pollingIntervalUnsub: (() => void) | null = null;
 
   constructor(clipboardManager: LocalClipboard, options?: ClipboardMonitorOptions) {
     this.clipboardManager = clipboardManager;
@@ -61,6 +63,9 @@ export class ClipboardMonitor {
     }
 
     this.isMonitoring = true;
+
+    // 订阅 localPollingInterval 配置变化
+    this._subscribeToPollingIntervalChanges();
 
     // 监听应用状态变化
     if (this.options.stopOnBackground) {
@@ -96,6 +101,10 @@ export class ClipboardMonitor {
       this.appStateSubscription.remove();
       this.appStateSubscription = null;
     }
+
+    // 取消配置订阅
+    this._pollingIntervalUnsub?.();
+    this._pollingIntervalUnsub = null;
 
     console.log('[ClipboardMonitor] Stopped monitoring');
   }
@@ -322,6 +331,27 @@ export class ClipboardMonitor {
    */
   reset(): void {
     this.lastContent = null;
+  }
+
+  /**
+   * 订阅 localPollingInterval 配置变化，并立即应用当前值。
+   */
+  private _subscribeToPollingIntervalChanges(): void {
+    if (this._pollingIntervalUnsub) return;
+
+    configService.getConfig().then((config) => {
+      const interval = config.localPollingInterval ?? 1000;
+      this.updatePollingInterval(interval);
+    });
+
+    let prevInterval: number | undefined;
+    this._pollingIntervalUnsub = configService.subscribe((config) => {
+      const interval = config.localPollingInterval ?? 1000;
+      if (interval !== prevInterval) {
+        prevInterval = interval;
+        this.updatePollingInterval(interval);
+      }
+    });
   }
 }
 

@@ -9,7 +9,7 @@ import type { ServerConfig } from '../../types/api';
 import type { ProfileChangedEvent } from 'signalr-client';
 import { getSignalRClient } from 'signalr-client';
 import { setTimer, clearTimer } from 'native-timer';
-import { createAPIClient } from '../../api/ClientFactory';
+import { getAPIClient } from '../ClientFactory';
 import { profileDtoToContent } from '../../utils/clipboard/dtoConvert';
 
 /** 远程剪贴板变化回调：仅在内容哈希变化时触发 */
@@ -132,7 +132,7 @@ class RemoteClipboardMonitor {
   private async _fetchAndNotify(): Promise<void> {
     if (!this._server) return;
     try {
-      const apiClient = createAPIClient(this._server);
+      const apiClient = await getAPIClient();
       const profile = await apiClient.getClipboard();
       if (!profile) return;
       const content: ClipboardContent = profileDtoToContent(profile);

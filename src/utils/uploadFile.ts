@@ -9,12 +9,11 @@ import { nativeCopyFile, type ProgressInfo } from 'native-util';
 import { calculateFileProfileHash, calculateTextHash } from '@/utils/hash';
 import { prepareTempFilePath } from '@/utils/fileStorage';
 import { useHistoryStore } from '@/stores/historyStore';
-import { createAPIClient } from '@/services';
+import { getAPIClient } from '@/services';
 import { SyncManager } from '@/services/sync/SyncManager';
 import type { ClipboardContent } from '@/types/clipboard';
 import { createHistoryItem, HistorySyncStatus } from '@/types/clipboard';
 import type { ClipboardContentType } from '@/types/api';
-import type { ServerConfig } from '@/types/api';
 
 function guessContentType(mimeType: string | null | undefined): ClipboardContentType {
   if (!mimeType) return 'File';
@@ -76,7 +75,6 @@ export async function importFileToHistory(
 
 export async function uploadTextAndAddToHistory(
   text: string,
-  activeServer: ServerConfig,
   options?: { signal?: AbortSignal }
 ): Promise<void> {
   const profileHash = await calculateTextHash(text, options?.signal);
@@ -93,7 +91,7 @@ export async function uploadTextAndAddToHistory(
     timestamp: Date.now(),
   };
 
-  const apiClient = createAPIClient(activeServer);
+  const apiClient = await getAPIClient();
   await apiClient.putContent(content, { signal: options?.signal });
 
   const historyItem = createHistoryItem({
@@ -112,7 +110,6 @@ export async function uploadFileAndAddToHistory(
   fileName: string,
   mimeType: string | null | undefined,
   fileSize: number | undefined,
-  activeServer: ServerConfig,
   options?: UploadFileOptions
 ): Promise<void> {
   const result = await importFileToHistory(sourceUri, fileName, mimeType, fileSize, options);
@@ -132,7 +129,7 @@ export async function uploadFileAndAddToHistory(
     timestamp: Date.now(),
   };
 
-  const apiClient = createAPIClient(activeServer);
+  const apiClient = await getAPIClient();
   options?.onProgress?.('正在上传文件…');
   await apiClient.putContent(content, {
     signal: options?.signal,

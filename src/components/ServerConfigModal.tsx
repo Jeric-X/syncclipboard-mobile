@@ -20,7 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { ServerConfig } from '@/types/api';
-import { createAPIClient } from '@/services';
+import { createClientFromConfig } from '@/services';
 
 interface ServerConfigModalProps {
   visible: boolean;
@@ -192,7 +192,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
       };
 
       console.log('[ServerConfigModal] Testing connection:', testConfig.url);
-      const client = createAPIClient(testConfig);
+      const client = createClientFromConfig(testConfig);
       await client.testConnection(testAbortControllerRef.current.signal);
       console.log('[ServerConfigModal] Test succeeded');
 
