@@ -1,5 +1,6 @@
 import type { ServerConfig } from '../types/api';
 import type { AppConfig } from '../types/storage';
+import { useSettingsStore } from '../stores/settingsStore';
 
 export interface ClipboardSyncSettingsSource {
   ensureLoaded(): Promise<void>;
@@ -11,8 +12,6 @@ export interface ClipboardSyncSettingsSource {
 }
 
 export function createSettingsStoreClipboardSyncSettingsSource(): ClipboardSyncSettingsSource {
-  const { useSettingsStore } = require('../stores/settingsStore');
-
   return {
     ensureLoaded: async () => {
       if (!useSettingsStore.getState().isLoaded) {

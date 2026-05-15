@@ -94,6 +94,11 @@ class ClipboardSyncService {
   }
 
   setSettingsSource(settingsSource: ClipboardSyncSettingsSource): void {
+    if (this._isStarted) {
+      throw new Error(
+        '[ClipboardSyncService] setSettingsSource must be called before start() to avoid inconsistent subscriptions'
+      );
+    }
     this.settingsSource = settingsSource;
   }
 
