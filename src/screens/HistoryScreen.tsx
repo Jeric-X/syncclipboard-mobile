@@ -784,7 +784,7 @@ export function HistoryScreen() {
 
       const queue = getHistoryTransferQueue();
       queue.start();
-      await queue.addDownloadTask(profileId, true);
+      await queue.addDownloadTask(profileId);
     },
     [ensureSyncServiceInitialized, showMessage]
   );
@@ -822,7 +822,7 @@ export function HistoryScreen() {
 
       const queue = getHistoryTransferQueue();
       queue.start();
-      await queue.addUploadTask(profileId, true);
+      await queue.addUploadTask(profileId);
     },
     [ensureSyncServiceInitialized, showMessage]
   );

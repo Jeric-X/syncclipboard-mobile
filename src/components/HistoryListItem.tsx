@@ -91,7 +91,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
           const pid = getProfileId(item.type, item.profileHash);
           const queue = getHistoryTransferQueue();
           queue.start();
-          await queue.addDownloadTask(pid, true);
+          await queue.addDownloadTask(pid);
         } catch {
           autoDownloadTriggered.current = false;
         }

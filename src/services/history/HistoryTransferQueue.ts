@@ -33,7 +33,6 @@ export interface TransferTask {
   completedTime?: number;
   errorMessage?: string;
   failureCount: number;
-  isImmediateTask: boolean;
   abortController: AbortController;
   userCancelled?: boolean;
   awaiter: Promise<ClipboardContent>;
@@ -159,12 +158,9 @@ export class HistoryTransferQueue {
   /**
    * 添加下载任务
    */
-  async addDownloadTask(profileId: string, isImmediate: boolean = false): Promise<TransferTask> {
+  async addDownloadTask(profileId: string): Promise<TransferTask> {
     const existingTask = this.findTask(profileId, 'download');
     if (existingTask) {
-      if (isImmediate && !existingTask.isImmediateTask) {
-        existingTask.isImmediateTask = true;
-      }
       return existingTask;
     }
 
@@ -190,7 +186,6 @@ export class HistoryTransferQueue {
       bytesTransferred: 0,
       createdTime: Date.now(),
       failureCount: 0,
-      isImmediateTask: isImmediate,
       abortController: new AbortController(),
       awaiter,
     };
@@ -207,12 +202,9 @@ export class HistoryTransferQueue {
   /**
    * 添加上传任务
    */
-  async addUploadTask(profileId: string, isImmediate: boolean = false): Promise<TransferTask> {
+  async addUploadTask(profileId: string): Promise<TransferTask> {
     const existingTask = this.findTask(profileId, 'upload');
     if (existingTask) {
-      if (isImmediate && !existingTask.isImmediateTask) {
-        existingTask.isImmediateTask = true;
-      }
       return existingTask;
     }
 
@@ -238,7 +230,6 @@ export class HistoryTransferQueue {
       bytesTransferred: 0,
       createdTime: Date.now(),
       failureCount: 0,
-      isImmediateTask: isImmediate,
       abortController: new AbortController(),
       awaiter,
     };
@@ -347,18 +338,12 @@ export class HistoryTransferQueue {
       this.pendingTasks.length > 0 &&
       this.activeTasks.size < this.config.maxConcurrency
     ) {
-      // 优先处理立即执行任务
-      const taskIndex = this.pendingTasks.findIndex((t) => t.isImmediateTask);
-      const index = taskIndex >= 0 ? taskIndex : 0;
-
-      const task = this.pendingTasks[index];
-      this.pendingTasks.splice(index, 1);
+      const task = this.pendingTasks.shift()!;
 
       if (task.status === 'cancelled' || task.userCancelled) {
         continue;
       }
 
-      // 添加到活动任务
       const key = this.getTaskKey(task.profileId, task.type);
       this.activeTasks.set(key, task);
 
@@ -455,7 +440,6 @@ export class HistoryTransferQueue {
     console.log(`[HistoryTransferQueue] ========== Execute Download Task ==========`);
     console.log(`[HistoryTransferQueue] ProfileId: ${task.profileId}`);
     console.log(`[HistoryTransferQueue] Task created: ${new Date(task.createdTime).toISOString()}`);
-    console.log(`[HistoryTransferQueue] Is immediate: ${task.isImmediateTask}`);
 
     const { parseProfileId } = await import('@/utils');
     const parsed = parseProfileId(task.profileId);

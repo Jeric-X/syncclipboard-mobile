@@ -789,7 +789,7 @@ class ClipboardSyncService {
       console.error('[ClipboardSyncService] Failed to add history item before download:', e);
     }
 
-    return await queue.addDownloadTask(profileId, true);
+    return await queue.addDownloadTask(profileId);
   }
 }
 
