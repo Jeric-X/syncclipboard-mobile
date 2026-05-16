@@ -10,7 +10,7 @@ import type { ProfileChangedEvent } from 'signalr-client';
 import { getSignalRClient } from 'signalr-client';
 import { setTimer, clearTimer } from 'native-timer';
 import { getAPIClient } from '../ClientFactory';
-import { profileDtoToContent } from '../../utils/clipboard/dtoConvert';
+import { profileDtoToContent } from '../../utils/clipboard/convert';
 import { clipboardSyncState } from './SyncState';
 
 /** 远程剪贴板变化回调：仅在内容哈希变化时触发 */

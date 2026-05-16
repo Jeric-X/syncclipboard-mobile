@@ -1,6 +1,6 @@
 /**
- * DTO Conversion Utilities
- * DTO 转换工具函数
+ * Conversion Utilities
+ * 转换工具函数
  */
 
 import { HistoryRecordDto } from '@/types/history';
@@ -191,6 +191,18 @@ export function clipboardContentToItem(
     fileUri: content.fileUri,
     ...overrides,
   });
+}
+
+export function historyItemToContent(item: HistoryItem): ClipboardContent {
+  return {
+    type: item.type,
+    text: item.text,
+    fileUri: item.fileUri,
+    fileName: item.dataName,
+    fileSize: item.size,
+    profileHash: item.profileHash,
+    hasData: item.hasData,
+  };
 }
 
 // ─── HistoryRecordDto ↔ ClipboardItem ────────────────────────────────────────

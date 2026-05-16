@@ -14,8 +14,6 @@ export enum SyncDirection {
   Upload = 'upload',
   /** 下载 */
   Download = 'download',
-  /** 双向同步 */
-  Both = 'both',
 }
 
 /**

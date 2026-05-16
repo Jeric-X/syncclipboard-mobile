@@ -118,7 +118,7 @@ export class SyncManager {
    * 手动同步
    */
   public async sync(
-    direction: SyncDirection = SyncDirection.Both,
+    direction: SyncDirection,
     isAuto: boolean = false,
     signal?: AbortSignal,
     onProgress?: (info: ProgressInfo) => void,
@@ -176,16 +176,6 @@ export class SyncManager {
             break;
           case SyncDirection.Download:
             result = await this.download(isAuto, mergedSignal, onProgress, onPreview);
-            break;
-          case SyncDirection.Both:
-            // 先下载后上传，避免覆盖远程内容
-            const downloadResult = await this.download(isAuto, mergedSignal, onProgress, onPreview);
-            if (downloadResult.success || downloadResult.skipped) {
-              const uploadResult = await this.upload(isAuto, mergedSignal, onProgress, onPreview);
-              result = uploadResult;
-            } else {
-              result = downloadResult;
-            }
             break;
         }
 
@@ -325,7 +315,7 @@ export class SyncManager {
       }
 
       // 转换为 ProfileDto
-      const { contentToProfileDto } = await import('../../utils/clipboard/dtoConvert');
+      const { contentToProfileDto } = await import('../../utils/clipboard/convert');
       const profile = await contentToProfileDto(localContent);
 
       console.log('[SyncManager] Upload - Profile info:', {
@@ -475,7 +465,7 @@ export class SyncManager {
       }
 
       // 转换为 ClipboardContent
-      const { profileDtoToContent } = await import('../../utils/clipboard/dtoConvert');
+      const { profileDtoToContent } = await import('../../utils/clipboard/convert');
       const content = profileDtoToContent(profile);
 
       // 如果有文件数据，优先从历史记录读取缓存，否则下载并保存到历史记录

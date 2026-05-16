@@ -6,8 +6,9 @@
 import type { IHistoryAPI } from '@/api/history';
 import { RecordNotFoundError } from '@/errors';
 import { HistoryStorage } from '../../storage/HistoryStorage';
-import { HistorySyncStatus } from '@/types/clipboard';
+import { HistorySyncStatus, type ClipboardContent } from '@/types/clipboard';
 import { getHistoryFileDir } from '@/utils/fileStorage';
+import { historyItemToContent } from '@/utils/clipboard/convert';
 import { File } from 'expo-file-system';
 
 export type TransferType = 'upload' | 'download';
@@ -35,6 +36,7 @@ export interface TransferTask {
   isImmediateTask: boolean;
   abortController: AbortController;
   userCancelled?: boolean;
+  awaiter: Promise<ClipboardContent>;
 }
 
 export interface TransferQueueConfig {
@@ -60,6 +62,10 @@ export class HistoryTransferQueue {
   private pendingTasks: TransferTask[] = [];
   private activeTasks: Map<string, TransferTask> = new Map();
   private taskStatusCallbacks: Set<TaskStatusChangedCallback> = new Set();
+  private taskCompletionResolvers: Map<
+    string,
+    { resolve: (content: ClipboardContent) => void; reject: (error: Error) => void }
+  > = new Map();
 
   private config: TransferQueueConfig;
   private isRunning = false;
@@ -167,6 +173,14 @@ export class HistoryTransferQueue {
     const item = parsed ? await this.historyStorage.getItem(parsed.hash) : null;
     const displayName = item?.text || profileId;
 
+    const key = this.getTaskKey(profileId, 'download');
+    let resolveAwaiter: (content: ClipboardContent) => void;
+    let rejectAwaiter: (error: Error) => void;
+    const awaiter = new Promise<ClipboardContent>((resolve, reject) => {
+      resolveAwaiter = resolve;
+      rejectAwaiter = reject;
+    });
+
     const task: TransferTask = {
       profileId,
       displayName,
@@ -178,8 +192,10 @@ export class HistoryTransferQueue {
       failureCount: 0,
       isImmediateTask: isImmediate,
       abortController: new AbortController(),
+      awaiter,
     };
 
+    this.taskCompletionResolvers.set(key, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
     this.pendingTasks.push(task);
     this.notifyStatusChanged(task);
     this.signalQueue();
@@ -205,6 +221,14 @@ export class HistoryTransferQueue {
     const item = parsed ? await this.historyStorage.getItem(parsed.hash) : null;
     const displayName = item?.text || profileId;
 
+    const key = this.getTaskKey(profileId, 'upload');
+    let resolveAwaiter: (content: ClipboardContent) => void;
+    let rejectAwaiter: (error: Error) => void;
+    const awaiter = new Promise<ClipboardContent>((resolve, reject) => {
+      resolveAwaiter = resolve;
+      rejectAwaiter = reject;
+    });
+
     const task: TransferTask = {
       profileId,
       displayName,
@@ -216,8 +240,10 @@ export class HistoryTransferQueue {
       failureCount: 0,
       isImmediateTask: isImmediate,
       abortController: new AbortController(),
+      awaiter,
     };
 
+    this.taskCompletionResolvers.set(key, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
     this.pendingTasks.push(task);
     this.notifyStatusChanged(task);
     this.signalQueue();
@@ -345,7 +371,6 @@ export class HistoryTransferQueue {
    * 执行任务
    */
   private async executeTask(task: TransferTask): Promise<void> {
-    // 用户取消的任务不执行
     if (task.userCancelled || task.status === 'cancelled') {
       console.log(`[HistoryTransferQueue] Task was cancelled, skipping: ${task.profileId}`);
       return;
@@ -355,11 +380,13 @@ export class HistoryTransferQueue {
     task.startedTime = Date.now();
     this.notifyStatusChanged(task);
 
+    let resultContent: ClipboardContent | undefined;
+
     try {
       if (task.type === 'download') {
-        await this.executeDownloadTask(task);
+        resultContent = await this.executeDownloadTask(task);
       } else {
-        await this.executeUploadTask(task);
+        resultContent = await this.executeUploadTask(task);
       }
 
       task.status = 'completed';
@@ -383,7 +410,6 @@ export class HistoryTransferQueue {
           error
         );
 
-        // 检查是否需要重试
         if (
           task.failureCount < this.config.maxConsecutiveFailures &&
           this.consecutiveFailures < this.config.maxConsecutiveFailures
@@ -403,13 +429,25 @@ export class HistoryTransferQueue {
       this.notifyStatusChanged(task);
       const key = this.getTaskKey(task.profileId, task.type);
       this.activeTasks.delete(key);
+
+      const resolver = this.taskCompletionResolvers.get(key);
+      if (resolver) {
+        this.taskCompletionResolvers.delete(key);
+        if (task.status === 'completed' && resultContent) {
+          resolver.resolve(resultContent);
+        } else if (task.status === 'failed') {
+          resolver.reject(new Error(task.errorMessage || 'Task failed'));
+        } else {
+          resolver.reject(new Error(`Task ${task.status}`));
+        }
+      }
     }
   }
 
   /**
    * 执行下载任务
    */
-  private async executeDownloadTask(task: TransferTask): Promise<void> {
+  private async executeDownloadTask(task: TransferTask): Promise<ClipboardContent> {
     if (!this.historyAPI) {
       throw new Error('History API not initialized');
     }
@@ -472,11 +510,14 @@ export class HistoryTransferQueue {
     await this.historyStorage.updateItem(parsed.hash, {
       fileUri: destinationUri,
       isLocalFileReady: true,
-      // dataName: item.dataName,
-      // text: item.text,
     });
 
     console.log(`[HistoryTransferQueue] Download task completed: ${task.profileId}`);
+
+    return {
+      ...historyItemToContent(item),
+      fileUri: destinationUri,
+    };
   }
 
   /**
@@ -486,7 +527,7 @@ export class HistoryTransferQueue {
    * 2. 如果存在，直接标记为已同步
    * 3. 如果不存在，执行上传
    */
-  private async executeUploadTask(task: TransferTask): Promise<void> {
+  private async executeUploadTask(task: TransferTask): Promise<ClipboardContent> {
     if (!this.historyAPI) {
       throw new Error('History API not initialized');
     }
@@ -525,7 +566,7 @@ export class HistoryTransferQueue {
         console.log(
           `[HistoryTransferQueue] Record already exists on server: ${task.profileId}, marked as synced`
         );
-        return;
+        return historyItemToContent(item);
       }
     } catch (error) {
       // 如果是 404 错误，继续执行上传
@@ -543,7 +584,7 @@ export class HistoryTransferQueue {
       throw new Error(`No file to upload: ${task.profileId}`);
     }
 
-    const { historyItemToDto } = await import('@/utils/clipboard/dtoConvert');
+    const { historyItemToDto } = await import('@/utils/clipboard/convert');
     const dto = historyItemToDto(item);
 
     await this.historyAPI.uploadRecord(dto, item.fileUri, task.abortController.signal, (info) => {
@@ -558,6 +599,8 @@ export class HistoryTransferQueue {
     });
 
     await this.historyStorage.updateSyncStatus(parsed.hash, HistorySyncStatus.Synced);
+
+    return historyItemToContent(item);
   }
 
   /**

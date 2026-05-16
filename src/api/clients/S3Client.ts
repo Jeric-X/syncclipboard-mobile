@@ -218,7 +218,7 @@ export class S3Client implements ISyncClipboardAPI {
         fileName: content.fileName,
       });
 
-      const { contentToProfileDto } = await import('@/utils/clipboard/dtoConvert');
+      const { contentToProfileDto } = await import('@/utils/clipboard/convert');
       const profile = await contentToProfileDto(content, { signal: options?.signal });
 
       // 确保 file/ 目录标记存在

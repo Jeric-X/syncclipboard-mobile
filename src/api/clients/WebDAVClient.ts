@@ -323,7 +323,7 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
         fileName: content.fileName,
       });
 
-      const { contentToProfileDto } = await import('@/utils/clipboard/dtoConvert');
+      const { contentToProfileDto } = await import('@/utils/clipboard/convert');
       const profile = await contentToProfileDto(content, { signal: options?.signal });
 
       if (profile.hasData && profile.dataName && content.fileUri) {

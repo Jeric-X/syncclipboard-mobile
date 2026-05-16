@@ -14,6 +14,6 @@ export {
   getClipboardTypeIcon,
   validateClipboardContent,
   clipboardContentToItem,
-} from './dtoConvert';
-export type { ContentToProfileDtoOptions } from './dtoConvert';
+} from './convert';
+export type { ContentToProfileDtoOptions } from './convert';
 export { getProfileId, parseProfileId } from './profileId';

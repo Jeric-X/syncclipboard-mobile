@@ -6,7 +6,7 @@
 import type { ClipboardContent } from '@/types/clipboard';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import { loadLastTrackedHash, saveLastTrackedHash } from './lastTrackedHashStorage';
-import { clipboardContentToItem } from '../../utils/clipboard/dtoConvert';
+import { clipboardContentToItem } from '../../utils/clipboard/convert';
 import { historyService } from './HistoryService';
 
 export class HistoryTracker {

@@ -1,4 +1,4 @@
-/**
+﻿﻿/**
  * ClipboardSyncService
  * 管理远程剪贴板同步（前台显示 + 后台同步）。
  *
@@ -21,10 +21,10 @@ import {
   HistoryItem,
   HistorySyncStatus,
 } from '../../types/clipboard';
-import { clipboardContentToItem } from '@/utils/clipboard/dtoConvert';
+import { clipboardContentToItem } from '@/utils/clipboard/convert';
 import { SyncDirection, SyncResult } from '../../types/sync';
 import type { ServerConfig } from '../../types/api';
-import type { ISyncClipboardAPI } from '../../api/clients/APIClient';
+import type { AppConfig } from '../../types/storage';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import type { ClipboardSyncState, ClipboardSyncStateListener } from './SyncState';
 import { clipboardSyncState } from './SyncState';
@@ -35,7 +35,7 @@ import { getAPIClient } from '../ClientFactory';
 import { SyncManager } from './SyncManager';
 import { historyService } from '../history/HistoryService';
 import { getProfileId } from '@/utils';
-import { getHistoryTransferQueue } from '../history/HistoryTransferQueue';
+import { getHistoryTransferQueue, type TransferTask } from '../history/HistoryTransferQueue';
 import { getHistoryFileUri } from '../../utils/fileStorage';
 
 class ClipboardSyncService {
@@ -64,12 +64,10 @@ class ClipboardSyncService {
     try {
       if (!this.activeServer) return;
       const currentHash = content.profileHash || content.text || '';
-      const apiClient = await getAPIClient();
       await this._processRemoteClipboardContent(
         content,
         currentHash,
         content.hasData ?? false,
-        apiClient,
         'Remote: '
       );
     } catch (e) {
@@ -351,160 +349,111 @@ class ClipboardSyncService {
     content: ClipboardContent,
     currentHash: string,
     hasData: boolean,
-    apiClient: ISyncClipboardAPI,
     logPrefix: string = ''
   ): Promise<void> {
     const config = await configService.getConfig();
-    const previousHash = this.lastRemoteProfileHash;
-
-    if (previousHash === currentHash) {
-      if (hasData && content.profileHash && content.fileName) {
-        try {
-          const { getHistoryFileUri } = await import('../../utils/fileStorage');
-          const fileUri = await getHistoryFileUri(
-            content.type,
-            content.profileHash,
-            content.fileName
-          );
-          if (fileUri) {
-            const prev = clipboardSyncState.getState().remoteContent;
-            if (prev?.fileUri !== fileUri) {
-              clipboardSyncState.setRemoteContent(
-                prev ? { ...prev, fileUri } : { ...content, fileUri }
-              );
-            }
-          }
-        } catch {}
-      }
-      return;
-    }
-
-    const lastUploadedHash = SyncManager.getInstance().getLastUploadedHash();
-    const { compareHash } = await import('../../utils/hash');
-    const isJustUploaded = !!(lastUploadedHash && compareHash(currentHash, lastUploadedHash));
-
-    let finalContent = content;
-    let foundInHistory = false;
-
-    if (hasData && content.profileHash) {
-      try {
-        const historyItem = await historyService.getItem(content.profileHash);
-        if (historyItem && content.fileName) {
-          const { getHistoryFileUri } = await import('../../utils/fileStorage');
-          const fileUri = await getHistoryFileUri(
-            content.type,
-            content.profileHash,
-            content.fileName
-          );
-          if (fileUri) {
-            finalContent = { ...content, fileUri };
-            foundInHistory = true;
-          }
-        }
-      } catch {}
-    }
-
-    if (isJustUploaded) {
-      console.log(
-        `[ClipboardSyncService] ${logPrefix}Remote hash matches last uploaded hash, skipping auto-download/copy`
-      );
-      this.lastRemoteProfileHash = currentHash;
-      clipboardSyncState.setRemoteContent(finalContent);
-      return;
-    }
-
+    const isFirstLoad = this.lastRemoteProfileHash === null;
     this.lastRemoteProfileHash = currentHash;
 
-    let skipAutoCopyDueToLargeFile = false;
+    let fileUri: string | undefined;
 
-    if (foundInHistory) {
+    if (content.profileHash) {
+      const addedItem = await historyService.addRemoteContent(content);
+      fileUri = addedItem.fileUri;
+    }
+
+    if (fileUri && !content.fileUri) {
+      console.log(`[ClipboardSyncService] ${logPrefix}Found existing file in history`);
+      content.fileUri = fileUri;
+      clipboardSyncState.setRemoteContent(content);
+    } else if (hasData && content.fileName && content.fileSize !== undefined) {
+      const downloadedContent = await this._tryAutoDownload(content, config, logPrefix);
+      if (!downloadedContent) {
+        return;
+      }
+      content = downloadedContent;
+    }
+
+    if (isFirstLoad) return;
+
+    await this._tryAutoCopyToClipboard(content, config, logPrefix);
+  }
+
+  private async _tryAutoDownload(
+    content: ClipboardContent,
+    config: AppConfig,
+    logPrefix: string
+  ): Promise<ClipboardContent | null> {
+    const autoDownloadMaxSize = config?.autoDownloadMaxSize ?? 5 * 1024 * 1024;
+
+    if (content.fileSize! > autoDownloadMaxSize) {
       console.log(
-        `[ClipboardSyncService] ${logPrefix}Found existing file in history, skipping download`
+        `[ClipboardSyncService] ${logPrefix}File too large (${content.fileSize} > ${autoDownloadMaxSize}), skipping auto-download`
       );
+      return null;
     }
 
-    if (!foundInHistory) {
-      const autoDownloadMaxSize = config?.autoDownloadMaxSize ?? 5 * 1024 * 1024;
-      const hasFileData = hasData && content.fileName && content.fileSize !== undefined;
-
-      if (hasFileData) {
-        const fileTooLarge = content.fileSize! > autoDownloadMaxSize;
-        if (fileTooLarge) {
-          skipAutoCopyDueToLargeFile = true;
-          console.log(
-            `[ClipboardSyncService] ${logPrefix}File too large (${content.fileSize} > ${autoDownloadMaxSize}), skipping auto-download`
-          );
-        } else {
-          try {
-            const { downloadAndAddToHistory } = await import('../../utils/remoteClipboard');
-            finalContent = await downloadAndAddToHistory(content, apiClient, hasData);
-            console.log(`[ClipboardSyncService] ${logPrefix}Auto-download completed`);
-          } catch (downloadError) {
-            console.error(
-              `[ClipboardSyncService] ${logPrefix}Auto-download failed:`,
-              downloadError
-            );
-            skipAutoCopyDueToLargeFile = true;
-          }
-        }
+    try {
+      let result: ClipboardContent;
+      if (this.activeServer?.type !== 'syncclipboard') {
+        result = await this._downloadForWebDAV(content);
+      } else {
+        const task = await this._downloadForSyncClipboard(content);
+        result = await task.awaiter;
       }
+      console.log(`[ClipboardSyncService] ${logPrefix}Auto-download completed`);
+      return result;
+    } catch (downloadError) {
+      console.error(`[ClipboardSyncService] ${logPrefix}Auto-download failed:`, downloadError);
+      return null;
+    }
+  }
+
+  private async _tryAutoCopyToClipboard(
+    content: ClipboardContent,
+    config: AppConfig,
+    logPrefix: string
+  ): Promise<void> {
+    if (content.type !== 'Text') return;
+
+    const autoSyncEnabled = config?.autoSync ?? false;
+    const bgDownloadEnabled = !!(config?.enableBackgroundTasks && config?.enableBackgroundDownload);
+    const shouldAutoCopy = autoSyncEnabled || (!this.isAppActive && bgDownloadEnabled);
+
+    if (!shouldAutoCopy) return;
+
+    const remoteHash = content.profileHash || content.text || '';
+    const localMatchesRemote = remoteHash === this.lastLocalProfileHash;
+
+    if (localMatchesRemote || !this.activeServer || this.isAutoSyncing) return;
+
+    if (!content.text && !content.fileUri) {
+      console.log(`[ClipboardSyncService] ${logPrefix}No text content available for auto-copy`);
+      return;
     }
 
-    clipboardSyncState.setRemoteContent(finalContent);
-
-    const isFirstLoad = previousHash === null;
-    if (!isFirstLoad) {
-      if (!hasData) {
-        try {
-          const historyItem = clipboardContentToItem(finalContent, {
-            hasData: false,
-            syncStatus: HistorySyncStatus.Synced,
-          });
-          await historyService.addItem(historyItem);
-          console.log(
-            `[ClipboardSyncService] ${logPrefix}Added remote clipboard (no file) to history`
-          );
-        } catch (error) {
-          console.error(`[ClipboardSyncService] ${logPrefix}Failed to add to history:`, error);
+    this.isAutoSyncing = true;
+    try {
+      const result = await this._copyToLocalClipboard(content, logPrefix);
+      if (result.success && Platform.OS === 'android') {
+        const preview = this._getContentPreview(content);
+        SyncManager.getInstance().updateForegroundNotification(`已下载: ${preview}`);
+        if (config?.syncToastEnabled !== false) {
+          ToastAndroid.show(`已下载\n${preview}`, ToastAndroid.SHORT);
         }
       }
-
-      const autoSyncEnabled = config?.autoSync ?? false;
-      const bgDownloadEnabled = !!(
-        config?.enableBackgroundTasks && config?.enableBackgroundDownload
-      );
-      const shouldAutoCopy = autoSyncEnabled || (!this.isAppActive && bgDownloadEnabled);
-      const remoteHash = finalContent.profileHash || finalContent.text || '';
-      const localMatchesRemote = remoteHash === this.lastLocalProfileHash;
-
-      if (
-        !localMatchesRemote &&
-        shouldAutoCopy &&
-        this.activeServer &&
-        !this.isAutoSyncing &&
-        !skipAutoCopyDueToLargeFile &&
-        finalContent.type === 'Text'
-      ) {
-        this.isAutoSyncing = true;
-        try {
-          const result = await this._copyToLocalClipboard(finalContent, logPrefix);
-          if (result.success && Platform.OS === 'android') {
-            const preview =
-              finalContent.type === 'Text' && finalContent.text
-                ? finalContent.text.trim().replace(/\s+/g, ' ').slice(0, 30)
-                : finalContent.fileName || finalContent.type;
-            SyncManager.getInstance().updateForegroundNotification(`已下载: ${preview}`);
-            if (config?.syncToastEnabled !== false) {
-              ToastAndroid.show(`已下载\n${preview}`, ToastAndroid.SHORT);
-            }
-          }
-        } catch (error) {
-          console.error(`[ClipboardSyncService] ${logPrefix}Auto-copy failed:`, error);
-        } finally {
-          this.isAutoSyncing = false;
-        }
-      }
+    } catch (error) {
+      console.error(`[ClipboardSyncService] ${logPrefix}Auto-copy failed:`, error);
+    } finally {
+      this.isAutoSyncing = false;
     }
+  }
+
+  private _getContentPreview(content: ClipboardContent): string {
+    if (content.type === 'Text' && content.text) {
+      return content.text.trim().replace(/\s+/g, ' ').slice(0, 30);
+    }
+    return content.fileName || content.type;
   }
 
   /**
@@ -778,7 +727,7 @@ class ClipboardSyncService {
   /** WebDAV/S3 直接下载，进度通过 store 更新 */
   private async _downloadForWebDAV(
     remoteContent: import('../../types/clipboard').ClipboardContent
-  ): Promise<void> {
+  ): Promise<import('../../types/clipboard').ClipboardContent> {
     clipboardSyncState.setState({ downloadingRemote: true, downloadProgress: null });
 
     const abortController = new AbortController();
@@ -804,13 +753,12 @@ class ClipboardSyncService {
         }
       );
       clipboardSyncState.setState({ remoteContent: updatedContent });
-      return;
+      return updatedContent;
     } catch (error) {
       const err = error as Error;
       const msg = err?.message?.toLowerCase() ?? '';
       if (err?.name === 'AbortError' || msg.includes('abort') || msg.includes('cancel')) {
-        // 取消不再向上抛出，由 UI 层通过 store 感知（downloadingRemote = false）
-        return;
+        return remoteContent;
       }
       throw error;
     } finally {
@@ -822,8 +770,10 @@ class ClipboardSyncService {
   /** SyncClipboard 服务器：加入下载队列 */
   private async _downloadForSyncClipboard(
     remoteContent: import('../../types/clipboard').ClipboardContent
-  ): Promise<void> {
-    if (!remoteContent.profileHash) return;
+  ): Promise<TransferTask> {
+    if (!remoteContent.profileHash) {
+      throw new Error('No profileHash in remoteContent');
+    }
 
     const profileId = getProfileId(remoteContent.type, remoteContent.profileHash);
     const queue = getHistoryTransferQueue();
@@ -839,7 +789,7 @@ class ClipboardSyncService {
       console.error('[ClipboardSyncService] Failed to add history item before download:', e);
     }
 
-    await queue.addDownloadTask(profileId, true);
+    return await queue.addDownloadTask(profileId, true);
   }
 }
 

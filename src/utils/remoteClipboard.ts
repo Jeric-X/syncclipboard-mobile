@@ -4,7 +4,7 @@
  */
 
 import { ClipboardContent, HistorySyncStatus } from '../types/clipboard';
-import { clipboardContentToItem } from './clipboard/dtoConvert';
+import { clipboardContentToItem } from './clipboard/convert';
 import { ISyncClipboardAPI, type DownloadProgressCallback } from '../api/clients/APIClient';
 import { historyStorage } from '../storage/HistoryStorage';
 import { useHistoryStore } from '../stores/historyStore';

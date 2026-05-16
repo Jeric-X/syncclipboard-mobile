@@ -4,9 +4,11 @@
  * 同时承担发布订阅职责：管理所有变更回调，HistoryStorage 不再直接维护订阅者列表。
  */
 
-import type { HistoryItem } from '@/types/clipboard';
+import type { HistoryItem, ClipboardContent } from '@/types/clipboard';
 import type { HistoryFilter, HistorySort } from '@/types/storage';
 import type { HistoryChangeCallback } from '@/storage/HistoryStorage';
+import { HistorySyncStatus } from '@/types/clipboard';
+import { clipboardContentToItem } from '@/utils/clipboard/convert';
 import { historyStorage } from '@/storage';
 
 /**
@@ -46,6 +48,21 @@ export class HistoryService {
 
   addItem(item: HistoryItem): Promise<HistoryItem> {
     return historyStorage.addItem(item);
+  }
+
+  addRemoteContent(content: ClipboardContent): Promise<HistoryItem> {
+    const hasData = content.hasData ?? false;
+    const fileUri = content.fileUri;
+
+    const historyItem = clipboardContentToItem(content, {
+      hasData,
+      hasRemoteData: hasData,
+      fileUri,
+      syncStatus: HistorySyncStatus.Synced,
+      isLocalFileReady: !hasData || !!fileUri,
+    });
+
+    return historyStorage.addItem(historyItem);
   }
 
   addItems(items: HistoryItem[]): Promise<void> {
