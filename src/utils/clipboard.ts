@@ -26,6 +26,7 @@ export async function copyClipboardItem(
     text?: string;
     fileUri?: string;
     profileHash?: string;
+    hasData: boolean;
   },
   clipboardManager: {
     setClipboardContent: (content: ClipboardContent) => Promise<void>;
@@ -38,6 +39,7 @@ export async function copyClipboardItem(
         type: 'Text',
         text: item.text,
         profileHash: item.profileHash,
+        hasData: item.hasData,
       });
       return { success: true, message: '已复制到剪贴板' };
     }

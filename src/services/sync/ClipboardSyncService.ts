@@ -1,4 +1,4 @@
-﻿﻿/**
+﻿/**
  * ClipboardSyncService
  * 管理远程剪贴板同步（前台显示 + 后台同步）。
  *
@@ -15,13 +15,7 @@
  */
 
 import { Platform, ToastAndroid, AppState } from 'react-native';
-import {
-  ClipboardContent,
-  ClipboardChangeCallback,
-  HistoryItem,
-  HistorySyncStatus,
-} from '../../types/clipboard';
-import { clipboardContentToItem } from '@/utils/clipboard/convert';
+import { ClipboardContent, ClipboardChangeCallback, HistoryItem } from '../../types/clipboard';
 import { SyncDirection, SyncResult } from '../../types/sync';
 import type { ServerConfig } from '../../types/api';
 import type { AppConfig } from '../../types/storage';
@@ -31,12 +25,13 @@ import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
 import { remoteClipboardMonitor } from './RemoteClipboardMonitor';
 import type { RemoteClipboardChangedCallback } from './RemoteClipboardMonitor';
-import { getAPIClient } from '../ClientFactory';
 import { SyncManager } from './SyncManager';
 import { historyService } from '../history/HistoryService';
-import { getProfileId } from '@/utils';
-import { getHistoryTransferQueue, type TransferTask } from '../history/HistoryTransferQueue';
 import { getHistoryFileUri } from '../../utils/fileStorage';
+import { calculateTextHash } from '../../utils/hash';
+import { getClientService } from '../client/ClientService';
+import { getHistoryTransferQueue } from '../history/HistoryTransferQueue';
+import { getProfileId } from '@/utils';
 
 class ClipboardSyncService {
   private static instance: ClipboardSyncService | null = null;
@@ -54,22 +49,15 @@ class ClipboardSyncService {
     | null = null;
   /** App 是否在前台（影响自动复制策略） */
   private isAppActive = true;
-  /** 当前正在进行的远程文件下载 AbortController */
-  private _downloadAbortController: AbortController | null = null;
   /** 当前正在进行的剪贴板上传 AbortController */
   private _uploadAbortController: AbortController | null = null;
+  /** 当前正在进行的剪贴板下载 AbortController */
+  private _downloadAbortController: AbortController | null = null;
 
   /** 远程剪贴板内容变化回调：监听器已完成内容获取和哈希去重 */
   private readonly _remoteChangeCallback: RemoteClipboardChangedCallback = async (content) => {
     try {
-      if (!this.activeServer) return;
-      const currentHash = content.profileHash || content.text || '';
-      await this._processRemoteClipboardContent(
-        content,
-        currentHash,
-        content.hasData ?? false,
-        'Remote: '
-      );
+      await this._processRemoteClipboardContent(content);
     } catch (e) {
       console.error('[ClipboardSyncService] Remote change callback error:', e);
     }
@@ -345,12 +333,12 @@ class ClipboardSyncService {
     await remoteClipboardMonitor.disconnect();
   }
 
-  private async _processRemoteClipboardContent(
-    content: ClipboardContent,
-    currentHash: string,
-    hasData: boolean,
-    logPrefix: string = ''
-  ): Promise<void> {
+  private async _processRemoteClipboardContent(content: ClipboardContent): Promise<void> {
+    if (!content.hasData && content.type === 'Text' && !content.profileHash && content.text) {
+      content.profileHash = await calculateTextHash(content.text);
+    }
+
+    const currentHash = content.profileHash || content.text;
     const config = await configService.getConfig();
     const isFirstLoad = this.lastRemoteProfileHash === null;
     this.lastRemoteProfileHash = currentHash;
@@ -363,11 +351,11 @@ class ClipboardSyncService {
     }
 
     if (fileUri && !content.fileUri) {
-      console.log(`[ClipboardSyncService] ${logPrefix}Found existing file in history`);
+      console.log('[ClipboardSyncService] Found existing file in history');
       content.fileUri = fileUri;
       clipboardSyncState.setRemoteContent(content);
-    } else if (hasData && content.fileName && content.fileSize !== undefined) {
-      const downloadedContent = await this._tryAutoDownload(content, config, logPrefix);
+    } else if (content.hasData && content.fileName && content.fileSize !== undefined) {
+      const downloadedContent = await this._tryAutoDownload(content, config);
       if (!downloadedContent) {
         return;
       }
@@ -376,43 +364,36 @@ class ClipboardSyncService {
 
     if (isFirstLoad) return;
 
-    await this._tryAutoCopyToClipboard(content, config, logPrefix);
+    await this._tryAutoCopyToClipboard(content, config);
   }
 
   private async _tryAutoDownload(
     content: ClipboardContent,
-    config: AppConfig,
-    logPrefix: string
+    config: AppConfig
   ): Promise<ClipboardContent | null> {
     const autoDownloadMaxSize = config?.autoDownloadMaxSize ?? 5 * 1024 * 1024;
 
     if (content.fileSize! > autoDownloadMaxSize) {
       console.log(
-        `[ClipboardSyncService] ${logPrefix}File too large (${content.fileSize} > ${autoDownloadMaxSize}), skipping auto-download`
+        `[ClipboardSyncService] File too large (${content.fileSize} > ${autoDownloadMaxSize}), skipping auto-download`
       );
       return null;
     }
 
-    try {
-      let result: ClipboardContent;
-      if (this.activeServer?.type !== 'syncclipboard') {
-        result = await this._downloadForWebDAV(content);
-      } else {
-        const task = await this._downloadForSyncClipboard(content);
-        result = await task.awaiter;
-      }
-      console.log(`[ClipboardSyncService] ${logPrefix}Auto-download completed`);
-      return result;
-    } catch (downloadError) {
-      console.error(`[ClipboardSyncService] ${logPrefix}Auto-download failed:`, downloadError);
-      return null;
+    const result = await this.downloadRemoteFile(content);
+
+    if (result) {
+      console.log('[ClipboardSyncService] Auto-download completed');
+    } else {
+      console.error('[ClipboardSyncService] Auto-download failed');
     }
+
+    return result;
   }
 
   private async _tryAutoCopyToClipboard(
     content: ClipboardContent,
-    config: AppConfig,
-    logPrefix: string
+    config: AppConfig
   ): Promise<void> {
     if (content.type !== 'Text') return;
 
@@ -422,19 +403,19 @@ class ClipboardSyncService {
 
     if (!shouldAutoCopy) return;
 
-    const remoteHash = content.profileHash || content.text || '';
+    const remoteHash = content.profileHash || content.text;
     const localMatchesRemote = remoteHash === this.lastLocalProfileHash;
 
     if (localMatchesRemote || !this.activeServer || this.isAutoSyncing) return;
 
     if (!content.text && !content.fileUri) {
-      console.log(`[ClipboardSyncService] ${logPrefix}No text content available for auto-copy`);
+      console.log('[ClipboardSyncService] No text content available for auto-copy');
       return;
     }
 
     this.isAutoSyncing = true;
     try {
-      const result = await this._copyToLocalClipboard(content, logPrefix);
+      const result = await this._copyToLocalClipboard(content);
       if (result.success && Platform.OS === 'android') {
         const preview = this._getContentPreview(content);
         SyncManager.getInstance().updateForegroundNotification(`已下载: ${preview}`);
@@ -443,7 +424,7 @@ class ClipboardSyncService {
         }
       }
     } catch (error) {
-      console.error(`[ClipboardSyncService] ${logPrefix}Auto-copy failed:`, error);
+      console.error('[ClipboardSyncService] Auto-copy failed:', error);
     } finally {
       this.isAutoSyncing = false;
     }
@@ -460,16 +441,16 @@ class ClipboardSyncService {
    * 将内容复制到本地剪贴板，并记录哈希以防止重复自动复制。
    */
   private async _copyToLocalClipboard(
-    content: ClipboardContent,
-    logPrefix: string = ''
+    content: ClipboardContent
   ): Promise<{ success: boolean; message?: string }> {
     const { copyToLocalClipboard } = await import('../../utils/clipboard');
     const result = await copyToLocalClipboard(content);
+
     if (result.success) {
-      this.lastLocalProfileHash = content.profileHash || content.text || '';
-      console.log(`[ClipboardSyncService] ${logPrefix}Copied to local clipboard`);
+      this.lastLocalProfileHash = content.profileHash || content.text;
+      console.log('[ClipboardSyncService] Copied to local clipboard');
     } else {
-      console.error(`[ClipboardSyncService] ${logPrefix}Copy failed: ${result.message}`);
+      console.error(`[ClipboardSyncService] Copy failed: ${result.message}`);
     }
     return result;
   }
@@ -598,7 +579,7 @@ class ClipboardSyncService {
     if (!autoSync && !bgUpload) return;
     if (!this.activeServer) return;
 
-    const currentHash = content.profileHash || content.text || '';
+    const currentHash = content.profileHash || content.text;
 
     // 初始化时记录哈希，不触发上传
     if (this.lastLocalProfileHash === null) {
@@ -637,21 +618,48 @@ class ClipboardSyncService {
   // ─── 用户触发的文件下载操作 ──────────────────────────────────
 
   /**
-   * 下载当前远程剪贴板的文件数据到本地。
+   * 下载远程文件。
    * - WebDAV/S3/自定义服务器：直接下载文件，进度通过 store 更新
    * - SyncClipboard 服务器：加入下载队列
    * 调用方无需传入 activeServer，服务内部从 store 读取。
    */
-  async downloadRemoteFile(): Promise<void> {
-    const remoteContent = clipboardSyncState.getState().remoteContent;
-    const server = this.activeServer;
+  async downloadRemoteFile(content?: ClipboardContent): Promise<ClipboardContent | null> {
+    const remoteContent = content || clipboardSyncState.getState().remoteContent;
+    if (!remoteContent) return null;
 
-    if (!server || !remoteContent) return;
+    const clientService = getClientService();
 
-    if (server.type !== 'syncclipboard') {
-      await this._downloadForWebDAV(remoteContent);
-    } else {
-      await this._downloadForSyncClipboard(remoteContent);
+    this._downloadAbortController = new AbortController();
+    const signal = this._downloadAbortController.signal;
+
+    clipboardSyncState.setState({ downloadingRemote: true, downloadProgress: null });
+
+    try {
+      const result = await clientService.download(
+        remoteContent,
+        (info) => {
+          clipboardSyncState.setState({
+            downloadProgress: {
+              progress: info.progress,
+              bytesTransferred: info.bytesTransferred,
+              totalBytes: info.totalBytes,
+            },
+          });
+        },
+        signal
+      );
+
+      if (result) {
+        clipboardSyncState.setState({ remoteContent: result });
+      }
+
+      return result;
+    } catch (downloadError) {
+      console.error('[ClipboardSyncService] Download failed:', downloadError);
+      return null;
+    } finally {
+      this._downloadAbortController = null;
+      clipboardSyncState.setState({ downloadingRemote: false, downloadProgress: null });
     }
   }
 
@@ -659,21 +667,9 @@ class ClipboardSyncService {
    * 取消当前正在进行的远程文件下载。
    */
   cancelRemoteFileDownload(): void {
-    const remoteContent = clipboardSyncState.getState().remoteContent;
-    const server = this.activeServer;
-
-    if (!server) return;
-
-    if (server.type !== 'syncclipboard') {
-      if (this._downloadAbortController) {
-        this._downloadAbortController.abort();
-        this._downloadAbortController = null;
-      }
-    } else {
-      if (remoteContent?.profileHash) {
-        const profileId = getProfileId(remoteContent.type, remoteContent.profileHash);
-        getHistoryTransferQueue().cancelTask(profileId, 'download');
-      }
+    if (this._downloadAbortController) {
+      this._downloadAbortController.abort();
+      this._downloadAbortController = null;
     }
   }
 
@@ -722,74 +718,6 @@ class ClipboardSyncService {
     } finally {
       clipboardSyncState.setState({ fileUploadProgress: null });
     }
-  }
-
-  /** WebDAV/S3 直接下载，进度通过 store 更新 */
-  private async _downloadForWebDAV(
-    remoteContent: import('../../types/clipboard').ClipboardContent
-  ): Promise<import('../../types/clipboard').ClipboardContent> {
-    clipboardSyncState.setState({ downloadingRemote: true, downloadProgress: null });
-
-    const abortController = new AbortController();
-    this._downloadAbortController = abortController;
-
-    try {
-      const { downloadAndAddToHistory } = await import('../../utils/remoteClipboard');
-
-      const apiClient = await getAPIClient();
-      const updatedContent = await downloadAndAddToHistory(
-        remoteContent,
-        apiClient,
-        remoteContent.hasData || false,
-        abortController.signal,
-        (info: import('native-util').ProgressInfo) => {
-          clipboardSyncState.setState({
-            downloadProgress: {
-              progress: info.progress,
-              bytesTransferred: info.bytesTransferred,
-              totalBytes: info.totalBytes,
-            },
-          });
-        }
-      );
-      clipboardSyncState.setState({ remoteContent: updatedContent });
-      return updatedContent;
-    } catch (error) {
-      const err = error as Error;
-      const msg = err?.message?.toLowerCase() ?? '';
-      if (err?.name === 'AbortError' || msg.includes('abort') || msg.includes('cancel')) {
-        return remoteContent;
-      }
-      throw error;
-    } finally {
-      this._downloadAbortController = null;
-      clipboardSyncState.setState({ downloadingRemote: false, downloadProgress: null });
-    }
-  }
-
-  /** SyncClipboard 服务器：加入下载队列 */
-  private async _downloadForSyncClipboard(
-    remoteContent: import('../../types/clipboard').ClipboardContent
-  ): Promise<TransferTask> {
-    if (!remoteContent.profileHash) {
-      throw new Error('No profileHash in remoteContent');
-    }
-
-    const profileId = getProfileId(remoteContent.type, remoteContent.profileHash);
-    const queue = getHistoryTransferQueue();
-
-    try {
-      const historyItem = clipboardContentToItem(remoteContent, {
-        syncStatus: HistorySyncStatus.NeedSync,
-        hasRemoteData: true,
-        isLocalFileReady: false,
-      });
-      await historyService.addItem(historyItem);
-    } catch (e) {
-      console.error('[ClipboardSyncService] Failed to add history item before download:', e);
-    }
-
-    return await queue.addDownloadTask(profileId);
   }
 }
 

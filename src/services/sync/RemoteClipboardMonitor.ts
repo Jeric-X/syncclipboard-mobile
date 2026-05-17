@@ -104,7 +104,7 @@ class RemoteClipboardMonitor {
         size: event.size,
       };
       const content: ClipboardContent = profileDtoToContent(profile);
-      const hash = content.profileHash || content.text || '';
+      const hash = content.profileHash || content.text;
       if (hash === this._lastContentHash) return;
       this._lastContentHash = hash;
       this.notifyCallbacks(content);
@@ -145,7 +145,7 @@ class RemoteClipboardMonitor {
       const profile = await apiClient.getClipboard();
       if (!profile) return;
       const content: ClipboardContent = profileDtoToContent(profile);
-      const hash = content.profileHash || content.text || '';
+      const hash = content.profileHash || content.text;
       if (hash === this._lastContentHash) return;
       this._lastContentHash = hash;
       this.notifyCallbacks(content);

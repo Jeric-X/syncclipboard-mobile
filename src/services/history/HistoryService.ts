@@ -51,7 +51,7 @@ export class HistoryService {
   }
 
   addRemoteContent(content: ClipboardContent): Promise<HistoryItem> {
-    const hasData = content.hasData ?? false;
+    const hasData = content.hasData;
     const fileUri = content.fileUri;
 
     const historyItem = clipboardContentToItem(content, {

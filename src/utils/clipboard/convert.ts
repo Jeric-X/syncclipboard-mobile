@@ -182,9 +182,9 @@ export function clipboardContentToItem(
 ): HistoryItem {
   return createHistoryItem({
     type: content.type,
-    text: content.text || '',
+    text: content.text,
     profileHash: content.profileHash || '',
-    hasData: content.hasData ?? !!(content.fileName || content.fileUri),
+    hasData: content.hasData,
     dataName: content.fileName,
     size: content.fileSize,
     timestamp: content.timestamp || Date.now(),

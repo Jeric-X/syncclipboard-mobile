@@ -168,7 +168,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   // 获取预览文本
   const getPreviewText = (): string => {
     if (clipboard.type === 'Text') {
-      return clipboard.text || '';
+      return clipboard.text;
     }
     if (clipboard.type === 'Image') {
       return clipboard.fileName || '图片';

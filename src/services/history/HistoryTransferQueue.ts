@@ -10,6 +10,7 @@ import { HistorySyncStatus, type ClipboardContent } from '@/types/clipboard';
 import { getHistoryFileDir } from '@/utils/fileStorage';
 import { historyItemToContent } from '@/utils/clipboard/convert';
 import { File } from 'expo-file-system';
+import type { ProgressInfo } from '@/types/progress';
 
 export type TransferType = 'upload' | 'download';
 export type TransferTaskStatus =
@@ -19,6 +20,8 @@ export type TransferTaskStatus =
   | 'failed'
   | 'cancelled'
   | 'waitForRetry';
+
+export type ProgressCallback = (info: ProgressInfo) => void;
 
 export interface TransferTask {
   profileId: string;
@@ -35,6 +38,8 @@ export interface TransferTask {
   failureCount: number;
   abortController: AbortController;
   userCancelled?: boolean;
+  isImmediateTask?: boolean;
+  externalProgressReporter?: ProgressCallback;
   awaiter: Promise<ClipboardContent>;
 }
 
@@ -244,6 +249,152 @@ export class HistoryTransferQueue {
   }
 
   /**
+   * 立即执行下载任务
+   */
+  async executeImmediateDownload(
+    content: ClipboardContent,
+    progress?: ProgressCallback,
+    signal?: AbortSignal
+  ): Promise<ClipboardContent> {
+    const { getProfileId } = await import('@/utils');
+    const profileId = getProfileId(content.type, content.profileHash!);
+
+    const existingTask = this.findTask(profileId, 'download');
+
+    if (existingTask) {
+      existingTask.isImmediateTask = true;
+      if (progress) {
+        existingTask.externalProgressReporter = progress;
+      }
+      return existingTask.awaiter;
+    }
+
+    const { parseProfileId } = await import('@/utils');
+    const parsed = parseProfileId(profileId);
+    const item = parsed ? await this.historyStorage.getItem(parsed.hash) : null;
+    const displayName = item?.text || profileId;
+
+    const key = this.getTaskKey(profileId, 'download');
+    let resolveAwaiter: (content: ClipboardContent) => void;
+    let rejectAwaiter: (error: Error) => void;
+    const awaiter = new Promise<ClipboardContent>((resolve, reject) => {
+      resolveAwaiter = resolve;
+      rejectAwaiter = reject;
+    });
+
+    const abortController = new AbortController();
+    if (signal) {
+      if (signal.aborted) {
+        abortController.abort();
+      } else {
+        signal.addEventListener('abort', () => abortController.abort());
+      }
+    }
+
+    const task: TransferTask = {
+      profileId,
+      displayName,
+      type: 'download',
+      status: 'pending',
+      progress: -1,
+      bytesTransferred: 0,
+      createdTime: Date.now(),
+      failureCount: 0,
+      abortController,
+      isImmediateTask: true,
+      externalProgressReporter: progress,
+      awaiter,
+    };
+
+    this.taskCompletionResolvers.set(key, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
+    this.activeTasks.set(key, task);
+    this.notifyStatusChanged(task);
+
+    console.log(`[HistoryTransferQueue] Executing immediate download task: ${profileId}`);
+
+    const result = await this.executeTask(task);
+
+    if (task.status !== 'completed') {
+      throw new Error(task.errorMessage || 'Download failed');
+    }
+
+    return result;
+  }
+
+  /**
+   * 立即执行上传任务
+   */
+  async executeImmediateUpload(
+    content: ClipboardContent,
+    progress?: ProgressCallback,
+    signal?: AbortSignal
+  ): Promise<ClipboardContent> {
+    const { getProfileId } = await import('@/utils');
+    const profileId = getProfileId(content.type, content.profileHash!);
+
+    const existingTask = this.findTask(profileId, 'upload');
+
+    if (existingTask) {
+      existingTask.isImmediateTask = true;
+      if (progress) {
+        existingTask.externalProgressReporter = progress;
+      }
+      return existingTask.awaiter;
+    }
+
+    const { parseProfileId } = await import('@/utils');
+    const parsed = parseProfileId(profileId);
+    const item = parsed ? await this.historyStorage.getItem(parsed.hash) : null;
+    const displayName = item?.text || profileId;
+
+    const key = this.getTaskKey(profileId, 'upload');
+    let resolveAwaiter: (content: ClipboardContent) => void;
+    let rejectAwaiter: (error: Error) => void;
+    const awaiter = new Promise<ClipboardContent>((resolve, reject) => {
+      resolveAwaiter = resolve;
+      rejectAwaiter = reject;
+    });
+
+    const abortController = new AbortController();
+    if (signal) {
+      if (signal.aborted) {
+        abortController.abort();
+      } else {
+        signal.addEventListener('abort', () => abortController.abort());
+      }
+    }
+
+    const task: TransferTask = {
+      profileId,
+      displayName,
+      type: 'upload',
+      status: 'pending',
+      progress: -1,
+      bytesTransferred: 0,
+      createdTime: Date.now(),
+      failureCount: 0,
+      abortController,
+      isImmediateTask: true,
+      externalProgressReporter: progress,
+      awaiter,
+    };
+
+    this.taskCompletionResolvers.set(key, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
+    this.activeTasks.set(key, task);
+    this.notifyStatusChanged(task);
+
+    console.log(`[HistoryTransferQueue] Executing immediate upload task: ${profileId}`);
+
+    const result = await this.executeTask(task);
+
+    if (task.status !== 'completed') {
+      throw new Error(task.errorMessage || 'Upload failed');
+    }
+
+    return result;
+  }
+
+  /**
    * 取消任务
    */
   cancelTask(profileId: string, type: TransferType): boolean {
@@ -347,18 +498,19 @@ export class HistoryTransferQueue {
       const key = this.getTaskKey(task.profileId, task.type);
       this.activeTasks.set(key, task);
 
-      // 执行任务
-      this.executeTask(task);
+      this.executeTask(task).catch((error) => {
+        console.error('[HistoryTransferQueue] Task execution error:', error);
+      });
     }
   }
 
   /**
    * 执行任务
    */
-  private async executeTask(task: TransferTask): Promise<void> {
+  private async executeTask(task: TransferTask): Promise<ClipboardContent> {
     if (task.userCancelled || task.status === 'cancelled') {
       console.log(`[HistoryTransferQueue] Task was cancelled, skipping: ${task.profileId}`);
-      return;
+      throw new Error('Task was cancelled');
     }
 
     task.status = 'running';
@@ -378,6 +530,8 @@ export class HistoryTransferQueue {
       task.completedTime = Date.now();
       task.progress = 100;
       this.consecutiveFailures = 0;
+
+      return resultContent;
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         task.status = 'cancelled';
@@ -410,6 +564,7 @@ export class HistoryTransferQueue {
           }, this.config.retryDelayMs);
         }
       }
+      throw error;
     } finally {
       this.notifyStatusChanged(task);
       const key = this.getTaskKey(task.profileId, task.type);
@@ -488,6 +643,14 @@ export class HistoryTransferQueue {
           task.progress = -1;
         }
         this.notifyStatusChanged(task);
+
+        if (task.externalProgressReporter) {
+          task.externalProgressReporter({
+            progress: task.progress,
+            bytesTransferred: task.bytesTransferred,
+            totalBytes: task.totalBytes || 0,
+          });
+        }
       }
     );
 
@@ -580,6 +743,14 @@ export class HistoryTransferQueue {
         task.progress = -1;
       }
       this.notifyStatusChanged(task);
+
+      if (task.externalProgressReporter) {
+        task.externalProgressReporter({
+          progress: task.progress,
+          bytesTransferred: task.bytesTransferred,
+          totalBytes: task.totalBytes || 0,
+        });
+      }
     });
 
     await this.historyStorage.updateSyncStatus(parsed.hash, HistorySyncStatus.Synced);

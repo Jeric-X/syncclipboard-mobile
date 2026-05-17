@@ -143,7 +143,7 @@ export interface ClipboardContent {
   type: ClipboardContentType;
 
   /** 文本内容 */
-  text?: string;
+  text: string;
 
   /** 文件 URI（本地文件路径） */
   fileUri?: string;
@@ -167,7 +167,7 @@ export interface ClipboardContent {
   timestamp?: number;
 
   /** 是否有额外数据文件（用于标识是否需要处理外部文件） */
-  hasData?: boolean;
+  hasData: boolean;
 }
 
 /**

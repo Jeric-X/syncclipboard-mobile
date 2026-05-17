@@ -72,7 +72,7 @@ function normalizeClipboardItem(item: HistoryItem): HistoryItem {
     type: item.type,
     text: item.text ?? '',
     profileHash: item.profileHash,
-    hasData: item.hasData ?? false,
+    hasData: item.hasData,
     dataName: item.dataName,
     size: item.size ?? 0,
     timestamp: item.timestamp ?? Date.now(),
