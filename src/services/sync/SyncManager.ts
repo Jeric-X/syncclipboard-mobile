@@ -14,9 +14,6 @@ import {
   SyncStatus,
   SyncDirection,
   SyncResult,
-  SyncEvent,
-  SyncEventType,
-  SyncListener,
   ConflictResolution,
 } from '../../types/sync';
 import { ClipboardContent } from '../../types/clipboard';
@@ -32,7 +29,6 @@ export class SyncManager {
   private clipboardManager = localClipboard;
 
   private status: SyncStatus = SyncStatus.Idle;
-  private listeners: Map<string, SyncListener> = new Map();
   private persistedDataLoaded = false;
 
   private isSyncing = false;
@@ -111,7 +107,6 @@ export class SyncManager {
    * 销毁同步管理器
    */
   public async destroy(): Promise<void> {
-    this.listeners.clear();
   }
 
   /**
@@ -161,10 +156,6 @@ export class SyncManager {
     const startTime = Date.now();
     this.isSyncing = true;
     this.setStatus(SyncStatus.Syncing);
-    this.emitEvent({
-      type: SyncEventType.Started,
-      timestamp: Date.now(),
-    });
 
     const doSync = async (): Promise<SyncResult> => {
       try {
@@ -180,13 +171,6 @@ export class SyncManager {
         }
 
         result.duration = Date.now() - startTime;
-
-        // 发送完成事件
-        this.emitEvent({
-          type: SyncEventType.Completed,
-          result,
-          timestamp: Date.now(),
-        });
 
         this.setStatus(result.success ? SyncStatus.Success : SyncStatus.Failed);
 
@@ -223,12 +207,6 @@ export class SyncManager {
           error: errorMessage,
           duration: Date.now() - startTime,
         };
-
-        this.emitEvent({
-          type: SyncEventType.Failed,
-          result,
-          timestamp: Date.now(),
-        });
 
         this.setStatus(SyncStatus.Failed);
 
@@ -548,13 +526,6 @@ export class SyncManager {
         return 'remote';
 
       case ConflictResolution.Ask:
-        // 发送冲突事件，等待用户决策
-        this.emitEvent({
-          type: SyncEventType.Conflict,
-          data: { localContent, remoteProfile },
-          timestamp: Date.now(),
-        });
-        // 暂时跳过，等待用户手动解决
         return 'skip';
 
       default:
@@ -566,41 +537,7 @@ export class SyncManager {
    * 设置同步状态
    */
   private setStatus(status: SyncStatus): void {
-    if (this.status !== status) {
-      this.status = status;
-      this.emitEvent({
-        type: SyncEventType.StatusChanged,
-        status,
-        timestamp: Date.now(),
-      });
-    }
-  }
-
-  /**
-   * 添加事件监听器
-   */
-  public addListener(id: string, listener: SyncListener): void {
-    this.listeners.set(id, listener);
-  }
-
-  /**
-   * 移除事件监听器
-   */
-  public removeListener(id: string): void {
-    this.listeners.delete(id);
-  }
-
-  /**
-   * 发送事件
-   */
-  private emitEvent(event: SyncEvent): void {
-    this.listeners.forEach((listener) => {
-      try {
-        listener(event);
-      } catch (error) {
-        console.error('Error in sync listener:', error);
-      }
-    });
+    this.status = status;
   }
 
   /**
