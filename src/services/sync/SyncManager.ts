@@ -10,12 +10,7 @@ import { ProfileDto } from '../../types/api';
 import { compareHash } from '../../utils/hash';
 import { isTextInvalid } from '../../utils/index';
 import type { ProgressInfo } from 'native-util';
-import {
-  SyncStatus,
-  SyncDirection,
-  SyncResult,
-  ConflictResolution,
-} from '../../types/sync';
+import { SyncStatus, SyncDirection, SyncResult, ConflictResolution } from '../../types/sync';
 import { ClipboardContent } from '../../types/clipboard';
 import { configStorage } from '../../storage';
 import { getLastSyncHash, setLastSyncHash } from '../../storage/SyncStateStorage';
@@ -106,8 +101,7 @@ export class SyncManager {
   /**
    * 销毁同步管理器
    */
-  public async destroy(): Promise<void> {
-  }
+  public async destroy(): Promise<void> {}
 
   /**
    * 手动同步
