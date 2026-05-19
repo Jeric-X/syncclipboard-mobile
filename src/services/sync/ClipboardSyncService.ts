@@ -16,6 +16,7 @@
 
 import { AppState } from 'react-native';
 import { ClipboardContent, ClipboardChangeCallback, HistoryItem } from '../../types/clipboard';
+import type { ProgressDetail } from '../../types/progress';
 import { SyncDirection, SyncResult } from '../../types/sync';
 import type { ServerConfig } from '../../types/api';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
@@ -382,9 +383,9 @@ class ClipboardSyncService {
     clipboardSyncState.setState({ downloadingRemote: true, downloadProgress: null });
 
     try {
-      const result = await clientService.download(
+      const result = await clientService.downloadData(
         remoteContent,
-        (info) => {
+        (info: ProgressDetail) => {
           clipboardSyncState.setState({
             downloadProgress: {
               progress: info.progress,
@@ -414,48 +415,6 @@ class ClipboardSyncService {
     if (this._downloadAbortController) {
       this._downloadAbortController.abort();
       this._downloadAbortController = null;
-    }
-  }
-
-  async uploadFile(
-    payload: { uri: string; fileName: string; mimeType?: string | null; fileSize?: number },
-    signal: AbortSignal
-  ): Promise<void> {
-    const server = this.activeServer;
-    if (!server) throw new Error('请先在设置中配置服务器');
-
-    clipboardSyncState.setState({
-      fileUploadProgress: {
-        stage: '正在处理文件…',
-        progress: 0,
-        bytesTransferred: 0,
-        totalBytes: 0,
-      },
-    });
-
-    try {
-      const { uploadFileAndAddToHistory } = await import('../../utils/uploadFile');
-      await uploadFileAndAddToHistory(
-        payload.uri,
-        payload.fileName,
-        payload.mimeType,
-        payload.fileSize,
-        {
-          signal,
-          onProgress: (stage: string, progressInfo?: import('native-util').ProgressInfo) => {
-            clipboardSyncState.setState({
-              fileUploadProgress: {
-                stage,
-                progress: progressInfo?.progress ?? 0,
-                bytesTransferred: progressInfo?.bytesTransferred ?? 0,
-                totalBytes: progressInfo?.totalBytes ?? 0,
-              },
-            });
-          },
-        }
-      );
-    } finally {
-      clipboardSyncState.setState({ fileUploadProgress: null });
     }
   }
 }

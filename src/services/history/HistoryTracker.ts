@@ -6,7 +6,6 @@
 import type { ClipboardContent } from '@/types/clipboard';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import { loadLastTrackedHash, saveLastTrackedHash } from './lastTrackedHashStorage';
-import { clipboardContentToItem } from '../../utils/clipboard/convert';
 import { historyService } from './HistoryService';
 
 export class HistoryTracker {
@@ -39,8 +38,7 @@ export class HistoryTracker {
       saveLastTrackedHash(content);
 
       try {
-        const historyItem = clipboardContentToItem(content);
-        await historyService.addItem(historyItem);
+        await historyService.addLocalContent(content);
       } catch (e) {
         console.error('[HistoryTracker] Failed to add clipboard change to history:', e);
       }

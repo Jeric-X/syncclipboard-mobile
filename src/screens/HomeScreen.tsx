@@ -23,6 +23,9 @@ import { useMessageStore } from '@/stores/messageStore';
 import { useErrorStore } from '@/stores/errorStore';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
 import { getClipboardSyncService } from '@/services/sync/ClipboardSyncService';
+import { createContentFromFile } from '@/utils/clipboard/clipboardContentUtils';
+import { setRemoteClipboard } from '@/services/sync/ClipboardSyncActions';
+import type { ProgressInfo } from '@/types/progress';
 
 export function HomeScreen() {
   const { theme } = useTheme();
@@ -44,7 +47,7 @@ export function HomeScreen() {
   const downloadingRemote = useClipboardSyncServiceStore((s) => s.downloadingRemote);
   const downloadProgress = useClipboardSyncServiceStore((s) => s.downloadProgress);
   const uploadingClipboard = useClipboardSyncServiceStore((s) => s.uploadingClipboard);
-  const fileUploadProgress = useClipboardSyncServiceStore((s) => s.fileUploadProgress);
+  const [fileUploadProgress, setFileUploadProgress] = useState<ProgressInfo | null>(null);
   const syncError = useClipboardSyncServiceStore((s) => s.syncError);
 
   const { currentContent } = uselocalClipboardStore();
@@ -143,13 +146,23 @@ export function HomeScreen() {
     async (signal: AbortSignal) => {
       if (!fileUploadPayload) throw new Error('没有可上传的文件');
 
-      await getClipboardSyncService().uploadFile(fileUploadPayload, signal);
+      const content = await createContentFromFile(
+        fileUploadPayload.uri,
+        fileUploadPayload.fileName,
+        fileUploadPayload.mimeType,
+        fileUploadPayload.fileSize,
+        { signal }
+      );
+      await setRemoteClipboard(content, signal, (info) => {
+        setFileUploadProgress(info);
+      });
     },
     [fileUploadPayload]
   );
 
   const handleFileUploadComplete = useCallback(() => {
     setFileUploadPayload(null);
+    setFileUploadProgress(null);
   }, []);
 
   // 菜单项配置
@@ -432,7 +445,7 @@ export function HomeScreen() {
         <View style={styles.fullScreenOverlay}>
           <QuickLoadingPage
             task={fileUploadTask}
-            loadingText={fileUploadProgress?.stage ?? '正在处理文件…'}
+            loadingText="正在上传文件…"
             successText="上传成功"
             failureText="上传失败"
             onComplete={handleFileUploadComplete}

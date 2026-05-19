@@ -4,16 +4,15 @@
  */
 
 import type { ClipboardContent } from '../../types/clipboard';
-import type { ProgressInfo } from '../../types/progress';
+import type { ProgressDetail } from '../../types/progress';
 
 /** ClipboardSyncService 向外暴露的同步状态 */
 export interface ClipboardSyncState {
   remoteContent: ClipboardContent | null;
   loadingRemote: boolean;
   downloadingRemote: boolean;
-  downloadProgress: ProgressInfo | null;
+  downloadProgress: ProgressDetail | null;
   uploadingClipboard: boolean;
-  fileUploadProgress: ProgressInfo | null;
   syncError: { title: string; message: string } | null;
 }
 
@@ -26,7 +25,6 @@ class ClipboardSyncStateManager {
     downloadingRemote: false,
     downloadProgress: null,
     uploadingClipboard: false,
-    fileUploadProgress: null,
     syncError: null,
   };
   private _listeners = new Set<ClipboardSyncStateListener>();
@@ -64,7 +62,7 @@ class ClipboardSyncStateManager {
     this.setState({ downloadingRemote: downloading });
   }
 
-  setDownloadProgress(progress: ProgressInfo | null): void {
+  setDownloadProgress(progress: ProgressDetail | null): void {
     this.setState({ downloadProgress: progress });
   }
 

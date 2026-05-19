@@ -10,7 +10,7 @@ import { HistorySyncStatus, type ClipboardContent } from '@/types/clipboard';
 import { getHistoryFileDir } from '@/utils/fileStorage';
 import { historyItemToContent } from '@/utils/clipboard/convert';
 import { File } from 'expo-file-system';
-import type { ProgressInfo } from '@/types/progress';
+import type { ProgressDetail } from '@/types/progress';
 
 export type TransferType = 'upload' | 'download';
 export type TransferTaskStatus =
@@ -21,7 +21,7 @@ export type TransferTaskStatus =
   | 'cancelled'
   | 'waitForRetry';
 
-export type ProgressCallback = (info: ProgressInfo) => void;
+export type ProgressCallback = (info: ProgressDetail) => void;
 
 export interface TransferTask {
   profileId: string;

@@ -1,76 +1,14 @@
-/**
- * uploadFileAndAddToHistory
- * 将本地文件（content:// 或 file:// URI）复制到 temp 目录、写入历史记录并上传到服务器。
- * 供 HomeScreen 右上角"上传文件"菜单和 ShareReceiveScreen 共同调用。
- */
-
-import { File } from 'expo-file-system';
-import { nativeCopyFile, type ProgressInfo } from 'native-util';
-import { calculateFileProfileHash, calculateTextHash } from '@/utils/hash';
-import { prepareTempFilePath } from '@/utils/fileStorage';
+import type { ProgressInfo } from 'native-util';
 import { useHistoryStore } from '@/stores/historyStore';
 import { getAPIClient } from '@/services';
 import { SyncManager } from '@/services/sync/SyncManager';
 import type { ClipboardContent } from '@/types/clipboard';
 import { createHistoryItem, HistorySyncStatus } from '@/types/clipboard';
-import type { ClipboardContentType } from '@/types/api';
-
-function guessContentType(mimeType: string | null | undefined): ClipboardContentType {
-  if (!mimeType) return 'File';
-  if (mimeType.startsWith('image/')) return 'Image';
-  return 'File';
-}
+import { calculateTextHash } from '@/utils/hash';
 
 export interface UploadFileOptions {
   signal?: AbortSignal;
   onProgress?: (stage: string, progress?: ProgressInfo) => void;
-}
-
-export interface ImportResult {
-  profileHash: string;
-  fileUri: string;
-  fileName: string;
-  fileSize: number;
-  contentType: ClipboardContentType;
-}
-
-export async function importFileToHistory(
-  sourceUri: string,
-  fileName: string,
-  mimeType: string | null | undefined,
-  fileSize: number | undefined,
-  options?: UploadFileOptions
-): Promise<ImportResult> {
-  const contentType: ClipboardContentType = guessContentType(mimeType);
-  const tempPath = prepareTempFilePath(fileName);
-  const sourceFile = new File(sourceUri);
-  options?.onProgress?.('正在复制文件…');
-  await nativeCopyFile(sourceFile.uri, tempPath);
-
-  options?.onProgress?.('正在计算哈希…');
-  const profileHash = await calculateFileProfileHash(tempPath, fileName);
-  const resolvedSize = fileSize ?? sourceFile.size;
-
-  const savedItem = await useHistoryStore.getState().addItem(
-    createHistoryItem({
-      type: contentType,
-      text: fileName,
-      profileHash,
-      hasData: true,
-      dataName: fileName,
-      size: resolvedSize,
-      timestamp: Date.now(),
-      fileUri: tempPath,
-    })
-  );
-
-  return {
-    profileHash,
-    fileUri: savedItem.fileUri ?? tempPath,
-    fileName,
-    fileSize: resolvedSize,
-    contentType,
-  };
 }
 
 export async function uploadTextAndAddToHistory(
@@ -79,7 +17,6 @@ export async function uploadTextAndAddToHistory(
 ): Promise<void> {
   const profileHash = await calculateTextHash(text, options?.signal);
 
-  // 预先设置 hash，避免 SignalR/轮询推送时误判为新远程内容触发自动下载
   SyncManager.getInstance().setLastUploadedHash(profileHash);
 
   const content: ClipboardContent = {
@@ -106,28 +43,26 @@ export async function uploadTextAndAddToHistory(
 }
 
 export async function uploadFileAndAddToHistory(
-  sourceUri: string,
-  fileName: string,
-  mimeType: string | null | undefined,
-  fileSize: number | undefined,
+  content: ClipboardContent,
   options?: UploadFileOptions
 ): Promise<void> {
-  const result = await importFileToHistory(sourceUri, fileName, mimeType, fileSize, options);
+  if (!content.profileHash) {
+    throw new Error('profileHash is required');
+  }
 
-  // 预先设置 hash，避免 SignalR/轮询推送时误判为新远程内容触发自动下载
-  SyncManager.getInstance().setLastUploadedHash(result.profileHash);
+  SyncManager.getInstance().setLastUploadedHash(content.profileHash);
 
-  const content: ClipboardContent = {
-    type: result.contentType,
-    text: result.fileName,
-    fileUri: result.fileUri,
-    fileName: result.fileName,
-    fileSize: result.fileSize,
-    profileHash: result.profileHash,
-    localClipboardHash: result.profileHash,
-    hasData: true,
-    timestamp: Date.now(),
-  };
+  const historyItem = createHistoryItem({
+    type: content.type,
+    text: content.text,
+    profileHash: content.profileHash,
+    hasData: content.hasData,
+    dataName: content.fileName,
+    size: content.fileSize,
+    timestamp: content.timestamp ?? Date.now(),
+    fileUri: content.fileUri,
+  });
+  await useHistoryStore.getState().addItem(historyItem);
 
   const apiClient = await getAPIClient();
   options?.onProgress?.('正在上传文件…');
@@ -136,5 +71,5 @@ export async function uploadFileAndAddToHistory(
     onProgress: (info) => options?.onProgress?.('正在上传文件…', info),
   });
 
-  await useHistoryStore.getState().updateItem(result.profileHash, { synced: true });
+  await useHistoryStore.getState().updateItem(content.profileHash, { synced: true });
 }

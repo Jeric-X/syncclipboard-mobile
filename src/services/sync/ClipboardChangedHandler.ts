@@ -222,7 +222,7 @@ class ClipboardChangedHandler {
   ): Promise<ClipboardContent | null> {
     try {
       const clientService = getClientService();
-      return await clientService.download(content, progress, signal);
+      return await clientService.downloadData(content, progress, signal);
     } catch (error) {
       const err = error as Error;
       const msg = err?.message?.toLowerCase() ?? '';

@@ -44,7 +44,7 @@ import { isTextInvalid } from '@/utils/index';
 import { useMessageStore } from '@/stores/messageStore';
 import { useErrorStore } from '@/stores/errorStore';
 import { calculateTextHash } from '@/utils/hash';
-import { importFileToHistory } from '@/utils/uploadFile';
+import { createContentFromFile } from '@/utils/clipboard/clipboardContentUtils';
 import { isHistorySyncEnabled } from '@/utils/config';
 
 const TAB_ROUTES: Route[] = [
@@ -436,7 +436,9 @@ export function HistoryScreen() {
         });
       });
 
-      await importFileToHistory(asset.uri, fileName, asset.mimeType, asset.size);
+      const content = await createContentFromFile(asset.uri, fileName, asset.mimeType, asset.size);
+      const { historyService: hs } = await import('@/services/history');
+      await hs.addLocalContent(content);
 
       showMessage(`文件 ${fileName} 已添加到历史记录`, 'success');
     } catch (error) {
@@ -476,7 +478,14 @@ export function HistoryScreen() {
         });
       });
 
-      await importFileToHistory(asset.uri, fileName, asset.mimeType, asset.fileSize);
+      const content = await createContentFromFile(
+        asset.uri,
+        fileName,
+        asset.mimeType,
+        asset.fileSize
+      );
+      const { historyService: hs } = await import('@/services/history');
+      await hs.addLocalContent(content);
 
       showMessage(`图片 ${fileName} 已添加到历史记录`, 'success');
     } catch (error) {

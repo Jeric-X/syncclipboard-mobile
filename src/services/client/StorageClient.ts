@@ -36,3 +36,23 @@ export async function downloadForStorage(
     throw error;
   }
 }
+
+export async function uploadForStorage(
+  content: ClipboardContent,
+  progress?: ProgressCallback,
+  signal?: AbortSignal
+): Promise<void> {
+  const apiClient = await getAPIClient();
+  await apiClient.putContent(content, {
+    signal,
+    onProgress: progress
+      ? (info: ProgressInfo) => {
+          progress({
+            progress: info.progress,
+            bytesTransferred: info.bytesTransferred,
+            totalBytes: info.totalBytes,
+          });
+        }
+      : undefined,
+  });
+}

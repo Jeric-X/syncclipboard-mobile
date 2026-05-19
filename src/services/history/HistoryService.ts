@@ -9,6 +9,8 @@ import type { HistoryFilter, HistorySort } from '@/types/storage';
 import type { HistoryChangeCallback } from '@/storage/HistoryStorage';
 import { HistorySyncStatus } from '@/types/clipboard';
 import { clipboardContentToItem } from '@/utils/clipboard/convert';
+import { getHistoryFileUri, prepareHistoryFileUri } from '@/utils/fileStorage';
+import { nativeCopyFile } from 'native-util';
 import { historyStorage } from '@/storage';
 
 /**
@@ -60,6 +62,50 @@ export class HistoryService {
       fileUri,
       syncStatus: HistorySyncStatus.Synced,
       isLocalFileReady: !hasData || !!fileUri,
+    });
+
+    return historyStorage.addItem(historyItem);
+  }
+
+  async addLocalContent(content: ClipboardContent): Promise<HistoryItem> {
+    let fileUri: string | undefined;
+
+    if (content.hasData) {
+      if (!content.fileName || !content.profileHash) {
+        throw new Error(
+          '[HistoryService] addLocalContent: fileName and profileHash are required when hasData is true'
+        );
+      }
+
+      const existingUri = await getHistoryFileUri(
+        content.type,
+        content.profileHash,
+        content.fileName
+      );
+
+      if (existingUri) {
+        fileUri = existingUri;
+      } else if (content.fileUri) {
+        const destUri = await prepareHistoryFileUri(
+          content.type,
+          content.profileHash,
+          content.fileName
+        );
+        await nativeCopyFile(content.fileUri, destUri);
+        fileUri = destUri;
+      } else {
+        throw new Error(
+          '[HistoryService] addLocalContent: fileUri is required when hasData is true and file does not exist in history'
+        );
+      }
+    }
+
+    const historyItem = clipboardContentToItem(content, {
+      hasData: content.hasData,
+      hasRemoteData: false,
+      fileUri,
+      syncStatus: HistorySyncStatus.LocalOnly,
+      isLocalFileReady: !content.hasData || !!fileUri,
     });
 
     return historyStorage.addItem(historyItem);

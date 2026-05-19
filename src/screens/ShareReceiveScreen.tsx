@@ -10,6 +10,7 @@ import { useIncomingShare, clearSharedPayloads, getSharedPayloads } from 'expo-s
 import { useTheme } from '@/hooks/useTheme';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { uploadFileAndAddToHistory, uploadTextAndAddToHistory } from '@/utils/uploadFile';
+import { createContentFromFile } from '@/utils/clipboard/clipboardContentUtils';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
 import type { ProgressInfo } from 'native-util';
 
@@ -84,7 +85,14 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
         setPreviewImage(payload.contentUri);
       }
 
-      await uploadFileAndAddToHistory(payload.contentUri, fileName, contentMime, undefined, {
+      const content = await createContentFromFile(
+        payload.contentUri,
+        fileName,
+        contentMime,
+        undefined,
+        { signal }
+      );
+      await uploadFileAndAddToHistory(content, {
         signal,
         onProgress: (stage, info) => {
           setLoadingText(stage);

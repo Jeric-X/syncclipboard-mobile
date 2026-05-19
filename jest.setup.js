@@ -15,17 +15,47 @@ jest.mock('expo-clipboard', () => ({
   setImageAsync: jest.fn(),
 }));
 
-jest.mock('expo-file-system', () => ({
-  File: jest.fn().mockImplementation(() => ({
-    info: jest.fn().mockReturnValue({ exists: true, size: 1000 }),
-    open: jest.fn().mockReturnValue({
-      readBytes: jest.fn().mockReturnValue(new Uint8Array(10)),
-      close: jest.fn(),
-    }),
-  })),
-  DocumentDirectory: 'file://documents/',
-  CacheDirectory: 'file://cache/',
-}));
+jest.mock('expo-file-system', () => {
+  const makeDir = (base, ...parts) => {
+    const path = [base, ...parts].join('/').replace(/\/+/g, '/');
+    return {
+      uri: path,
+      exists: jest.fn().mockResolvedValue(false),
+      create: jest.fn().mockResolvedValue(undefined),
+      delete: jest.fn().mockResolvedValue(undefined),
+      list: jest.fn().mockResolvedValue([]),
+      copy: jest.fn().mockResolvedValue(undefined),
+      move: jest.fn().mockResolvedValue(undefined),
+    };
+  };
+  const makeFile = (base, ...parts) => {
+    const path = [base, ...parts].join('/').replace(/\/+/g, '/');
+    return {
+      uri: path,
+      exists: jest.fn().mockResolvedValue(false),
+      create: jest.fn().mockResolvedValue(undefined),
+      delete: jest.fn().mockResolvedValue(undefined),
+      copy: jest.fn().mockResolvedValue(undefined),
+      move: jest.fn().mockResolvedValue(undefined),
+      info: jest.fn().mockReturnValue({ exists: true, size: 1000 }),
+      open: jest.fn().mockReturnValue({
+        readBytes: jest.fn().mockReturnValue(new Uint8Array(10)),
+        close: jest.fn(),
+      }),
+    };
+  };
+  return {
+    File: jest.fn().mockImplementation((...args) => makeFile(...args)),
+    Directory: jest.fn().mockImplementation((...args) => makeDir(...args)),
+    Paths: {
+      document: 'file://documents',
+      cache: 'file://cache',
+      downloads: 'file://downloads',
+    },
+    DocumentDirectory: 'file://documents/',
+    CacheDirectory: 'file://cache/',
+  };
+});
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   default: {
@@ -39,6 +69,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 jest.mock('native-util', () => ({
   isNativeHashModuleAvailable: jest.fn().mockReturnValue(false),
   nativeCalculateFileHash: jest.fn(),
+  nativeCopyFile: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('@microsoft/signalr', () => ({
