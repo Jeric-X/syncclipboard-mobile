@@ -1,13 +1,13 @@
 /**
  * Process Text Screen
  * 处理来自 Android 文字选中菜单（PROCESS_TEXT）的上传请求。
- * 复用 QuickLoadingPage 和 uploadTextAndAddToHistory，与 ShareReceiveScreen 保持一致。
  */
 
 import React, { useCallback } from 'react';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { uploadTextAndAddToHistory } from '@/utils/uploadFile';
+import { createContentFromText } from '@/utils/clipboard/clipboardContentUtils';
+import { setRemoteClipboard } from '@/services/sync/ClipboardSyncActions';
 
 interface ProcessTextScreenProps {
   text: string;
@@ -20,7 +20,8 @@ export const ProcessTextScreen: React.FC<ProcessTextScreenProps> = ({ text, onCo
   const task = useCallback(
     async (signal: AbortSignal) => {
       if (!activeServer) throw new Error('请先在设置中配置服务器');
-      await uploadTextAndAddToHistory(text, { signal });
+      const content = await createContentFromText(text, { signal });
+      await setRemoteClipboard(content, 'external', signal);
     },
     [text, activeServer]
   );

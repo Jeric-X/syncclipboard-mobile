@@ -272,6 +272,13 @@ export class ClipboardMonitor {
   }
 
   /**
+   * 获取上次已知的本地剪贴板内容缓存（不触发系统 API 读取）
+   */
+  getLastContent(): ClipboardContent | null {
+    return this.lastContent;
+  }
+
+  /**
    * 手动更新上次已知内容，防止监听器将外部设置的剪贴板内容误判为用户新复制
    */
   async setLastContent(content: ClipboardContent): Promise<void> {

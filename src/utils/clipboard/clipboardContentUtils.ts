@@ -1,6 +1,6 @@
 import { File } from 'expo-file-system';
 import { nativeCopyFile } from 'native-util';
-import { calculateFileProfileHash } from '@/utils/hash';
+import { calculateFileProfileHash, calculateTextHash } from '@/utils/hash';
 import { prepareTempFilePath } from '@/utils/fileStorage';
 import type { ClipboardContent } from '@/types/clipboard';
 import type { ClipboardContentType } from '@/types/api';
@@ -9,6 +9,21 @@ function guessContentType(mimeType: string | null | undefined): ClipboardContent
   if (!mimeType) return 'File';
   if (mimeType.startsWith('image/')) return 'Image';
   return 'File';
+}
+
+export async function createContentFromText(
+  text: string,
+  options?: { signal?: AbortSignal }
+): Promise<ClipboardContent> {
+  const profileHash = await calculateTextHash(text, options?.signal);
+  return {
+    type: 'Text',
+    text,
+    profileHash,
+    localClipboardHash: profileHash,
+    hasData: false,
+    timestamp: Date.now(),
+  };
 }
 
 export interface CreateContentFromFileOptions {

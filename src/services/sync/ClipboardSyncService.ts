@@ -17,7 +17,6 @@
 import { AppState } from 'react-native';
 import { ClipboardContent, ClipboardChangeCallback, HistoryItem } from '../../types/clipboard';
 import type { ProgressDetail } from '../../types/progress';
-import { SyncDirection, SyncResult } from '../../types/sync';
 import type { ServerConfig } from '../../types/api';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import type { ClipboardSyncState, ClipboardSyncStateListener } from './SyncState';
@@ -25,7 +24,6 @@ import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
 import { remoteClipboardMonitor } from './RemoteClipboardMonitor';
 import type { RemoteClipboardChangedCallback } from './RemoteClipboardMonitor';
-import { SyncManager } from './SyncManager';
 import { historyService } from '../history/HistoryService';
 import { getHistoryFileUri } from '../../utils/fileStorage';
 import { getClientService } from '../client/ClientService';
@@ -43,8 +41,6 @@ class ClipboardSyncService {
   private transferQueueHandler:
     | ((task: import('../history/HistoryTransferQueue').TransferTask) => Promise<void>)
     | null = null;
-  private isAppActive = true;
-  private _uploadAbortController: AbortController | null = null;
   private _downloadAbortController: AbortController | null = null;
 
   private readonly _remoteChangeCallback: RemoteClipboardChangedCallback = async (content) => {
@@ -169,7 +165,6 @@ class ClipboardSyncService {
   }
 
   async onAppForeground(): Promise<void> {
-    this.isAppActive = true;
     if (!this.activeServer) return;
 
     if (this.activeServer.type === 'syncclipboard') {
@@ -188,7 +183,6 @@ class ClipboardSyncService {
   }
 
   async onAppBackground(): Promise<void> {
-    this.isAppActive = false;
     const config = await configService.getConfig();
     const bgDownloadEnabled = config?.enableBackgroundTasks && config?.enableBackgroundDownload;
 
@@ -202,38 +196,6 @@ class ClipboardSyncService {
 
     if (!this.activeServer) return;
     await remoteClipboardMonitor.refresh();
-  }
-
-  async triggerUpload(): Promise<SyncResult> {
-    if (this._uploadAbortController) {
-      this._uploadAbortController.abort();
-    }
-
-    this._uploadAbortController = new AbortController();
-    clipboardSyncState.setUploadingClipboard(true);
-
-    try {
-      const result = await SyncManager.getInstance().sync(
-        SyncDirection.Upload,
-        false,
-        this._uploadAbortController.signal
-      );
-      if (result.success) {
-        await remoteClipboardMonitor.refresh().catch(() => {});
-      }
-      return result;
-    } finally {
-      this._uploadAbortController = null;
-      clipboardSyncState.setUploadingClipboard(false);
-    }
-  }
-
-  cancelUpload(): void {
-    if (this._uploadAbortController) {
-      this._uploadAbortController.abort();
-      this._uploadAbortController = null;
-      clipboardSyncState.setUploadingClipboard(false);
-    }
   }
 
   recordLocalHash(hash: string): void {

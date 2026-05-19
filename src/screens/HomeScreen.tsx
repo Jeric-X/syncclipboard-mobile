@@ -24,7 +24,11 @@ import { useErrorStore } from '@/stores/errorStore';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
 import { getClipboardSyncService } from '@/services/sync/ClipboardSyncService';
 import { createContentFromFile } from '@/utils/clipboard/clipboardContentUtils';
-import { setRemoteClipboard } from '@/services/sync/ClipboardSyncActions';
+import {
+  setRemoteClipboard,
+  uploadLocalClipboard,
+  cancelUploadLocalClipboard,
+} from '@/services/sync/ClipboardSyncActions';
 import type { ProgressInfo } from '@/types/progress';
 
 export function HomeScreen() {
@@ -153,7 +157,7 @@ export function HomeScreen() {
         fileUploadPayload.fileSize,
         { signal }
       );
-      await setRemoteClipboard(content, signal, (info) => {
+      await setRemoteClipboard(content, 'external', signal, (info) => {
         setFileUploadProgress(info);
       });
     },
@@ -205,20 +209,7 @@ export function HomeScreen() {
       clearError();
 
       console.log('[HomeScreen] Starting upload...');
-      const result = await getClipboardSyncService().triggerUpload();
-      console.log('[HomeScreen] Upload result:', JSON.stringify(result, null, 2));
-
-      if (result.success) {
-        showMessage('剪贴板已上传到服务器', 'success');
-      } else {
-        const errorMessage = result.error || '上传失败';
-        console.log('[HomeScreen] Upload failed, setting error:', errorMessage);
-        setError({
-          title: '上传失败',
-          message: errorMessage,
-        });
-        showMessage('上传失败', 'error');
-      }
+      await uploadLocalClipboard(null);
     } catch (error: unknown) {
       console.error('[HomeScreen] Upload exception:', error);
       const errorMessage = error instanceof Error ? error.message : '无法上传到服务器';
@@ -230,7 +221,6 @@ export function HomeScreen() {
         normalizedMessage.includes('cancelled');
 
       if (isCanceled) {
-        showMessage('已取消上传', 'info');
         return;
       }
 
@@ -254,7 +244,7 @@ export function HomeScreen() {
       return;
     }
 
-    getClipboardSyncService().cancelUpload();
+    cancelUploadLocalClipboard();
     showMessage('正在取消上传...', 'info');
   }, [uploadingClipboard, showMessage]);
 

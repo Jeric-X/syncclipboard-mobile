@@ -5,11 +5,11 @@
 
 import { AppState, Platform, ToastAndroid } from 'react-native';
 import { ClipboardContent } from '../../types/clipboard';
-import { SyncDirection, SyncResult } from '../../types/sync';
 import type { AppConfig } from '../../types';
 import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
 import { remoteClipboardMonitor } from './RemoteClipboardMonitor';
+import { uploadLocalClipboard } from './ClipboardSyncActions';
 import { SyncManager } from './SyncManager';
 import { historyService } from '../history/HistoryService';
 import { calculateTextHash } from '../../utils/hash';
@@ -20,7 +20,6 @@ class ClipboardChangedHandler {
 
   private lastRemoteProfileHash: string | null = null;
   private lastLocalProfileHash: string | null = null;
-  private isAutoSyncing = false;
 
   private constructor() {}
 
@@ -123,7 +122,7 @@ class ClipboardChangedHandler {
     const localMatchesRemote = remoteHash === this.lastLocalProfileHash;
     const activeServer = await configService.getActiveServer();
 
-    if (localMatchesRemote || !activeServer || this.isAutoSyncing) {
+    if (localMatchesRemote || !activeServer) {
       return;
     }
 
@@ -132,7 +131,6 @@ class ClipboardChangedHandler {
       return;
     }
 
-    this.isAutoSyncing = true;
     try {
       const result = await this.copyToLocalClipboard(content);
       if (result.success && Platform.OS === 'android') {
@@ -144,8 +142,6 @@ class ClipboardChangedHandler {
       }
     } catch (error) {
       console.error('[ClipboardChangedHandler] Auto-copy failed:', error);
-    } finally {
-      this.isAutoSyncing = false;
     }
   }
 
@@ -191,28 +187,21 @@ class ClipboardChangedHandler {
     if (currentHash === this.lastLocalProfileHash) return;
     this.lastLocalProfileHash = currentHash;
 
-    if (this.isAutoSyncing) return;
-    this.isAutoSyncing = true;
-
-    SyncManager.getInstance()
-      .sync(SyncDirection.Upload, true)
-      .then((result: SyncResult) => {
-        if (result.success && !result.skipped && Platform.OS === 'android') {
-          const preview =
-            content.type === 'Text' && content.text
-              ? content.text.trim().replace(/\s+/g, ' ').slice(0, 30)
-              : content.fileName || content.type;
-          SyncManager.getInstance().updateForegroundNotification(`已上传: ${preview}`);
-          if (config?.syncToastEnabled !== false) {
-            ToastAndroid.show(`已上传\n${preview}`, ToastAndroid.SHORT);
-          }
-          remoteClipboardMonitor.refresh().catch(() => {});
+    try {
+      const uploaded = await uploadLocalClipboard(content);
+      if (uploaded && Platform.OS === 'android') {
+        const preview = this.getContentPreview(content);
+        SyncManager.getInstance().updateForegroundNotification(`已上传: ${preview}`);
+        if (config?.syncToastEnabled !== false) {
+          ToastAndroid.show(`已上传\n${preview}`, ToastAndroid.SHORT);
         }
-      })
-      .catch((e: Error) => console.error('[ClipboardChangedHandler] Auto-upload failed:', e))
-      .finally(() => {
-        this.isAutoSyncing = false;
-      });
+        remoteClipboardMonitor.refresh().catch(() => {});
+      }
+    } catch (e: unknown) {
+      if (!(e instanceof DOMException && e.name === 'AbortError')) {
+        console.error('[ClipboardChangedHandler] Auto-upload failed:', e);
+      }
+    }
   }
 
   async downloadRemoteFile(

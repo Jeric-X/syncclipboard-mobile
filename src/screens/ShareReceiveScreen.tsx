@@ -9,8 +9,11 @@ import { View, ActivityIndicator, Text, StyleSheet, BackHandler } from 'react-na
 import { useIncomingShare, clearSharedPayloads, getSharedPayloads } from 'expo-sharing';
 import { useTheme } from '@/hooks/useTheme';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { uploadFileAndAddToHistory, uploadTextAndAddToHistory } from '@/utils/uploadFile';
-import { createContentFromFile } from '@/utils/clipboard/clipboardContentUtils';
+import {
+  createContentFromFile,
+  createContentFromText,
+} from '@/utils/clipboard/clipboardContentUtils';
+import { setRemoteClipboard } from '@/services/sync/ClipboardSyncActions';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
 import type { ProgressInfo } from 'native-util';
 
@@ -66,7 +69,8 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
         if (!text) throw new Error('分享的文字内容为空');
         setLoadingText('正在上传文字…');
         setPreviewText(text.slice(0, 100));
-        await uploadTextAndAddToHistory(text, { signal });
+        const textContent = await createContentFromText(text, { signal });
+        await setRemoteClipboard(textContent, 'external', signal);
         clearSharedPayloads();
         return;
       }
@@ -92,12 +96,9 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
         undefined,
         { signal }
       );
-      await uploadFileAndAddToHistory(content, {
-        signal,
-        onProgress: (stage, info) => {
-          setLoadingText(stage);
-          setProgress(info ?? null);
-        },
+      await setRemoteClipboard(content, 'external', signal, (info) => {
+        setLoadingText('正在上传文件…');
+        setProgress(info ?? null);
       });
       clearSharedPayloads();
     },
