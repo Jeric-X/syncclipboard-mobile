@@ -5,29 +5,25 @@
  * 负责管理：
  * - ClipboardSyncService（远程同步、SignalR/轮询、SyncManager、自动上传/下载）
  * - HistoryService（本地历史记录追踪）
- * - 前台服务（常驻通知）
- * - 短信验证码服务
  * - 剪贴板监控（startMonitoring）
  * - 统计心跳
- * - 通知栏停止/临时停止监听
+ * - LongRunningTask（前台常驻通知、短信转发等，由 LongRunningTaskManager 统一管理）
  *
  * 被 ServiceRestartApp、QuickActionApp、App（main）调用。
  * HomeScreen 不负责后台服务的启动与停止。
  */
 
 import { Platform } from 'react-native';
-import * as ForegroundService from 'foreground-service';
 import { setTimer, clearTimer } from 'native-timer';
 import { configService } from '../ConfigService';
 import { backgroundRuntimeState } from '../BackgroundRuntimeState';
+import { longRunningTaskManager } from '../longRunningTask/LongRunningTaskManager';
 
 class BackgroundServiceManager {
   private static instance: BackgroundServiceManager | null = null;
 
   private running = false;
   private heartbeatTag: string | null = null;
-  private stopSub: { remove(): void } | null = null;
-  private tempStopSub: { remove(): void } | null = null;
   /** 取消对 configService 的订阅 */
   private configUnsub: (() => void) | null = null;
   /** 取消对 backgroundRuntimeState 的订阅 */
@@ -55,37 +51,19 @@ class BackgroundServiceManager {
   }
 
   /**
-   * 更新静态短信接收器状态。
-   * SMS 转发不受后台任务总开关控制，仅由 enableSmsForwarding 决定。
-   */
-  private async _updateSmsReceiver(): Promise<void> {
-    try {
-      const config = await configService.getConfig();
-      const { setStaticReceiverEnabled } = require('sms-forwarder');
-      setStaticReceiverEnabled(!!config?.enableSmsForwarding);
-    } catch (e) {
-      console.error('[BackgroundServiceManager] Failed to toggle SMS receiver:', e);
-    }
-  }
-
-  // ─── 公开 API ─────────────────────────────────────────────
-
-  /**
    * 启动所有服务（幂等）。
    * 由任意 Activity 入口调用。
    * - 始终启动剪贴板监控（前台 UI 需要）
    * - 始终启动 ClipboardSyncService（前台 UI + 后台同步）
-   * - 仅在后台任务启用时才启动前台通知和心跳
+   * - 仅在后台任务启用时才启动心跳
    * - 始终订阅配置变化以支持动态重启
    */
   async start(): Promise<void> {
     // 确保配置已初始化（configStorage 内部做幂等保护）
     await configService.getConfig();
 
-    // SMS 转发始终独立管理（Android 专属）
-    if (Platform.OS === 'android') {
-      await this._updateSmsReceiver();
-    }
+    // 启动所有持续任务（前台服务、SMS 转发等，各任务内部自行处理平台判断和配置订阅）
+    await longRunningTaskManager.startAll();
 
     // 始终启动剪贴板监控（无论是否启用后台任务，UI 需要感知本地剪贴板变化）
     try {
@@ -109,7 +87,7 @@ class BackgroundServiceManager {
     // 始终启动 ClipboardSyncService（前台 UI + 后台同步）
     await this._startRemoteSync();
 
-    // 后台专用服务（前台通知 + 心跳，Android 专属）
+    // 后台专用服务（心跳，Android 专属，前台通知由 LongRunningTaskManager 管理）
     if (Platform.OS === 'android') {
       if (await this.getShouldRunBackground()) {
         if (!this.running) {
@@ -126,10 +104,11 @@ class BackgroundServiceManager {
   }
 
   /**
-   * 停止后台专用服务（前台通知、心跳）。
+   * 停止后台专用服务（心跳）并停止所有持续任务（前台通知等）。
    * 注意：ClipboardSyncService 不在此处停止，由 refresh() 统一管理。
    */
   async stop(): Promise<void> {
+    await longRunningTaskManager.stopAll();
     await this._stopBackgroundOnlyServices();
   }
 
@@ -137,11 +116,6 @@ class BackgroundServiceManager {
    * 配置变化时重新评估所有服务状态（由内部订阅自动触发）。
    */
   async refresh(): Promise<void> {
-    // SMS 转发（Android 专属）
-    if (Platform.OS === 'android') {
-      await this._updateSmsReceiver();
-    }
-
     // 刷新远程同步服务（处理服务器变更、连接类型切换等）
     await this._startRemoteSync();
 
@@ -151,9 +125,8 @@ class BackgroundServiceManager {
         if (!this.running) {
           this.running = true;
           await this._startBackgroundOnlyServices();
-        } else {
-          await this._updateBackgroundOnlyServices();
         }
+        // 注意：前台通知的配置更新由 ForegroundServiceTask 内部订阅处理，无需在此更新
       } else {
         await this._stopBackgroundOnlyServices();
       }
@@ -172,29 +145,9 @@ class BackgroundServiceManager {
     }
   }
 
-  /** 启动后台专用服务（前台通知、心跳、剪贴板监控） */
+  /** 启动后台专用服务（心跳） */
   private async _startBackgroundOnlyServices(): Promise<void> {
-    const config = await configService.getConfig();
-
-    // 1. 按需启动前台常驻通知服务
-    if (config?.enableForegroundNotification) {
-      try {
-        ForegroundService.startService();
-
-        this.stopSub = ForegroundService.addStopListener(() => {
-          configService.updateConfig({ enableBackgroundTasks: false }).catch((e) => {
-            console.error('[BackgroundServiceManager] Failed to disable background tasks:', e);
-          });
-        });
-        this.tempStopSub = ForegroundService.addTempStopListener(() => {
-          backgroundRuntimeState.setTempDisabled(true);
-        });
-      } catch (e) {
-        console.error('[BackgroundServiceManager] Failed to start foreground service:', e);
-      }
-    }
-
-    // 2. 统计心跳
+    // 统计心跳
     try {
       const { useStatisticsStore } = require('../../stores/statisticsStore');
       await useStatisticsStore.getState().recordBackgroundTaskStart();
@@ -209,37 +162,10 @@ class BackgroundServiceManager {
     console.log('[BackgroundServiceManager] Background-only services started');
   }
 
-  /** 更新后台专用服务（配置变化时调用） */
-  private async _updateBackgroundOnlyServices(): Promise<void> {
-    const config = await configService.getConfig();
-
-    try {
-      const isRunning = ForegroundService.isRunning();
-      if (config?.enableForegroundNotification && !isRunning) {
-        ForegroundService.startService();
-        this.stopSub = ForegroundService.addStopListener(() => {
-          configService.updateConfig({ enableBackgroundTasks: false }).catch((e) => {
-            console.error('[BackgroundServiceManager] Failed to disable background tasks:', e);
-          });
-        });
-        this.tempStopSub = ForegroundService.addTempStopListener(() => {
-          backgroundRuntimeState.setTempDisabled(true);
-        });
-      } else if (!config?.enableForegroundNotification && isRunning) {
-        this._cleanupListeners();
-        ForegroundService.stopService();
-      }
-    } catch (e) {
-      console.error('[BackgroundServiceManager] Failed to update foreground service:', e);
-    }
-  }
-
-  /** 停止后台专用服务 */
+  /** 停止后台专用服务（心跳） */
   private async _stopBackgroundOnlyServices(): Promise<void> {
     if (!this.running) return;
     this.running = false;
-
-    this._cleanupListeners();
 
     if (this.heartbeatTag) {
       try {
@@ -247,17 +173,6 @@ class BackgroundServiceManager {
       } catch {}
       this.heartbeatTag = null;
     }
-
-    try {
-      ForegroundService.stopService();
-    } catch {}
-  }
-
-  private _cleanupListeners(): void {
-    this.stopSub?.remove();
-    this.tempStopSub?.remove();
-    this.stopSub = null;
-    this.tempStopSub = null;
   }
 
   /**
