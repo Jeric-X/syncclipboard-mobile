@@ -124,6 +124,15 @@ export function cancelRemoteClipboardDownload(): void {
 }
 
 /**
+ * 刷新本地剪贴板和远程剪贴板监视器。
+ * 等价于原 ClipboardSyncService.refreshContent()。
+ */
+export async function refreshMonitor(): Promise<void> {
+  await clipboardMonitor.triggerCheck();
+  await remoteClipboardMonitor.refresh();
+}
+
+/**
  * 拉取最新远程剪贴板内容，若包含未下载的文件则先下载，最后写入本地剪贴板。
  * @returns 最终写入的内容；若远程无文件或无需下载则返回 fetchLatest 的结果
  */

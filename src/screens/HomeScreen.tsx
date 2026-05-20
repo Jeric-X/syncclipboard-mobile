@@ -30,6 +30,7 @@ import {
   cancelUploadLocalClipboard,
   downloadRemoteClipboard,
   cancelRemoteClipboardDownload,
+  refreshMonitor,
 } from '@/services/sync/ClipboardSyncActions';
 import type { ProgressInfo } from '@/types/progress';
 
@@ -200,7 +201,7 @@ export function HomeScreen() {
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await getClipboardSyncService().refreshContent();
+      await refreshMonitor();
     } finally {
       setRefreshing(false);
     }

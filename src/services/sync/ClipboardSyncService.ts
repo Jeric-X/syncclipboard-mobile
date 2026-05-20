@@ -15,7 +15,7 @@
  */
 
 import { AppState } from 'react-native';
-import { ClipboardChangeCallback, HistoryItem } from '../../types/clipboard';
+import { ClipboardChangeCallback } from '../../types/clipboard';
 import type { ServerConfig } from '../../types/api';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import type { ClipboardSyncState, ClipboardSyncStateListener } from './SyncState';
@@ -24,10 +24,11 @@ import { configService } from '../ConfigService';
 import { remoteClipboardMonitor } from './RemoteClipboardMonitor';
 import type { RemoteClipboardChangedCallback } from './RemoteClipboardMonitor';
 import { historyService } from '../history/HistoryService';
-import { getHistoryFileUri } from '../../utils/fileStorage';
 import { getHistoryTransferQueue } from '../history/HistoryTransferQueue';
-import { getProfileId } from '@/utils';
+import type { TransferTask } from '../history/HistoryTransferQueue';
 import { getClipboardChangedHandler } from './ClipboardChangedHandler';
+import { createHistoryChangedHandler } from './historyChangedHandler';
+import { createTransferQueueChangedHandler } from './historyTransferQueueChangedHandler';
 
 class ClipboardSyncService {
   private static instance: ClipboardSyncService | null = null;
@@ -36,9 +37,7 @@ class ClipboardSyncService {
   private activeServer: ServerConfig | null = null;
   private clipboardUnsub: (() => void) | null = null;
   private historyUnsub: (() => void) | null = null;
-  private transferQueueHandler:
-    | ((task: import('../history/HistoryTransferQueue').TransferTask) => Promise<void>)
-    | null = null;
+  private transferQueueHandler: ((task: TransferTask) => Promise<void>) | null = null;
   private readonly _remoteChangeCallback: RemoteClipboardChangedCallback = async (content) => {
     try {
       await getClipboardChangedHandler().processRemoteClipboardContent(content);
@@ -187,13 +186,6 @@ class ClipboardSyncService {
     }
   }
 
-  async refreshContent(): Promise<void> {
-    await clipboardMonitor.triggerCheck();
-
-    if (!this.activeServer) return;
-    await remoteClipboardMonitor.refresh();
-  }
-
   recordLocalHash(hash: string): void {
     getClipboardChangedHandler().setLastLocalProfileHash(hash);
   }
@@ -227,51 +219,8 @@ class ClipboardSyncService {
   private _subscribeToTransferQueue(): void {
     if (this.transferQueueHandler) return;
     const queue = getHistoryTransferQueue();
-
-    const handler = async (task: import('../history/HistoryTransferQueue').TransferTask) => {
-      if (task.type !== 'download') return;
-
-      const currentRemote = clipboardSyncState.getState().remoteContent;
-      if (!currentRemote?.profileHash) return;
-
-      const profileId = getProfileId(currentRemote.type, currentRemote.profileHash);
-      if (task.profileId !== profileId) return;
-
-      if (
-        task.status === 'running' ||
-        task.status === 'pending' ||
-        task.status === 'waitForRetry'
-      ) {
-        clipboardSyncState.setDownloadingRemote(true);
-        if (task.status === 'running' && task.progress >= 0) {
-          clipboardSyncState.setDownloadProgress({
-            progress: task.progress / 100,
-            bytesTransferred: task.bytesTransferred,
-            totalBytes: task.totalBytes || 0,
-          });
-        }
-      } else if (task.status === 'completed') {
-        const fileUri = await getHistoryFileUri(
-          currentRemote.type,
-          currentRemote.profileHash,
-          currentRemote.fileName!
-        );
-        if (fileUri && fileUri !== currentRemote.fileUri) {
-          clipboardSyncState.updateRemoteContentFileUri(fileUri);
-          const config = await configService.getConfig();
-          if (config?.syncToastEnabled !== false) {
-            const { ToastAndroid } = require('react-native');
-            ToastAndroid.show('文件已下载', ToastAndroid.SHORT);
-          }
-        }
-        clipboardSyncState.clearDownloadState();
-      } else {
-        clipboardSyncState.clearDownloadState();
-      }
-    };
-
-    this.transferQueueHandler = handler;
-    queue.onTaskStatusChanged(handler);
+    this.transferQueueHandler = createTransferQueueChangedHandler();
+    queue.onTaskStatusChanged(this.transferQueueHandler);
   }
 
   private _unsubscribeFromTransferQueue(): void {
@@ -298,28 +247,7 @@ class ClipboardSyncService {
 
   private _subscribeToHistoryChanges(): void {
     if (this.historyUnsub) return;
-    const handler = (items: HistoryItem[], action: string) => {
-      if (action !== 'delete' && action !== 'clear') return;
-
-      const currentRemote = clipboardSyncState.getState().remoteContent;
-      if (!currentRemote?.profileHash) return;
-
-      if (action === 'clear') {
-        console.log('[ClipboardSyncService] History cleared, resetting remote content fileUri');
-        clipboardSyncState.updateRemoteContentFileUri(undefined);
-        return;
-      }
-
-      const deletedSet = new Set(items.map((i) => i.profileHash.toLowerCase()));
-      if (deletedSet.has(currentRemote.profileHash.toLowerCase())) {
-        console.log(
-          '[ClipboardSyncService] Remote content deleted from history, resetting fileUri:',
-          currentRemote.profileHash
-        );
-        clipboardSyncState.updateRemoteContentFileUri(undefined);
-      }
-    };
-
+    const handler = createHistoryChangedHandler();
     historyService.addChangeCallback(handler);
     this.historyUnsub = () => historyService.removeChangeCallback(handler);
   }

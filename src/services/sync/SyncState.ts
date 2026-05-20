@@ -30,7 +30,6 @@ class ClipboardSyncStateManager {
     syncError: null,
   };
   private _listeners = new Set<ClipboardSyncStateListener>();
-  private _uploadingRefCount = 0;
 
   /** 获取当前状态快照 */
   getState(): ClipboardSyncState {
@@ -58,12 +57,7 @@ class ClipboardSyncStateManager {
   }
 
   setUploadingClipboard(uploading: boolean): void {
-    if (uploading) {
-      this._uploadingRefCount++;
-    } else {
-      this._uploadingRefCount = Math.max(0, this._uploadingRefCount - 1);
-    }
-    this.setState({ uploadingClipboard: this._uploadingRefCount > 0 });
+    this.setState({ uploadingClipboard: uploading });
   }
 
   setUploadProgress(progress: ProgressDetail | null): void {
