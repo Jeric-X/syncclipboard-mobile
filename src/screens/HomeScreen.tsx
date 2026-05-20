@@ -28,6 +28,8 @@ import {
   setRemoteClipboard,
   uploadLocalClipboard,
   cancelUploadLocalClipboard,
+  downloadRemoteClipboard,
+  cancelRemoteClipboardDownload,
 } from '@/services/sync/ClipboardSyncActions';
 import type { ProgressInfo } from '@/types/progress';
 
@@ -51,6 +53,7 @@ export function HomeScreen() {
   const downloadingRemote = useClipboardSyncServiceStore((s) => s.downloadingRemote);
   const downloadProgress = useClipboardSyncServiceStore((s) => s.downloadProgress);
   const uploadingClipboard = useClipboardSyncServiceStore((s) => s.uploadingClipboard);
+  const uploadProgress = useClipboardSyncServiceStore((s) => s.uploadProgress);
   const [fileUploadProgress, setFileUploadProgress] = useState<ProgressInfo | null>(null);
   const syncError = useClipboardSyncServiceStore((s) => s.syncError);
 
@@ -157,7 +160,7 @@ export function HomeScreen() {
         fileUploadPayload.fileSize,
         { signal }
       );
-      await setRemoteClipboard(content, 'external', signal, (info) => {
+      await setRemoteClipboard(content, signal, (info) => {
         setFileUploadProgress(info);
       });
     },
@@ -209,7 +212,7 @@ export function HomeScreen() {
       clearError();
 
       console.log('[HomeScreen] Starting upload...');
-      await uploadLocalClipboard(null);
+      await uploadLocalClipboard();
     } catch (error: unknown) {
       console.error('[HomeScreen] Upload exception:', error);
       const errorMessage = error instanceof Error ? error.message : '无法上传到服务器';
@@ -272,7 +275,7 @@ export function HomeScreen() {
   const handleDownloadRemoteFile = async () => {
     if (!remoteContent || !needsDownload) return;
     try {
-      await getClipboardSyncService().downloadRemoteFile();
+      await downloadRemoteClipboard();
     } catch (error) {
       console.error('[HomeScreen] Failed to download remote file:', error);
       showMessage('文件下载失败', 'error');
@@ -281,7 +284,7 @@ export function HomeScreen() {
 
   // 取消下载
   const handleCancelDownload = useCallback(() => {
-    getClipboardSyncService().cancelRemoteFileDownload();
+    cancelRemoteClipboardDownload();
   }, []);
 
   return (
@@ -333,10 +336,10 @@ export function HomeScreen() {
                 <CurrentClipboardCard
                   clipboard={remoteContent}
                   isRemote={true}
-                  onDownload={handleDownloadRemoteFile}
-                  downloading={downloadingRemote}
-                  downloadProgress={downloadProgress}
-                  onCancelDownload={handleCancelDownload}
+                  onAction={handleDownloadRemoteFile}
+                  acting={downloadingRemote}
+                  actionProgress={downloadProgress}
+                  onCancelAction={handleCancelDownload}
                   onCopy={async (content) => {
                     const result = await copyRemoteToLocal(content, 'Manual copy: ');
                     if (result.success) {
@@ -358,9 +361,10 @@ export function HomeScreen() {
               <CurrentClipboardCard
                 clipboard={currentContent}
                 isRemote={false}
-                onUpload={handleUpload}
-                uploading={uploadingClipboard}
-                onCancelUpload={handleCancelClipboardUpload}
+                onAction={handleUpload}
+                acting={uploadingClipboard}
+                actionProgress={uploadProgress}
+                onCancelAction={handleCancelClipboardUpload}
                 onCopy={copyLocalToClipboard}
                 onWordPick={setWordPickerText}
               />

@@ -70,7 +70,7 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
         setLoadingText('正在上传文字…');
         setPreviewText(text.slice(0, 100));
         const textContent = await createContentFromText(text, { signal });
-        await setRemoteClipboard(textContent, 'external', signal);
+        await setRemoteClipboard(textContent, signal);
         clearSharedPayloads();
         return;
       }
@@ -96,7 +96,7 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
         undefined,
         { signal }
       );
-      await setRemoteClipboard(content, 'external', signal, (info) => {
+      await setRemoteClipboard(content, signal, (info) => {
         setLoadingText('正在上传文件…');
         setProgress(info ?? null);
       });

@@ -9,11 +9,10 @@ import type { AppConfig } from '../../types';
 import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
 import { remoteClipboardMonitor } from './RemoteClipboardMonitor';
-import { uploadLocalClipboard } from './ClipboardSyncActions';
-import { SyncManager } from './SyncManager';
+import { uploadLocalClipboard, downloadRemoteClipboard } from './ClipboardSyncActions';
+import { updateForegroundNotification } from '../notification/ForegroundNotification';
 import { historyService } from '../history/HistoryService';
 import { calculateTextHash } from '../../utils/hash';
-import { getClientService } from '../client/ClientService';
 
 class ClipboardChangedHandler {
   private static instance: ClipboardChangedHandler | null = null;
@@ -94,15 +93,17 @@ class ClipboardChangedHandler {
       return null;
     }
 
-    const result = await this.downloadRemoteFile(content);
-
-    if (result) {
+    try {
+      const result = await downloadRemoteClipboard(content);
       console.log('[ClipboardChangedHandler] Auto-download completed');
-    } else {
-      console.error('[ClipboardChangedHandler] Auto-download failed');
+      return result;
+    } catch (error) {
+      const err = error as Error;
+      if (err?.name !== 'AbortError') {
+        console.error('[ClipboardChangedHandler] Auto-download failed:', error);
+      }
+      return null;
     }
-
-    return result;
   }
 
   private async tryAutoCopyToClipboard(
@@ -135,7 +136,7 @@ class ClipboardChangedHandler {
       const result = await this.copyToLocalClipboard(content);
       if (result.success && Platform.OS === 'android') {
         const preview = this.getContentPreview(content);
-        SyncManager.getInstance().updateForegroundNotification(`已下载: ${preview}`);
+        updateForegroundNotification(`已下载: ${preview}`);
         if (config?.syncToastEnabled !== false) {
           ToastAndroid.show(`已下载\n${preview}`, ToastAndroid.SHORT);
         }
@@ -191,7 +192,7 @@ class ClipboardChangedHandler {
       const uploaded = await uploadLocalClipboard(content);
       if (uploaded && Platform.OS === 'android') {
         const preview = this.getContentPreview(content);
-        SyncManager.getInstance().updateForegroundNotification(`已上传: ${preview}`);
+        updateForegroundNotification(`已上传: ${preview}`);
         if (config?.syncToastEnabled !== false) {
           ToastAndroid.show(`已上传\n${preview}`, ToastAndroid.SHORT);
         }
@@ -201,25 +202,6 @@ class ClipboardChangedHandler {
       if (!(e instanceof DOMException && e.name === 'AbortError')) {
         console.error('[ClipboardChangedHandler] Auto-upload failed:', e);
       }
-    }
-  }
-
-  async downloadRemoteFile(
-    content: ClipboardContent,
-    progress?: (info: { progress: number; bytesTransferred: number; totalBytes: number }) => void,
-    signal?: AbortSignal
-  ): Promise<ClipboardContent | null> {
-    try {
-      const clientService = getClientService();
-      return await clientService.downloadData(content, progress, signal);
-    } catch (error) {
-      const err = error as Error;
-      const msg = err?.message?.toLowerCase() ?? '';
-      if (err?.name === 'AbortError' || msg.includes('abort') || msg.includes('cancel')) {
-        return null;
-      }
-      console.error('[ClipboardChangedHandler] Download failed:', error);
-      return null;
     }
   }
 }

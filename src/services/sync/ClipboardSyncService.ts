@@ -15,8 +15,7 @@
  */
 
 import { AppState } from 'react-native';
-import { ClipboardContent, ClipboardChangeCallback, HistoryItem } from '../../types/clipboard';
-import type { ProgressDetail } from '../../types/progress';
+import { ClipboardChangeCallback, HistoryItem } from '../../types/clipboard';
 import type { ServerConfig } from '../../types/api';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import type { ClipboardSyncState, ClipboardSyncStateListener } from './SyncState';
@@ -26,7 +25,6 @@ import { remoteClipboardMonitor } from './RemoteClipboardMonitor';
 import type { RemoteClipboardChangedCallback } from './RemoteClipboardMonitor';
 import { historyService } from '../history/HistoryService';
 import { getHistoryFileUri } from '../../utils/fileStorage';
-import { getClientService } from '../client/ClientService';
 import { getHistoryTransferQueue } from '../history/HistoryTransferQueue';
 import { getProfileId } from '@/utils';
 import { getClipboardChangedHandler } from './ClipboardChangedHandler';
@@ -41,8 +39,6 @@ class ClipboardSyncService {
   private transferQueueHandler:
     | ((task: import('../history/HistoryTransferQueue').TransferTask) => Promise<void>)
     | null = null;
-  private _downloadAbortController: AbortController | null = null;
-
   private readonly _remoteChangeCallback: RemoteClipboardChangedCallback = async (content) => {
     try {
       await getClipboardChangedHandler().processRemoteClipboardContent(content);
@@ -331,53 +327,6 @@ class ClipboardSyncService {
   private _unsubscribeFromHistoryChanges(): void {
     this.historyUnsub?.();
     this.historyUnsub = null;
-  }
-
-  async downloadRemoteFile(content?: ClipboardContent): Promise<ClipboardContent | null> {
-    const remoteContent = content || clipboardSyncState.getState().remoteContent;
-    if (!remoteContent) return null;
-
-    const clientService = getClientService();
-
-    this._downloadAbortController = new AbortController();
-    const signal = this._downloadAbortController.signal;
-
-    clipboardSyncState.setState({ downloadingRemote: true, downloadProgress: null });
-
-    try {
-      const result = await clientService.downloadData(
-        remoteContent,
-        (info: ProgressDetail) => {
-          clipboardSyncState.setState({
-            downloadProgress: {
-              progress: info.progress,
-              bytesTransferred: info.bytesTransferred,
-              totalBytes: info.totalBytes,
-            },
-          });
-        },
-        signal
-      );
-
-      if (result) {
-        clipboardSyncState.setState({ remoteContent: result });
-      }
-
-      return result;
-    } catch (downloadError) {
-      console.error('[ClipboardSyncService] Download failed:', downloadError);
-      return null;
-    } finally {
-      this._downloadAbortController = null;
-      clipboardSyncState.setState({ downloadingRemote: false, downloadProgress: null });
-    }
-  }
-
-  cancelRemoteFileDownload(): void {
-    if (this._downloadAbortController) {
-      this._downloadAbortController.abort();
-      this._downloadAbortController = null;
-    }
   }
 }
 

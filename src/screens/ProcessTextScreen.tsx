@@ -21,7 +21,7 @@ export const ProcessTextScreen: React.FC<ProcessTextScreenProps> = ({ text, onCo
     async (signal: AbortSignal) => {
       if (!activeServer) throw new Error('请先在设置中配置服务器');
       const content = await createContentFromText(text, { signal });
-      await setRemoteClipboard(content, 'external', signal);
+      await setRemoteClipboard(content, signal);
     },
     [text, activeServer]
   );

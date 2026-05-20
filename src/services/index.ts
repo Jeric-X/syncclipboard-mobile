@@ -15,9 +15,6 @@ export type {
   RemoteHistoryChangedCallback,
 } from 'signalr-client';
 
-// Sync Manager
-export { SyncManager } from './sync/SyncManager';
-
 // Error Service
 export { errorService } from './ErrorService';
 export type { ErrorInfo } from './ErrorService';

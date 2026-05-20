@@ -1,104 +1,146 @@
 import type { ClipboardContent } from '@/types/clipboard';
 import type { ProgressInfo } from '@/types/progress';
+import type { ProgressDetail } from '@/types/progress';
 import { historyService } from '../history/HistoryService';
 import { getClientService } from '../client/ClientService';
 import { configService } from '../ConfigService';
 import { remoteClipboardMonitor } from './RemoteClipboardMonitor';
 import { clipboardSyncState } from './SyncState';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
+import { localClipboard } from '../clipboard/LocalClipboard';
+import { DedupedOperation } from '@/utils/DedupedOperation';
 
-/** 同步优先级：external（高，外部触发）或 currentlocal（低，当前本地自动） */
-export type SyncPriority = 'external' | 'currentlocal';
+/** 比较两个 ClipboardContent 是否代表相同内容（用于去重继承判断） */
+function isSameContent(a: ClipboardContent, b: ClipboardContent): boolean {
+  if (a.type !== b.type) return false;
+  if (a.profileHash && b.profileHash) return a.profileHash === b.profileHash;
+  if (a.type === 'Text') return a.text === b.text;
+  return a.fileName === b.fileName && a.fileSize === b.fileSize;
+}
 
-const PRIORITY_LEVEL: Record<SyncPriority, number> = {
-  external: 1,
-  currentlocal: 0,
-};
-
-/** 当前正在执行的上传控制器，用于取消上一个未完成的实例 */
-let _currentController: AbortController | null = null;
-let _currentPriority: SyncPriority = 'currentlocal';
+const _uploadOp = new DedupedOperation<ClipboardContent, boolean, ProgressInfo>(isSameContent);
+const _downloadOp = new DedupedOperation<ClipboardContent, ClipboardContent | null, ProgressDetail>(
+  isSameContent
+);
 
 /**
  * 上传文件到远程剪贴板，并将内容添加到本地历史记录。
- * 同时只允许一个实例运行；高优先级可打断同等或更低优先级，低优先级无法打断高优先级。
+ * - 若与正在进行的上传内容相同，则继承（共享进度），等待完成。
+ * - 若不同，则取消正在进行的上传并重新开始。
  * @param content 已构建好的剪贴板内容（含 profileHash、fileUri 等）
- * @param priority 同步优先级，'external' 为外部触发（高），'currentlocal' 为本地自动（低）
  * @param signal 外部取消信号
  * @param onProgress 上传进度回调
- * @returns `true` 表示上传已完成，`false` 表示因低优先级被跳过（高优先级正在执行）
- * @throws 当被更高优先级打断（AbortError）或发生其他错误时抛出
+ * @returns `true` 表示上传已完成
+ * @throws 当被取消（AbortError）或发生其他错误时抛出
  */
 export async function setRemoteClipboard(
   content: ClipboardContent,
-  priority: SyncPriority,
   signal: AbortSignal,
   onProgress?: (info: ProgressInfo) => void
 ): Promise<boolean> {
-  // 仅在新优先级 >= 当前优先级时才打断正在进行的实例
-  if (_currentController && PRIORITY_LEVEL[priority] >= PRIORITY_LEVEL[_currentPriority]) {
-    _currentController.abort();
-  } else if (_currentController) {
-    // 低优先级无法打断高优先级，跳过本次执行
-    return false;
-  }
-
-  const controller = new AbortController();
-  _currentController = controller;
-  _currentPriority = priority;
-
-  // 将外部 signal 的取消转发给内部 controller
-  const onExternalAbort = () => controller.abort(signal.reason);
-  if (signal.aborted) {
-    controller.abort(signal.reason);
-  } else {
-    signal.addEventListener('abort', onExternalAbort, { once: true });
-  }
-
-  try {
-    if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+  return _uploadOp.execute(content, onProgress, signal, async (sig, notify) => {
+    if (sig.aborted) throw new DOMException('Aborted', 'AbortError');
 
     const server = await configService.getActiveServer();
     if (!server) throw new Error('请先在设置中配置服务器');
 
     await historyService.addLocalContent(content);
 
-    await getClientService().setRemoteClipboard(content, onProgress, controller.signal);
+    await getClientService().setRemoteClipboard(content, notify, sig);
 
     if (content.profileHash) {
       remoteClipboardMonitor.setLastContentHash(content.profileHash);
     }
     return true;
-  } finally {
-    signal.removeEventListener('abort', onExternalAbort);
-    if (_currentController === controller) {
-      _currentController = null;
-    }
-  }
+  });
 }
 
 /**
  * 上传内容到远程剪贴板，并同步更新本地剪贴板卡片的上传状态（uploadingClipboard）。
- * 内部使用引用计数，支持与其他上传操作并发而不互相干扰状态。
  * @param content 剪贴板内容；为 null/undefined 时自动从本地剪贴板读取
- * @returns `true` 表示上传已完成，`false` 表示因低优先级被跳过或无内容可上传
+ * @returns `true` 表示上传已完成，`false` 表示无内容可上传
  */
-export async function uploadLocalClipboard(
-  content: ClipboardContent | null | undefined,
-  onProgress?: (info: ProgressInfo) => void
-): Promise<boolean> {
+export async function uploadLocalClipboard(content?: ClipboardContent | null): Promise<boolean> {
   const actualContent = content ?? clipboardMonitor.getLastContent();
   if (!actualContent) return false;
   const controller = new AbortController();
   clipboardSyncState.setUploadingClipboard(true);
+  clipboardSyncState.setUploadProgress(null);
   try {
-    return await setRemoteClipboard(actualContent, 'currentlocal', controller.signal, onProgress);
+    return await setRemoteClipboard(actualContent, controller.signal, (info) => {
+      clipboardSyncState.setUploadProgress(info);
+    });
   } finally {
     clipboardSyncState.setUploadingClipboard(false);
+    clipboardSyncState.setUploadProgress(null);
   }
 }
 
 /** 取消当前正在进行的本地上传（如有） */
 export function cancelUploadLocalClipboard(): void {
-  _currentController?.abort();
+  _uploadOp.abort();
+}
+
+/**
+ * 下载远程剪贴板文件，并同步更新 UI 下载进度状态（downloadingRemote / downloadProgress）。
+ * - 若与正在进行的下载内容相同，则继承（共享进度），等待完成。
+ * - 若不同，则取消正在进行的下载并重新开始。
+ * @param content 远程剪贴板内容；为 null/undefined 时自动从当前远程剪贴板状态读取
+ * @returns 下载完成的内容；若 content 和当前远程状态均为空则返回 null
+ * @throws 下载失败或被取消时抛出异常
+ */
+export async function downloadRemoteClipboard(
+  content?: ClipboardContent | null,
+  onProgress?: (info: ProgressDetail) => void
+): Promise<ClipboardContent | null> {
+  const actualContent = content ?? clipboardSyncState.getState().remoteContent;
+  if (!actualContent) return null;
+
+  return _downloadOp.execute(actualContent, onProgress, null, async (sig, notify) => {
+    clipboardSyncState.setDownloadingRemote(true);
+    clipboardSyncState.setDownloadProgress(null);
+    try {
+      const result = await getClientService().downloadData(
+        actualContent,
+        (info: ProgressDetail) => {
+          clipboardSyncState.setDownloadProgress(info);
+          notify(info);
+        },
+        sig
+      );
+      clipboardSyncState.setState({ remoteContent: result });
+      return result;
+    } finally {
+      clipboardSyncState.clearDownloadState();
+    }
+  });
+}
+
+/**
+ * 取消正在进行的远程剪贴板文件下载。
+ */
+export function cancelRemoteClipboardDownload(): void {
+  _downloadOp.abort();
+}
+
+/**
+ * 拉取最新远程剪贴板内容，若包含未下载的文件则先下载，最后写入本地剪贴板。
+ * @returns 最终写入的内容；若远程无文件或无需下载则返回 fetchLatest 的结果
+ */
+export async function setLocalClipboardFromRemote(
+  onProgress?: (info: ProgressDetail) => void
+): Promise<ClipboardContent | null> {
+  const content = await remoteClipboardMonitor.fetchLatest();
+
+  const needsDownload =
+    content.hasData &&
+    content.fileName !== undefined &&
+    content.fileSize !== undefined &&
+    !content.fileUri;
+
+  const finalContent = needsDownload ? await downloadRemoteClipboard(content, onProgress) : content;
+  if (finalContent) {
+    await localClipboard.setClipboardContent(finalContent);
+  }
+  return finalContent;
 }

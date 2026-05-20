@@ -13,6 +13,7 @@ export interface ClipboardSyncState {
   downloadingRemote: boolean;
   downloadProgress: ProgressDetail | null;
   uploadingClipboard: boolean;
+  uploadProgress: ProgressDetail | null;
   syncError: { title: string; message: string } | null;
 }
 
@@ -25,6 +26,7 @@ class ClipboardSyncStateManager {
     downloadingRemote: false,
     downloadProgress: null,
     uploadingClipboard: false,
+    uploadProgress: null,
     syncError: null,
   };
   private _listeners = new Set<ClipboardSyncStateListener>();
@@ -62,6 +64,14 @@ class ClipboardSyncStateManager {
       this._uploadingRefCount = Math.max(0, this._uploadingRefCount - 1);
     }
     this.setState({ uploadingClipboard: this._uploadingRefCount > 0 });
+  }
+
+  setUploadProgress(progress: ProgressDetail | null): void {
+    this.setState({ uploadProgress: progress });
+  }
+
+  clearUploadState(): void {
+    this.setState({ uploadingClipboard: false, uploadProgress: null });
   }
 
   setDownloadingRemote(downloading: boolean): void {

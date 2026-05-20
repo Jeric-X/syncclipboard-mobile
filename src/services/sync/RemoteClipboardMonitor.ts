@@ -119,7 +119,7 @@ class RemoteClipboardMonitor {
       const pollingInterval = interval ?? 3000;
       this.pollingTag = setTimer(
         () => {
-          this._fetchAndNotify().catch(() => {});
+          this.fetchLatest().catch(() => {});
         },
         pollingInterval,
         'remote_sync_poll'
@@ -135,26 +135,34 @@ class RemoteClipboardMonitor {
    * 与轮询逻辑复用同一实现，会自动跳过内容未变化的情况。
    */
   async refresh(): Promise<void> {
-    await this._fetchAndNotify();
-  }
-
-  private async _fetchAndNotify(): Promise<void> {
-    if (!this._server) return;
     try {
-      const apiClient = await getAPIClient();
-      const profile = await apiClient.getClipboard();
-      if (!profile) return;
-      const content: ClipboardContent = profileDtoToContent(profile);
-      const hash = content.profileHash || content.text;
-      if (hash === this._lastContentHash) return;
-      this._lastContentHash = hash;
-      this.notifyCallbacks(content);
-      clipboardSyncState.clearSyncError();
+      await this.fetchLatest();
     } catch (e) {
-      console.error('[RemoteClipboardMonitor] Failed to fetch and notify:', e);
+      console.error('[RemoteClipboardMonitor] Failed to fetch latest:', e);
       const errorMessage = e instanceof Error ? e.message : '获取远程剪贴板失败';
       clipboardSyncState.setSyncError({ title: '同步失败', message: errorMessage });
     }
+  }
+
+  /**
+   * 主动拉取最新远程剪贴板内容并返回。
+   * 仅在内容哈希变化时触发回调（与 refresh 行为一致），但无论是否变化都返回内容。
+   * @returns 最新的远程剪贴板内容
+   * @throws 无服务器连接或拉取失败时抛出异常
+   */
+  async fetchLatest(): Promise<ClipboardContent> {
+    if (!this._server) throw new Error('No active server');
+    const apiClient = await getAPIClient();
+    const profile = await apiClient.getClipboard();
+    if (!profile) throw new Error('No clipboard data returned');
+    const content: ClipboardContent = profileDtoToContent(profile);
+    const hash = content.profileHash || content.text;
+    if (hash !== this._lastContentHash) {
+      this._lastContentHash = hash;
+      this.notifyCallbacks(content);
+      clipboardSyncState.clearSyncError();
+    }
+    return content;
   }
 
   private _stopPolling(): void {

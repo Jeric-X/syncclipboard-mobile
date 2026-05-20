@@ -2,8 +2,10 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { ToastAndroid, Linking } from 'react-native';
 import { SyncDirection } from '@/types/sync';
 import { ClipboardContent } from '@/types/clipboard';
-import { SyncManager } from '@/services/sync/SyncManager';
-import { setRemoteClipboard } from '@/services/sync/ClipboardSyncActions';
+import {
+  setRemoteClipboard,
+  setLocalClipboardFromRemote,
+} from '@/services/sync/ClipboardSyncActions';
 import { localClipboard } from '@/services/clipboard/LocalClipboard';
 import { openFile, shareFile, saveFile, saveToGallery } from '@/utils/fileActions';
 import { isTextInvalid } from '@/utils/index';
@@ -40,20 +42,9 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
       if (isUpload) {
         content = await localClipboard.getClipboardContent();
         if (!content) throw new Error('剪贴板为空，无内容可上传');
-        await setRemoteClipboard(content, 'external', signal, (info) => setProgress(info));
+        await setRemoteClipboard(content, signal, (info) => setProgress(info));
       } else {
-        const syncMgr = SyncManager.getInstance();
-        const result = await syncMgr.sync(
-          direction,
-          false,
-          signal,
-          (info) => setProgress(info),
-          (preview) => setPreviewText(preview)
-        );
-        if (!result.success) {
-          throw new Error(result.error || '同步失败');
-        }
-        content = result.content;
+        content = await setLocalClipboardFromRemote((info) => setProgress(info));
       }
 
       // 只有文本类型才显示 Toast 提示
