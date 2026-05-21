@@ -4,21 +4,20 @@
  *
  * 职责：
  * - 根据 enableSmsForwarding 配置启用/禁用 Android 静态短信接收器
- * - 自行订阅 configService，配置变更时动态响应
+ * - 通过 onConfigChanged 响应配置变更（由 LongRunningTaskManager 统一分发）
  *
  * 注意：仅在 Android 上生效，iOS 直接 no-op。
  * 生命周期由 LongRunningTaskManager 统一管理。
  */
 
 import { Platform } from 'react-native';
-import type { LongRunningTask } from './LongRunningTask';
+import { LongRunningTask } from './LongRunningTask';
 import { configService } from '../ConfigService';
 
-class SmsForwardingTask implements LongRunningTask {
+class SmsForwardingTask extends LongRunningTask {
   readonly name = 'smsForwarding';
 
   private _running = false;
-  private _configUnsub: (() => void) | null = null;
 
   async start(): Promise<void> {
     if (Platform.OS !== 'android') return;
@@ -27,21 +26,11 @@ class SmsForwardingTask implements LongRunningTask {
 
     // 立即应用当前配置
     await this._applyConfig();
-
-    // 订阅后续配置变更
-    this._configUnsub = configService.subscribe(() => {
-      this._applyConfig().catch((e) => {
-        console.error('[SmsForwardingTask] Failed to apply config change:', e);
-      });
-    });
   }
 
   async stop(): Promise<void> {
     if (!this._running) return;
     this._running = false;
-
-    this._configUnsub?.();
-    this._configUnsub = null;
 
     try {
       const { setStaticReceiverEnabled } = require('sms-forwarder');
@@ -53,6 +42,10 @@ class SmsForwardingTask implements LongRunningTask {
 
   isRunning(): boolean {
     return this._running;
+  }
+
+  override onConfigChanged(): Promise<void> {
+    return this._applyConfig();
   }
 
   // ─── 私有实现 ─────────────────────────────────────────────

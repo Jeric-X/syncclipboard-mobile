@@ -6,18 +6,43 @@
  * - 注册/注销 LongRunningTask 实例
  * - 统一启动/停止所有已注册任务
  * - 按名称单独控制单个任务
+ * - 订阅 configService 并分发 onConfigChanged
+ * - 当 app 进入后台，或处于后台时配置/运行时状态要求停止，自动停止所有任务
  */
 
-import type { LongRunningTask } from './LongRunningTask';
+import type { ILongRunningTask } from './LongRunningTask';
 import { smsForwardingTask } from './SmsForwardingTask';
 import { foregroundServiceTask } from './ForegroundServiceTask';
+import { historySyncTask } from './HistorySyncTask';
+import { configService } from '../ConfigService';
+import { backgroundRuntimeState } from '../BackgroundRuntimeState';
+import { AppState, type AppStateStatus } from 'react-native';
 
 class LongRunningTaskManager {
   private static instance: LongRunningTaskManager | null = null;
 
-  private readonly tasks = new Map<string, LongRunningTask>();
+  private readonly tasks = new Map<string, ILongRunningTask>();
+  private readonly _keepAliveTasks = new Set<string>();
+  private _appState: AppStateStatus = AppState.currentState;
 
-  private constructor() {}
+  private constructor() {
+    configService.subscribe(() => {
+      this._notifyConfigChanged();
+      this._stopAllIfBackgroundDisabled();
+    });
+
+    backgroundRuntimeState.subscribe(() => {
+      this._stopAllIfBackgroundDisabled();
+    });
+
+    AppState.addEventListener('change', (nextState) => {
+      const wasBackground = this._appState === 'background';
+      this._appState = nextState;
+      if (!wasBackground && nextState === 'background') {
+        this._stopAllIfBackgroundDisabled();
+      }
+    });
+  }
 
   static getInstance(): LongRunningTaskManager {
     if (!LongRunningTaskManager.instance) {
@@ -31,14 +56,21 @@ class LongRunningTaskManager {
   /**
    * 注册一个持续任务。
    * 若已存在同名任务则覆盖。
+   * @param keepAlive 若为 true，则后台自动停止时跳过该任务，使其保持运行。
    */
-  register(task: LongRunningTask): void {
+  register(task: ILongRunningTask, keepAlive = false): void {
     this.tasks.set(task.name, task);
+    if (keepAlive) {
+      this._keepAliveTasks.add(task.name);
+    } else {
+      this._keepAliveTasks.delete(task.name);
+    }
   }
 
   /** 注销一个持续任务（不会自动停止任务）。 */
   unregister(name: string): void {
     this.tasks.delete(name);
+    this._keepAliveTasks.delete(name);
   }
 
   // ─── 批量控制 ────────────────────────────────────────────
@@ -86,7 +118,38 @@ class LongRunningTaskManager {
 
   // ─── 私有工具 ────────────────────────────────────────────
 
-  private _getOrThrow(name: string): LongRunningTask {
+  private _notifyConfigChanged(): void {
+    for (const task of this.tasks.values()) {
+      if (task.isRunning()) {
+        task.onConfigChanged().catch((e) => {
+          console.error(`[LongRunningTaskManager] Task "${task.name}" onConfigChanged failed:`, e);
+        });
+      }
+    }
+  }
+
+  private _stopAllIfBackgroundDisabled(): void {
+    if (this._appState !== 'background') return;
+    configService.getConfig().then((config) => {
+      const shouldStop = backgroundRuntimeState.isTempDisabled() || !config?.enableBackgroundTasks;
+      if (shouldStop) {
+        const targets = Array.from(this.tasks.values()).filter(
+          (task) => !this._keepAliveTasks.has(task.name)
+        );
+        Promise.allSettled(
+          targets.map((task) =>
+            task.stop().catch((e) => {
+              console.error(`[LongRunningTaskManager] Failed to stop task "${task.name}":`, e);
+            })
+          )
+        ).catch(() => {});
+      }
+    }).catch((e) => {
+      console.error('[LongRunningTaskManager] Failed to get config in _checkAndStopIfNeeded:', e);
+    });
+  }
+
+  private _getOrThrow(name: string): ILongRunningTask {
     const task = this.tasks.get(name);
     if (!task) {
       throw new Error(`[LongRunningTaskManager] Task "${name}" is not registered.`);
@@ -99,5 +162,6 @@ export const longRunningTaskManager = LongRunningTaskManager.getInstance();
 
 // ─── 注册所有持续任务 ─────────────────────────────────────────
 // 在此统一声明，供后续迁移 BackgroundServiceManager 时逐步扩展。
-longRunningTaskManager.register(smsForwardingTask);
+longRunningTaskManager.register(smsForwardingTask, true);
 longRunningTaskManager.register(foregroundServiceTask);
+longRunningTaskManager.register(historySyncTask);

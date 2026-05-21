@@ -78,10 +78,6 @@ class ClipboardSyncService {
 
     const activeServer = await configService.getActiveServer();
 
-    if (activeServer) {
-      await this._initializeHistorySyncService(activeServer);
-    }
-
     if (!activeServer) {
       clipboardSyncState.setRemoteContent(null);
       this._subscribeToClipboardChanges();
@@ -192,19 +188,6 @@ class ClipboardSyncService {
 
   clearSyncError(): void {
     clipboardSyncState.clearSyncError();
-  }
-
-  private async _initializeHistorySyncService(server: ServerConfig): Promise<void> {
-    try {
-      const config = await configService.getConfig();
-      if (config?.enableHistorySync) {
-        const { getHistorySyncService } = require('../history/HistorySyncService');
-        await getHistorySyncService().ensureInitialized(server);
-        console.log('[ClipboardSyncService] HistorySyncService initialized');
-      }
-    } catch (e) {
-      console.error('[ClipboardSyncService] Failed to initialize HistorySyncService:', e);
-    }
   }
 
   private async _startConnection(server: ServerConfig): Promise<void> {

@@ -46,6 +46,7 @@ import { useErrorStore } from '@/stores/errorStore';
 import { calculateTextHash } from '@/utils/hash';
 import { createContentFromFile } from '@/utils/clipboard/clipboardContentUtils';
 import { isHistorySyncEnabled } from '@/utils/config';
+import { getHistorySyncService } from '@/services/history/HistorySyncService';
 
 const TAB_ROUTES: Route[] = [
   { key: 'all', title: '全部' },
@@ -100,17 +101,6 @@ export function HistoryScreen() {
   } = useTransferQueueStore();
 
   const historySyncEnabled = useMemo(() => isHistorySyncEnabled(config), [config]);
-
-  const ensureSyncServiceInitialized = useCallback(async (): Promise<boolean> => {
-    if (!historySyncEnabled) {
-      return false;
-    }
-
-    const serverConfig = config!.servers[config!.activeServerIndex];
-    const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
-    const syncService = getHistorySyncService();
-    return syncService.ensureInitialized(serverConfig);
-  }, [config, historySyncEnabled]);
 
   // 加载排序设置并同步到 store
   useEffect(() => {
@@ -394,8 +384,6 @@ export function HistoryScreen() {
           onPress: async () => {
             try {
               await clearHistory();
-              const { getHistorySyncService } =
-                await import('@/services/history/HistorySyncService');
               const syncService = getHistorySyncService();
               await syncService.resetSyncCursor();
               showMessage('已清空所有历史记录', 'success');
@@ -533,14 +521,11 @@ export function HistoryScreen() {
   const handleResyncHistory = useCallback(async () => {
     if (isSyncing) return;
 
-    const initialized = await ensureSyncServiceInitialized();
-    if (!initialized) {
+    const syncService = getHistorySyncService();
+    if (!syncService.isInitialized()) {
       showMessage('请先配置服务器', 'error');
       return;
     }
-
-    const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
-    const syncService = getHistorySyncService();
 
     setIsSyncing(true);
     showMessage('开始同步历史记录...', 'info');
@@ -563,19 +548,16 @@ export function HistoryScreen() {
     } finally {
       setIsSyncing(false);
     }
-  }, [isSyncing, showMessage, setError, ensureSyncServiceInitialized]);
+  }, [isSyncing, showMessage, setError]);
 
   const handleIncrementalSync = useCallback(
     async (isPullToRefresh = false) => {
       if (isSyncing) return;
 
-      const initialized = await ensureSyncServiceInitialized();
-      if (!initialized) {
+      const syncService = getHistorySyncService();
+      if (!syncService.isInitialized()) {
         return;
       }
-
-      const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
-      const syncService = getHistorySyncService();
 
       setIsSyncing(true);
       if (isPullToRefresh) {
@@ -598,7 +580,7 @@ export function HistoryScreen() {
         }
       }
     },
-    [isSyncing, setError, ensureSyncServiceInitialized]
+    [isSyncing, setError]
   );
 
   useFocusEffect(
@@ -617,7 +599,6 @@ export function HistoryScreen() {
             console.log('[HistoryScreen] Starting history reorganization...');
 
             const { HistoryStorage } = await import('@/storage/HistoryStorage');
-            const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
             const { historyService } = await import('@/services/history');
             const historyStorage = HistoryStorage.getInstance();
             const syncService = getHistorySyncService();
@@ -649,36 +630,31 @@ export function HistoryScreen() {
 
         if (historySyncEnabled) {
           console.log('[HistoryScreen] Screen focused, starting incremental sync');
-          const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
           const syncService = getHistorySyncService();
-          const serverConfig = currentConfig?.servers[currentConfig?.activeServerIndex];
-          if (serverConfig) {
-            const initialized = await syncService.ensureInitialized(serverConfig);
-            if (initialized) {
-              if (syncService.isSyncInProgress()) {
-                console.log('[HistoryScreen] Sync already in progress, showing indicator');
-                setIsSyncing(true);
-                const progressCallback = (progress: { phase: string }) => {
-                  if (progress.phase === 'completed' || progress.phase === 'error') {
-                    syncService.removeProgressCallback(progressCallback);
-                    setIsSyncing(false);
-                  }
-                };
-                syncService.addProgressCallback(progressCallback);
-              } else {
-                setIsSyncing(true);
-                try {
-                  await syncService.syncIncremental();
-                } catch (error) {
-                  console.error('[HistoryScreen] Failed to incremental sync:', error);
-                  const errorMessage = error instanceof Error ? error.message : '未知错误';
-                  setError({
-                    title: '历史记录增量同步失败',
-                    message: errorMessage,
-                  });
-                } finally {
+          if (syncService.isInitialized()) {
+            if (syncService.isSyncInProgress()) {
+              console.log('[HistoryScreen] Sync already in progress, showing indicator');
+              setIsSyncing(true);
+              const progressCallback = (progress: { phase: string }) => {
+                if (progress.phase === 'completed' || progress.phase === 'error') {
+                  syncService.removeProgressCallback(progressCallback);
                   setIsSyncing(false);
                 }
+              };
+              syncService.addProgressCallback(progressCallback);
+            } else {
+              setIsSyncing(true);
+              try {
+                await syncService.syncIncremental();
+              } catch (error) {
+                console.error('[HistoryScreen] Failed to incremental sync:', error);
+                const errorMessage = error instanceof Error ? error.message : '未知错误';
+                setError({
+                  title: '历史记录增量同步失败',
+                  message: errorMessage,
+                });
+              } finally {
+                setIsSyncing(false);
               }
             }
           }
@@ -779,8 +755,7 @@ export function HistoryScreen() {
       console.log(`[HistoryScreen] Item hasRemoteData: ${item.hasRemoteData}`);
       console.log(`[HistoryScreen] Item isLocalFileReady: ${item.isLocalFileReady}`);
 
-      const initialized = await ensureSyncServiceInitialized();
-      if (!initialized) {
+      if (!getHistorySyncService().isInitialized()) {
         showMessage('历史同步未启用', 'error');
         return;
       }
@@ -795,7 +770,7 @@ export function HistoryScreen() {
       queue.start();
       await queue.addDownloadTask(profileId);
     },
-    [ensureSyncServiceInitialized, showMessage]
+    [showMessage]
   );
 
   const handleUpload = useCallback(
@@ -806,8 +781,7 @@ export function HistoryScreen() {
       console.log(`[HistoryScreen] Item isLocalFileReady: ${item.isLocalFileReady}`);
       console.log(`[HistoryScreen] Item syncStatus: ${item.syncStatus}`);
 
-      const initialized = await ensureSyncServiceInitialized();
-      if (!initialized) {
+      if (!getHistorySyncService().isInitialized()) {
         showMessage('历史同步未启用', 'error');
         return;
       }
@@ -833,7 +807,7 @@ export function HistoryScreen() {
       queue.start();
       await queue.addUploadTask(profileId);
     },
-    [ensureSyncServiceInitialized, showMessage]
+    [showMessage]
   );
 
   const renderItem = useCallback(

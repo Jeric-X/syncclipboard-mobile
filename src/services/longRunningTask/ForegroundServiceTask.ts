@@ -6,7 +6,8 @@
  * - 根据后台任务总开关（enableBackgroundTasks + enableBackgroundDownload/Upload +
  *   enableForegroundNotification + tempDisabled）决定是否运行前台服务
  * - 监听通知栏"停止"／"临时停止"操作并写回配置或运行时状态
- * - 自行订阅 configService 和 backgroundRuntimeState，配置变更时动态响应
+ * - 通过 onConfigChanged 响应配置变更（由 LongRunningTaskManager 统一分发）
+ * - 自行订阅 backgroundRuntimeState，运行时状态变更时动态响应
  *
  * 注意：仅在 Android 上生效，iOS 直接 no-op。
  * 生命周期由 LongRunningTaskManager 统一管理。
@@ -14,11 +15,11 @@
 
 import { Platform } from 'react-native';
 import * as ForegroundService from 'foreground-service';
-import type { LongRunningTask } from './LongRunningTask';
+import { LongRunningTask } from './LongRunningTask';
 import { configService } from '../ConfigService';
 import { backgroundRuntimeState } from '../BackgroundRuntimeState';
 
-class ForegroundServiceTask implements LongRunningTask {
+class ForegroundServiceTask extends LongRunningTask {
   readonly name = 'foregroundService';
 
   /** 任务是否已启动（订阅是否活跃） */
@@ -26,7 +27,6 @@ class ForegroundServiceTask implements LongRunningTask {
   /** ForegroundService 当前是否正在运行 */
   private _serviceActive = false;
 
-  private _configUnsub: (() => void) | null = null;
   private _runtimeUnsub: (() => void) | null = null;
   private _stopSub: { remove(): void } | null = null;
   private _tempStopSub: { remove(): void } | null = null;
@@ -39,12 +39,7 @@ class ForegroundServiceTask implements LongRunningTask {
     // 立即应用当前配置
     await this._refresh();
 
-    // 订阅后续变更
-    this._configUnsub = configService.subscribe(() => {
-      this._refresh().catch((e) => {
-        console.error('[ForegroundServiceTask] Failed to apply config change:', e);
-      });
-    });
+    // 订阅运行时状态变更
     this._runtimeUnsub = backgroundRuntimeState.subscribe(() => {
       this._refresh().catch((e) => {
         console.error('[ForegroundServiceTask] Failed to apply runtime state change:', e);
@@ -56,9 +51,7 @@ class ForegroundServiceTask implements LongRunningTask {
     if (!this._running) return;
     this._running = false;
 
-    this._configUnsub?.();
     this._runtimeUnsub?.();
-    this._configUnsub = null;
     this._runtimeUnsub = null;
 
     await this._stopService();
@@ -66,6 +59,10 @@ class ForegroundServiceTask implements LongRunningTask {
 
   isRunning(): boolean {
     return this._running;
+  }
+
+  override async onConfigChanged(): Promise<void> {
+    await this._refresh();
   }
 
   // ─── 私有实现 ─────────────────────────────────────────────
