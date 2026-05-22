@@ -11,11 +11,11 @@
  */
 
 import { LongRunningTask } from './LongRunningTask';
-import { configService } from '../ConfigService';
+import { configService } from '../services/ConfigService';
 import {
   getHistorySyncService,
   resetHistorySyncService,
-} from '../history/HistorySyncService';
+} from '../services/history/HistorySyncService';
 
 class HistorySyncTask extends LongRunningTask {
   readonly name = 'historySync';

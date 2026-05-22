@@ -16,8 +16,8 @@
 import { Platform } from 'react-native';
 import * as ForegroundService from 'foreground-service';
 import { LongRunningTask } from './LongRunningTask';
-import { configService } from '../ConfigService';
-import { backgroundRuntimeState } from '../BackgroundRuntimeState';
+import { configService } from '../services/ConfigService';
+import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
 
 class ForegroundServiceTask extends LongRunningTask {
   readonly name = 'foregroundService';

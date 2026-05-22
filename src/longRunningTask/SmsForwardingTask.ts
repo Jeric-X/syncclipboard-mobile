@@ -12,7 +12,7 @@
 
 import { Platform } from 'react-native';
 import { LongRunningTask } from './LongRunningTask';
-import { configService } from '../ConfigService';
+import { configService } from '../services/ConfigService';
 
 class SmsForwardingTask extends LongRunningTask {
   readonly name = 'smsForwarding';

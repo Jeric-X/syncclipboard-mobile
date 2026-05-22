@@ -17,7 +17,7 @@ import { Platform } from 'react-native';
 import { setTimer, clearTimer } from 'native-timer';
 import { configService } from '../ConfigService';
 import { backgroundRuntimeState } from '../BackgroundRuntimeState';
-import { longRunningTaskManager } from '../longRunningTask/LongRunningTaskManager';
+import { longRunningTaskManager } from '../../longRunningTask/LongRunningTaskManager';
 
 class BackgroundServiceManager {
   private static instance: BackgroundServiceManager | null = null;

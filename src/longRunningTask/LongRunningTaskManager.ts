@@ -14,8 +14,8 @@ import type { ILongRunningTask } from './LongRunningTask';
 import { smsForwardingTask } from './SmsForwardingTask';
 import { foregroundServiceTask } from './ForegroundServiceTask';
 import { historySyncTask } from './HistorySyncTask';
-import { configService } from '../ConfigService';
-import { backgroundRuntimeState } from '../BackgroundRuntimeState';
+import { configService } from '../services/ConfigService';
+import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
 import { AppState, type AppStateStatus } from 'react-native';
 
 class LongRunningTaskManager {
