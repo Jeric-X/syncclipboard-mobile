@@ -3,8 +3,7 @@ import { getAPIClient } from '../ClientFactory';
 import type { ProgressInfo } from 'native-util';
 import type { ProgressCallback } from '../history/HistoryTransferQueue';
 import { clipboardContentToItem } from '@/utils/clipboard/convert';
-import { historyStorage } from '@/storage/HistoryStorage';
-import { useHistoryStore } from '@/stores/historyStore';
+import { historyService } from '../history/HistoryService';
 import { prepareTempFilePath } from '@/utils/fileStorage';
 import { calculateFileProfileHash } from '@/utils/hash';
 import { ISyncClipboardAPI, type DownloadProgressCallback } from '@/api/clients/APIClient';
@@ -28,7 +27,7 @@ async function downloadAndAddToHistory(
 
   // 仅在 profileHash 不为空时查询历史记录缓存
   if (content.profileHash) {
-    const historyItem = await historyStorage.getItem(content.profileHash);
+    const historyItem = await historyService.getItem(content.profileHash);
     if (historyItem?.fileUri) {
       const cachedFile = new File(historyItem.fileUri);
       if (cachedFile.exists) {
@@ -63,11 +62,11 @@ async function downloadAndAddToHistory(
       profileHash: profileHash || '',
       syncStatus: HistorySyncStatus.Synced,
     });
-    await useHistoryStore.getState().addItem(item);
+    await historyService.addItem(item);
 
     // addItem 内部会将文件移动到历史目录，重新读取以获取最新的 fileUri
     if (profileHash) {
-      const storedItem = await historyStorage.getItem(profileHash);
+      const storedItem = await historyService.getItem(profileHash);
       if (storedItem?.fileUri) {
         updatedContent = { ...updatedContent, fileUri: storedItem.fileUri };
       }
