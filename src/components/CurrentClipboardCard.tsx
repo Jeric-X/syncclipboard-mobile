@@ -330,9 +330,6 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
                 <Text style={[styles.mediaLabel, { color: theme.colors.textSecondary }]}>
                   {clipboard.fileName || '图片文件'}
                 </Text>
-                <Text style={[styles.mediaHint, { color: theme.colors.textTertiary }]}>
-                  等待下载...
-                </Text>
               </View>
             )}
           </View>
@@ -343,11 +340,6 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             <Text style={[styles.mediaLabel, { color: theme.colors.textSecondary }]}>
               {clipboard.fileName || '文件'}
             </Text>
-            {clipboard.fileUri && (
-              <Text style={[styles.mediaHint, { color: theme.colors.textTertiary }]}>
-                包含文件数据
-              </Text>
-            )}
           </View>
         )}
       </View>
@@ -572,9 +564,6 @@ const styles = StyleSheet.create({
   mediaLabel: {
     fontSize: 15,
     marginBottom: 4,
-  },
-  mediaHint: {
-    fontSize: 13,
   },
   footer: {
     paddingTop: 12,

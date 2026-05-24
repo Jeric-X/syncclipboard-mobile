@@ -359,11 +359,6 @@ export class LocalClipboard {
 
         case 'File':
         case 'Group':
-          // 文件和文件组暂不支持直接设置到剪贴板
-          // 可以设置文件路径或名称作为文本
-          await this.setTextContent(content);
-          break;
-
         default:
           throw new Error(`Unsupported clipboard type: ${content.type}`);
       }

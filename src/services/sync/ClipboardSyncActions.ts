@@ -9,6 +9,7 @@ import { clipboardSyncState } from './SyncState';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import { localClipboard } from '../clipboard/LocalClipboard';
 import { DedupedOperation } from '@/utils/DedupedOperation';
+import { File } from 'expo-file-system';
 
 /** 比较两个 ClipboardContent 是否代表相同内容（用于去重继承判断） */
 function isSameContent(a: ClipboardContent, b: ClipboardContent): boolean {
@@ -91,12 +92,13 @@ export function cancelUploadLocalClipboard(): void {
  */
 export async function downloadRemoteClipboard(
   content?: ClipboardContent | null,
-  onProgress?: (info: ProgressDetail) => void
+  onProgress?: (info: ProgressDetail) => void,
+  signal?: AbortSignal
 ): Promise<ClipboardContent | null> {
   const actualContent = content ?? clipboardSyncState.getState().remoteContent;
   if (!actualContent) return null;
 
-  return _downloadOp.execute(actualContent, onProgress, null, async (sig, notify) => {
+  return _downloadOp.execute(actualContent, onProgress, signal ?? null, async (sig, notify) => {
     clipboardSyncState.setDownloadingRemote(true);
     clipboardSyncState.setDownloadProgress(null);
     try {
@@ -137,7 +139,8 @@ export async function refreshMonitor(): Promise<void> {
  * @returns 最终写入的内容；若远程无文件或无需下载则返回 fetchLatest 的结果
  */
 export async function setLocalClipboardFromRemote(
-  onProgress?: (info: ProgressDetail) => void
+  onProgress?: (info: ProgressDetail) => void,
+  signal?: AbortSignal
 ): Promise<ClipboardContent | null> {
   const content = await remoteClipboardMonitor.fetchLatest();
 
@@ -147,8 +150,20 @@ export async function setLocalClipboardFromRemote(
     content.fileSize !== undefined &&
     !content.fileUri;
 
-  const finalContent = needsDownload ? await downloadRemoteClipboard(content, onProgress) : content;
-  if (finalContent) {
+  if (needsDownload && content.profileHash) {
+    const cachedItem = await historyService.getItem(content.profileHash);
+    if (cachedItem?.fileUri) {
+      const cachedFile = new File(cachedItem.fileUri);
+      if (cachedFile.exists) {
+        return { ...content, fileUri: cachedItem.fileUri };
+      }
+    }
+  }
+
+  const finalContent = needsDownload
+    ? await downloadRemoteClipboard(content, onProgress, signal)
+    : content;
+  if (finalContent && finalContent.type === 'Text') {
     await localClipboard.setClipboardContent(finalContent);
   }
   return finalContent;

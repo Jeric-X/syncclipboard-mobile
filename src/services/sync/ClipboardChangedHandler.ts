@@ -50,6 +50,7 @@ class ClipboardChangedHandler {
     if (!content.hasData && content.type === 'Text' && !content.profileHash && content.text) {
       content.profileHash = await calculateTextHash(content.text);
     }
+    clipboardSyncState.setRemoteContent(content);
 
     const currentHash = content.profileHash || content.text;
     const config = await configService.getConfig();
@@ -65,8 +66,7 @@ class ClipboardChangedHandler {
 
     if (fileUri && !content.fileUri) {
       console.log('[ClipboardChangedHandler] Found existing file in history');
-      content.fileUri = fileUri;
-      clipboardSyncState.setRemoteContent(content);
+      content = { ...content, fileUri };
     } else if (content.hasData && content.fileName && content.fileSize !== undefined) {
       const downloadedContent = await this.tryAutoDownload(content, config);
       if (!downloadedContent) {
@@ -74,6 +74,8 @@ class ClipboardChangedHandler {
       }
       content = downloadedContent;
     }
+
+    clipboardSyncState.setRemoteContent(content);
 
     if (isFirstLoad) return;
 

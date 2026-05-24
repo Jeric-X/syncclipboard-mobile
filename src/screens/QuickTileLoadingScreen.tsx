@@ -44,7 +44,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
         if (!content) throw new Error('剪贴板为空，无内容可上传');
         await setRemoteClipboard(content, signal, (info) => setProgress(info));
       } else {
-        content = await setLocalClipboardFromRemote((info) => setProgress(info));
+        content = await setLocalClipboardFromRemote((info) => setProgress(info), signal);
       }
 
       // 只有文本类型才显示 Toast 提示

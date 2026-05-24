@@ -646,7 +646,7 @@ export class HistoryTransferQueue {
 
         if (task.externalProgressReporter) {
           task.externalProgressReporter({
-            progress: task.progress,
+            progress: task.progress >= 0 ? task.progress / 100 : -1,
             bytesTransferred: task.bytesTransferred,
             totalBytes: task.totalBytes || 0,
           });
@@ -746,7 +746,7 @@ export class HistoryTransferQueue {
 
       if (task.externalProgressReporter) {
         task.externalProgressReporter({
-          progress: task.progress,
+          progress: task.progress >= 0 ? task.progress / 100 : -1,
           bytesTransferred: task.bytesTransferred,
           totalBytes: task.totalBytes || 0,
         });
