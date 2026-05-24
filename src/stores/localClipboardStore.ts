@@ -23,7 +23,7 @@ interface ClipboardState {
 /**
  * 创建剪贴板 Store
  */
-export const uselocalClipboardStore = create<ClipboardState>((set) => ({
+export const useLocalClipboardStore = create<ClipboardState>((set) => ({
   currentContent: null,
 
   setCurrentContentDisplay: (content: ClipboardContent) => {
@@ -33,5 +33,5 @@ export const uselocalClipboardStore = create<ClipboardState>((set) => ({
 
 // 注册 callback：将剪贴板变化同步到 localClipboardStore
 clipboardMonitor.addCallback((content) => {
-  uselocalClipboardStore.getState().setCurrentContentDisplay(content);
+  useLocalClipboardStore.getState().setCurrentContentDisplay(content);
 });

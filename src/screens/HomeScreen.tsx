@@ -10,7 +10,7 @@ import * as ClipboardProxy from '@/utils/clipboardProxy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/hooks/useTheme';
-import { uselocalClipboardStore } from '@/stores/localClipboardStore';
+import { useLocalClipboardStore } from '@/stores/localClipboardStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useClipboardSyncServiceStore } from '@/serviceState/ClipboardSyncState';
 import { ClipboardContent } from '@/types/clipboard';
@@ -57,7 +57,7 @@ export function HomeScreen() {
   const [fileUploadProgress, setFileUploadProgress] = useState<ProgressInfo | null>(null);
   const syncError = useClipboardSyncServiceStore((s) => s.syncError);
 
-  const { currentContent } = uselocalClipboardStore();
+  const { currentContent } = useLocalClipboardStore();
   const { getActiveServer } = useSettingsStore();
 
   const activeServer = getActiveServer();

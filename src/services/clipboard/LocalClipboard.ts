@@ -17,7 +17,7 @@ import { nativeSetClipboardImageFromFile } from 'native-util';
  * 剪贴板复制生命周期回调，由外部模块（如 ClipboardMonitor）注册
  */
 export interface CopyLifecycleCallbacks {
-  /** 复制开始前调用（暹停轮询） */
+  /** 复制开始前调用（暂停轮询） */
   onBeforeCopy: () => void;
   /** 复制结束后调用，无论成功与否（恢复轮询） */
   onAfterCopy: () => void;

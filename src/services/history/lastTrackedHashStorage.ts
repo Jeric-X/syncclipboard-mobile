@@ -1,11 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ClipboardContent } from '@/types/clipboard';
-
-const LAST_CLIPBOARD_HASH_KEY = '@last_clipboard_hash';
+import { STORAGE_KEYS } from '@/types/storage';
 
 export async function loadLastTrackedHash(): Promise<string | null> {
   try {
-    const stored = await AsyncStorage.getItem(LAST_CLIPBOARD_HASH_KEY);
+    const stored = await AsyncStorage.getItem(STORAGE_KEYS.HISTORY_TRACKER_LAST_HASH);
     if (stored) {
       const parsed = JSON.parse(stored) as {
         localClipboardHash?: string;
@@ -24,7 +23,7 @@ export function saveLastTrackedHash(content: ClipboardContent): void {
   if (!hash) return;
 
   AsyncStorage.setItem(
-    LAST_CLIPBOARD_HASH_KEY,
+    STORAGE_KEYS.HISTORY_TRACKER_LAST_HASH,
     JSON.stringify({
       localClipboardHash: content.localClipboardHash,
       profileHash: content.profileHash,

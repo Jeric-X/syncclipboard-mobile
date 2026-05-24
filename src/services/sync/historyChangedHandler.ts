@@ -1,7 +1,8 @@
 import { HistoryItem } from '../../types/clipboard';
 import { clipboardSyncState } from './SyncState';
-import { uselocalClipboardStore } from '../../stores/localClipboardStore';
+import { useLocalClipboardStore } from '../../stores/localClipboardStore';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
+import type { HistoryChangeAction } from '../../storage/HistoryStorage';
 
 function resetRemoteFileUriIfMatch(deletedHashes: Set<string>): void {
   const remote = clipboardSyncState.getState().remoteContent;
@@ -15,9 +16,9 @@ function resetRemoteFileUriIfMatch(deletedHashes: Set<string>): void {
 }
 
 function resetLocalFileUriIfMatch(deletedHashes: Set<string>): void {
-  const local = uselocalClipboardStore.getState().currentContent;
+  const local = useLocalClipboardStore.getState().currentContent;
   if (local?.fileUri && local.profileHash && deletedHashes.has(local.profileHash.toLowerCase())) {
-    uselocalClipboardStore.getState().setCurrentContentDisplay({ ...local, fileUri: undefined });
+    useLocalClipboardStore.getState().setCurrentContentDisplay({ ...local, fileUri: undefined });
     clipboardMonitor.reset();
   }
 }
@@ -30,15 +31,18 @@ function handleDeletedHashes(deletedHashes: Set<string>): void {
 function handleClear(): void {
   console.log('[HistoryChangedHandler] History cleared, resetting fileUris');
   clipboardSyncState.updateRemoteContentFileUri(undefined);
-  const local = uselocalClipboardStore.getState().currentContent;
+  const local = useLocalClipboardStore.getState().currentContent;
   if (local?.fileUri) {
-    uselocalClipboardStore.getState().setCurrentContentDisplay({ ...local, fileUri: undefined });
+    useLocalClipboardStore.getState().setCurrentContentDisplay({ ...local, fileUri: undefined });
     clipboardMonitor.reset();
   }
 }
 
-export function createHistoryChangedHandler(): (items: HistoryItem[], action: string) => void {
-  return (items: HistoryItem[], action: string) => {
+export function createHistoryChangedHandler(): (
+  items: HistoryItem[],
+  action: HistoryChangeAction
+) => void {
+  return (items: HistoryItem[], action: HistoryChangeAction) => {
     if (action === 'clear') {
       handleClear();
       return;

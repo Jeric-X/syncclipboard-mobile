@@ -3,7 +3,7 @@ import { clipboardSyncState } from './SyncState';
 import { getHistoryFileUri } from '../../utils/fileStorage';
 import { configService } from '../ConfigService';
 import { getProfileId } from '@/utils';
-import { uselocalClipboardStore } from '../../stores/localClipboardStore';
+import { useLocalClipboardStore } from '../../stores/localClipboardStore';
 
 export function createTransferQueueChangedHandler(): (task: TransferTask) => Promise<void> {
   return async (task: TransferTask) => {
@@ -19,7 +19,7 @@ export function createTransferQueueChangedHandler(): (task: TransferTask) => Pro
 }
 
 async function handleUploadTask(task: TransferTask): Promise<void> {
-  const local = uselocalClipboardStore.getState().currentContent;
+  const local = useLocalClipboardStore.getState().currentContent;
   if (!local?.profileHash) return;
 
   const localProfileId = getProfileId(local.type, local.profileHash);
@@ -57,10 +57,14 @@ async function handleDownloadTask(task: TransferTask): Promise<void> {
       });
     }
   } else if (task.status === 'completed') {
+    if (!currentRemote.fileName || !currentRemote.hasData) {
+      clipboardSyncState.clearDownloadState();
+      return;
+    }
     const fileUri = await getHistoryFileUri(
       currentRemote.type,
       currentRemote.profileHash,
-      currentRemote.fileName!
+      currentRemote.fileName
     );
     if (fileUri && fileUri !== currentRemote.fileUri) {
       clipboardSyncState.updateRemoteContentFileUri(fileUri);
