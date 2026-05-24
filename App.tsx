@@ -12,7 +12,7 @@ import { initLogger } from './src/utils/Logger';
 import { useTheme } from './src/hooks/useTheme';
 import { setDynamicShortcuts } from 'shortcut';
 import { moveTaskToBack, setExcludeFromRecents } from 'native-util';
-import { getBackgroundServiceManager } from './src/services/sync/BackgroundServiceManager';
+import { longRunningTaskManager } from './src/longRunningTask/LongRunningTaskManager';
 
 const QUICK_UPLOAD_URL = 'syncclipboard://quick-upload';
 const QUICK_DOWNLOAD_URL = 'syncclipboard://quick-download';
@@ -78,9 +78,7 @@ export default function App() {
   // 启动所有服务（冷启动时保证剪贴板监控、远程同步、后台任务正常运行，后续由 BackgroundServiceManager 维护）
   useEffect(() => {
     if (!isLoaded) return;
-    getBackgroundServiceManager()
-      .start()
-      .catch(() => {});
+    longRunningTaskManager.startAll().catch(() => {});
     // 应用启动时恢复「最近任务隐藏」设置（仅 Android）
     if (Platform.OS === 'android' && config?.hideFromRecents) {
       setExcludeFromRecents(true);

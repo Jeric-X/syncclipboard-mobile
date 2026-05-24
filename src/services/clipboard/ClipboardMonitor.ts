@@ -3,11 +3,10 @@
  * 剪贴板监听器 - 监听剪贴板内容变化
  */
 
-import { AppState, AppStateStatus, Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { LocalClipboard } from './LocalClipboard';
 import { ClipboardContent, ClipboardChangeCallback, ClipboardMonitorOptions } from '@/types';
 import { setTimer, clearTimer } from 'native-timer';
-import { configService } from '../ConfigService';
 
 /**
  * 剪贴板监听器类
@@ -17,25 +16,22 @@ export class ClipboardMonitor {
   private callbacks: Set<ClipboardChangeCallback> = new Set();
   private isMonitoring: boolean = false;
   private pollingTimerTag: string | null = null;
-  private appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
   private lastContent: ClipboardContent | null = null;
 
   /**
-   * 注入的回调，用于查询"后台上传是否已启用"。
-   * 避免直接依赖 settingsStore（服务层不应反向依赖 UI 状态层）。
-   * 若未注入则默认视为未启用。
+   * 注入的回调集合，用于查询“后台运行是否需要持续”。
+   * 只要任意一个回调返回 true，轮询就不会因进入后台而暂停。
+   * 如果集合为空，默认视为未启用。
    */
-  private getBgUploadEnabled: () => boolean = () => false;
+  private readonly _bgRunningCheckers: Set<() => boolean> = new Set();
 
   // 配置选项
   private options: Required<ClipboardMonitorOptions> = {
     pollingInterval: 1000, // iOS 默认 1 秒轮询
-    stopOnBackground: true,
   };
 
   private isChecking: boolean = false;
   private checkGeneration: number = 0;
-  private _pollingIntervalUnsub: (() => void) | null = null;
 
   constructor(clipboardManager: LocalClipboard, options?: ClipboardMonitorOptions) {
     this.clipboardManager = clipboardManager;
@@ -46,11 +42,16 @@ export class ClipboardMonitor {
   }
 
   /**
-   * 注入"后台上传是否启用"判断函数。
-   * 应在服务启动时由外部（BackgroundServiceManager / ClipboardSyncService）调用一次。
+   * 添加一个“后台运行检测函数”。
+   * 运行时只要任意一个检测函数返回 true，轮询就不会因进入后台而暂停。
+   * 应在服务启动时由外部调用。
    */
-  setBackgroundUploadChecker(fn: () => boolean): void {
-    this.getBgUploadEnabled = fn;
+  addBackgroundRunningChecker(fn: () => boolean): void {
+    this._bgRunningCheckers.add(fn);
+  }
+
+  removeBackgroundRunningChecker(fn: () => boolean): void {
+    this._bgRunningCheckers.delete(fn);
   }
 
   /**
@@ -63,14 +64,6 @@ export class ClipboardMonitor {
     }
 
     this.isMonitoring = true;
-
-    // 订阅 localPollingInterval 配置变化
-    this._subscribeToPollingIntervalChanges();
-
-    // 监听应用状态变化
-    if (this.options.stopOnBackground) {
-      this.appStateSubscription = AppState.addEventListener('change', this.handleAppStateChange);
-    }
 
     // 开始轮询（iOS）或设置监听器（Android）
     if (Platform.OS === 'ios') {
@@ -95,16 +88,6 @@ export class ClipboardMonitor {
 
     // 停止轮询
     this.stopPolling();
-
-    // 取消应用状态监听
-    if (this.appStateSubscription) {
-      this.appStateSubscription.remove();
-      this.appStateSubscription = null;
-    }
-
-    // 取消配置订阅
-    this._pollingIntervalUnsub?.();
-    this._pollingIntervalUnsub = null;
 
     console.log('[ClipboardMonitor] Stopped monitoring');
   }
@@ -235,34 +218,33 @@ export class ClipboardMonitor {
     });
   }
 
-  /**
-   * 处理应用状态变化
-   */
-  private handleAppStateChange = (nextAppState: AppStateStatus): void => {
-    if (!this.options.stopOnBackground) {
-      return;
-    }
+  private _isBgRunningEnabled(): boolean {
+    return Array.from(this._bgRunningCheckers).some((fn) => fn());
+  }
 
-    if (nextAppState === 'active') {
-      // 应用进入前台，立即检查一次剪贴板（减少等待第一次轮询的延迟）
-      // 再重启轮询计时器
-      if (this.isMonitoring) {
-        void this.checkClipboard();
-        if (!this.pollingTimerTag) {
-          this.startPolling();
-        }
-      }
-    } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-      // 后台上传启用时不停止轮询
-      if (!this.getBgUploadEnabled()) {
-        // 应用进入后台，停止监听
-        console.log(
-          '[ClipboardMonitor] Background upload disabled, stopping polling (app went to background/inactive)'
-        );
-        this.stopPolling();
+  /**
+   * App 进入后台时由外部（ClipboardMonitorTask.onBackground）调用。
+   * 若后台上传未启用，暂停轮询以节省资源。
+   */
+  handleBackground(): void {
+    if (!this._isBgRunningEnabled()) {
+      console.log('[ClipboardMonitor] Background upload disabled, pausing polling');
+      this.stopPolling();
+    }
+  }
+
+  /**
+   * App 从后台恢复前台时由外部（ClipboardMonitorTask.onForeground）调用。
+   * 立即触发一次检查并（重）启轮询计时器。
+   */
+  handleForeground(): void {
+    if (this.isMonitoring) {
+      void this.checkClipboard();
+      if (!this.pollingTimerTag) {
+        this.startPolling();
       }
     }
-  };
+  }
 
   /**
    * 手动触发一次检查
@@ -302,14 +284,13 @@ export class ClipboardMonitor {
   resumePolling(): void {
     if (!this.isMonitoring) return;
 
-    // 如果配置了后台停止，且当前在后台且后台上传未启用，则不恢复轮询
-    if (this.options.stopOnBackground) {
-      const currentState = AppState.currentState;
-      if (currentState === 'background' || currentState === 'inactive') {
-        if (!this.getBgUploadEnabled()) {
-          return;
-        }
-      }
+    // 后台且后台上传未启用时，不恢复轮询
+    const currentState = AppState.currentState;
+    if (
+      (currentState === 'background' || currentState === 'inactive') &&
+      !this._isBgRunningEnabled()
+    ) {
+      return;
     }
 
     this.startPolling();
@@ -338,27 +319,6 @@ export class ClipboardMonitor {
    */
   reset(): void {
     this.lastContent = null;
-  }
-
-  /**
-   * 订阅 localPollingInterval 配置变化，并立即应用当前值。
-   */
-  private _subscribeToPollingIntervalChanges(): void {
-    if (this._pollingIntervalUnsub) return;
-
-    configService.getConfig().then((config) => {
-      const interval = config.localPollingInterval ?? 1000;
-      this.updatePollingInterval(interval);
-    });
-
-    let prevInterval: number | undefined;
-    this._pollingIntervalUnsub = configService.subscribe((config) => {
-      const interval = config.localPollingInterval ?? 1000;
-      if (interval !== prevInterval) {
-        prevInterval = interval;
-        this.updatePollingInterval(interval);
-      }
-    });
   }
 }
 

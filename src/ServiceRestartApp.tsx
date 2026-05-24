@@ -9,7 +9,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, BackHandler, StatusBar, Platform } from 'react-native';
 import { useSettingsStore } from './stores';
 import { initLogger } from './utils/Logger';
-import { getBackgroundServiceManager } from './services/sync/BackgroundServiceManager';
+import { longRunningTaskManager } from './longRunningTask/LongRunningTaskManager';
 
 interface ServiceRestartAppProps {
   systemTheme?: 'light' | 'dark';
@@ -34,9 +34,7 @@ export default function ServiceRestartApp({ systemTheme }: ServiceRestartAppProp
   useEffect(() => {
     if (!isLoaded || Platform.OS !== 'android') return;
 
-    getBackgroundServiceManager()
-      .start()
-      .finally(() => setReady(true));
+    longRunningTaskManager.startAll().finally(() => setReady(true));
   }, [isLoaded]);
 
   // 自动关闭：短暂展示"服务已恢复"后退出，后台服务持续运行（JS 运行时由前台服务保持存活）

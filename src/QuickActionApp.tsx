@@ -13,7 +13,7 @@ import { QuickTileLoadingScreen } from './screens/QuickTileLoadingScreen';
 import { SyncDirection } from './types/sync';
 import { useSettingsStore } from './stores';
 import { initLogger } from './utils/Logger';
-import { getBackgroundServiceManager } from './services/sync/BackgroundServiceManager';
+import { longRunningTaskManager } from './longRunningTask/LongRunningTaskManager';
 
 interface QuickActionAppProps {
   direction?: string;
@@ -40,9 +40,7 @@ export default function QuickActionApp({
   // 启动所有后台服务（冷启动 / 快速操作时保证后台任务正常运行）
   useEffect(() => {
     if (!isLoaded || Platform.OS !== 'android') return;
-    getBackgroundServiceManager()
-      .start()
-      .catch(() => {});
+    longRunningTaskManager.startAll().catch(() => {});
   }, [isLoaded]);
 
   const handleComplete = useCallback(() => {

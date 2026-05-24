@@ -181,9 +181,6 @@ export type ClipboardChangeCallback = (content: ClipboardContent) => void;
 export interface ClipboardMonitorOptions {
   /** 轮询间隔（毫秒），仅 iOS 使用 */
   pollingInterval?: number;
-
-  /** 是否在应用进入后台时停止监听 */
-  stopOnBackground?: boolean;
 }
 
 /**

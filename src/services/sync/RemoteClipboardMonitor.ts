@@ -23,8 +23,14 @@ class RemoteClipboardMonitor {
   private pollingTag: string | null = null;
   private _signalRConnected = false;
   private _server: ServerConfig | null = null;
+  private _pollingInterval: number | undefined = undefined;
   /** 上次触发回调时的内容哈希，用于过滤重复通知 */
   private _lastContentHash: string | null = null;
+  /**
+   * 注入的后台运行检测函数集合。
+   * 只要任意一个函数返回 true，后台时就继续监听而不断开。
+   */
+  private readonly _bgRunningCheckers: Set<() => boolean> = new Set();
 
   private constructor() {}
 
@@ -39,6 +45,32 @@ class RemoteClipboardMonitor {
 
   removeCallback(callback: RemoteClipboardChangedCallback): void {
     this.callbacks.delete(callback);
+  }
+
+  /**
+   * 添加一个“后台运行检测函数”。
+   * 只要任意一个检测函数返回 true，进入后台时就不断开连接。
+   */
+  addBackgroundRunningChecker(fn: () => boolean): void {
+    this._bgRunningCheckers.add(fn);
+  }
+
+  removeBackgroundRunningChecker(fn: () => boolean): void {
+    this._bgRunningCheckers.delete(fn);
+  }
+
+  private _isBgRunningEnabled(): boolean {
+    return Array.from(this._bgRunningCheckers).some((fn) => fn());
+  }
+
+  /**
+   * App 进入后台时由外部（RemoteClipboardMonitorTask.onBackground）调用。
+   * 若无任何 checker 返回 true，则断开连接。
+   */
+  async handleBackground(): Promise<void> {
+    if (!this._isBgRunningEnabled()) {
+      await this.disconnect();
+    }
   }
 
   /**
@@ -59,11 +91,33 @@ class RemoteClipboardMonitor {
    */
   async connect(server: ServerConfig, pollingInterval?: number): Promise<void> {
     this._server = server;
+    this._pollingInterval = pollingInterval;
     if (server.type === 'syncclipboard') {
       await this._connectSignalR(server);
     } else {
       this._startPolling(pollingInterval);
     }
+  }
+
+  /**
+   * 前台恢复时调用：确保连接并立即触发一次内容拉取。
+   * 若未连接则先重连，若已连接则直接刷新。
+   * 无需区分服务器类型，内部统一处理。
+   */
+  async resumeAndRefresh(server: ServerConfig, pollingInterval?: number): Promise<void> {
+    if (!this.isConnected()) {
+      await this.connect(server, pollingInterval);
+    }
+    await this.refresh();
+  }
+
+  /**
+   * App 返回前台时由外部（RemoteClipboardMonitorTask.onForeground）调用。
+   * 使用上次已知的服务器配置重新连接并刷新。
+   */
+  async handleForeground(): Promise<void> {
+    if (!this._server) return;
+    await this.resumeAndRefresh(this._server, this._pollingInterval);
   }
 
   async disconnect(): Promise<void> {

@@ -29,6 +29,18 @@ export interface ILongRunningTask {
    * 由任务自身决定是否响应配置变更。
    */
   onConfigChanged(): Promise<void>;
+
+  /**
+   * App 切换到后台时的回调。
+   * 由任务自身决定是否响应。
+   */
+  onBackground(): Promise<void>;
+
+  /**
+   * App 从后台切换回前台时的回调。
+   * 由任务自身决定是否响应。
+   */
+  onForeground(): Promise<void>;
 }
 
 /**
@@ -43,6 +55,14 @@ export abstract class LongRunningTask implements ILongRunningTask {
   abstract isRunning(): boolean;
 
   onConfigChanged(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  onBackground(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  onForeground(): Promise<void> {
     return Promise.resolve();
   }
 }

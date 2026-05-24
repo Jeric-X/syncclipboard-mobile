@@ -14,6 +14,11 @@ import type { ILongRunningTask } from './LongRunningTask';
 import { smsForwardingTask } from './SmsForwardingTask';
 import { foregroundServiceTask } from './ForegroundServiceTask';
 import { historySyncTask } from './HistorySyncTask';
+import { clipboardMonitorTask } from './ClipboardMonitorTask';
+import { historyTrackerTask } from './HistoryTrackerTask';
+import { clipboardSyncTask } from './ClipboardSyncTask';
+import { remoteClipboardMonitorTask } from './RemoteClipboardMonitorTask';
+import { heartbeatTask } from './HeartbeatTask';
 import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
 import { AppState, type AppStateStatus } from 'react-native';
@@ -39,7 +44,10 @@ class LongRunningTaskManager {
       const wasBackground = this._appState === 'background';
       this._appState = nextState;
       if (!wasBackground && nextState === 'background') {
+        this._notifyBackground();
         this._stopAllIfBackgroundDisabled();
+      } else if (wasBackground && nextState !== 'background') {
+        this._notifyForeground();
       }
     });
   }
@@ -128,25 +136,45 @@ class LongRunningTaskManager {
     }
   }
 
+  private _notifyBackground(): void {
+    for (const task of this.tasks.values()) {
+      task.onBackground().catch((e) => {
+        console.error(`[LongRunningTaskManager] Task "${task.name}" onBackground failed:`, e);
+      });
+    }
+  }
+
+  private _notifyForeground(): void {
+    for (const task of this.tasks.values()) {
+      task.onForeground().catch((e) => {
+        console.error(`[LongRunningTaskManager] Task "${task.name}" onForeground failed:`, e);
+      });
+    }
+  }
+
   private _stopAllIfBackgroundDisabled(): void {
     if (this._appState !== 'background') return;
-    configService.getConfig().then((config) => {
-      const shouldStop = backgroundRuntimeState.isTempDisabled() || !config?.enableBackgroundTasks;
-      if (shouldStop) {
-        const targets = Array.from(this.tasks.values()).filter(
-          (task) => !this._keepAliveTasks.has(task.name)
-        );
-        Promise.allSettled(
-          targets.map((task) =>
-            task.stop().catch((e) => {
-              console.error(`[LongRunningTaskManager] Failed to stop task "${task.name}":`, e);
-            })
-          )
-        ).catch(() => {});
-      }
-    }).catch((e) => {
-      console.error('[LongRunningTaskManager] Failed to get config in _checkAndStopIfNeeded:', e);
-    });
+    configService
+      .getConfig()
+      .then((config) => {
+        const shouldStop =
+          backgroundRuntimeState.isTempDisabled() || !config?.enableBackgroundTasks;
+        if (shouldStop) {
+          const targets = Array.from(this.tasks.values()).filter(
+            (task) => !this._keepAliveTasks.has(task.name)
+          );
+          Promise.allSettled(
+            targets.map((task) =>
+              task.stop().catch((e) => {
+                console.error(`[LongRunningTaskManager] Failed to stop task "${task.name}":`, e);
+              })
+            )
+          ).catch(() => {});
+        }
+      })
+      .catch((e) => {
+        console.error('[LongRunningTaskManager] Failed to get config in _checkAndStopIfNeeded:', e);
+      });
   }
 
   private _getOrThrow(name: string): ILongRunningTask {
@@ -164,4 +192,9 @@ export const longRunningTaskManager = LongRunningTaskManager.getInstance();
 // 在此统一声明，供后续迁移 BackgroundServiceManager 时逐步扩展。
 longRunningTaskManager.register(smsForwardingTask, true);
 longRunningTaskManager.register(foregroundServiceTask);
+longRunningTaskManager.register(clipboardMonitorTask, true);
+longRunningTaskManager.register(remoteClipboardMonitorTask, true);
+longRunningTaskManager.register(historyTrackerTask, true);
 longRunningTaskManager.register(historySyncTask);
+longRunningTaskManager.register(clipboardSyncTask);
+longRunningTaskManager.register(heartbeatTask);
