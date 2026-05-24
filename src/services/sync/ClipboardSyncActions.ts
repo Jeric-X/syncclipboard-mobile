@@ -164,7 +164,7 @@ export async function setLocalClipboardFromRemote(
     ? await downloadRemoteClipboard(content, onProgress, signal)
     : content;
   if (finalContent && finalContent.type === 'Text') {
-    await localClipboard.setClipboardContent(finalContent);
+    await localClipboard.setClipboardContent(finalContent, true);
   }
   return finalContent;
 }

@@ -28,12 +28,17 @@ export interface CopyLifecycleCallbacks {
  */
 export class LocalClipboard {
   private copyLifecycleCallbacks: CopyLifecycleCallbacks | null = null;
+  private remoteCopiedCallback: ((content: ClipboardContent) => void) | null = null;
 
   /**
    * 注册复制生命周期回调（由 ClipboardMonitor 调用）
    */
   registerCopyLifecycleCallbacks(callbacks: CopyLifecycleCallbacks): void {
     this.copyLifecycleCallbacks = callbacks;
+  }
+
+  registerRemoteCopiedCallback(callback: ((content: ClipboardContent) => void) | null): void {
+    this.remoteCopiedCallback = callback;
   }
 
   /**
@@ -343,7 +348,7 @@ export class LocalClipboard {
    * 设置剪贴板内容。写入期间自动暂停剪贴板监听，完成后恢复并立即触发一次检查。
    * 写入失败时直接抛出异常，由调用方处理。
    */
-  async setClipboardContent(content: ClipboardContent): Promise<void> {
+  async setClipboardContent(content: ClipboardContent, isFromRemote = false): Promise<void> {
     this.copyLifecycleCallbacks?.onBeforeCopy();
     try {
       switch (content.type) {
@@ -361,6 +366,9 @@ export class LocalClipboard {
         case 'Group':
         default:
           throw new Error(`Unsupported clipboard type: ${content.type}`);
+      }
+      if (isFromRemote) {
+        this.remoteCopiedCallback?.(content);
       }
     } finally {
       this.copyLifecycleCallbacks?.onAfterCopy();

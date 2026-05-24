@@ -157,7 +157,7 @@ class ClipboardChangedHandler {
 
   private async copyToLocalClipboard(content: ClipboardContent): Promise<void> {
     const { localClipboard } = await import('../clipboard/LocalClipboard');
-    await localClipboard.setClipboardContent(content);
+    await localClipboard.setClipboardContent(content, true);
     this.lastLocalProfileHash = content.profileHash || content.text;
     console.log('[ClipboardChangedHandler] Copied to local clipboard');
   }

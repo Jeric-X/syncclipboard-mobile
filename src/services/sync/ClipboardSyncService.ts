@@ -12,7 +12,9 @@
  */
 
 import { ClipboardChangeCallback } from '../../types/clipboard';
+import type { ClipboardContent } from '../../types/clipboard';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
+import { localClipboard } from '../clipboard/LocalClipboard';
 import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
 import type { AppConfig } from '../../types/storage';
@@ -53,9 +55,7 @@ class ClipboardSyncService {
     this._applyConfig(cfg);
     this._registerBgUploadChecker();
     this._registerBgDownloadChecker();
-
-    getClipboardChangedHandler().resetLastRemoteProfileHash();
-
+    this._registerRemoteCopiedCallback();
     this._subscribeToRemoteClipboard();
     this._subscribeToClipboardChanges();
     this._subscribeToHistoryChanges();
@@ -66,12 +66,6 @@ class ClipboardSyncService {
     this._isStarted = false;
     this._cleanups.forEach((unsub) => unsub());
     this._cleanups.length = 0;
-
-    getClipboardChangedHandler().resetHashes();
-  }
-
-  recordLocalHash(hash: string): void {
-    getClipboardChangedHandler().setLastLocalProfileHash(hash);
   }
 
   onConfigChanged(cfg: AppConfig | null): void {
@@ -97,6 +91,15 @@ class ClipboardSyncService {
     const checker = () => this._bgDownloadEnabled;
     remoteClipboardMonitor.addBackgroundRunningChecker(checker);
     this._cleanups.push(() => remoteClipboardMonitor.removeBackgroundRunningChecker(checker));
+  }
+
+  private _registerRemoteCopiedCallback(): void {
+    const callback = (content: ClipboardContent) => {
+      const hash = content.profileHash || content.text || null;
+      if (hash) getClipboardChangedHandler().setLastLocalProfileHash(hash);
+    };
+    localClipboard.registerRemoteCopiedCallback(callback);
+    this._cleanups.push(() => localClipboard.registerRemoteCopiedCallback(null));
   }
 
   private _subscribeToRemoteClipboard(): void {

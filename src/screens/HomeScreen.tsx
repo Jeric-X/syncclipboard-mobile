@@ -62,11 +62,10 @@ export function HomeScreen() {
 
   const activeServer = getActiveServer();
 
-  // 复制远程内容到本地剪贴板，同时通知服务记录哈希
+  // 复制远程内容到本地剪贴板
   const copyRemoteToLocal = async (content: ClipboardContent, logPrefix: string = '') => {
     const { localClipboard } = await import('@/services');
-    await localClipboard.setClipboardContent(content);
-    getClipboardSyncService().recordLocalHash(content.profileHash || content.text);
+    await localClipboard.setClipboardContent(content, true);
     console.log(`[HomeScreen] ${logPrefix}Copy to local clipboard completed`);
   };
 

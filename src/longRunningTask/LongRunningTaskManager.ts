@@ -33,11 +33,11 @@ class LongRunningTaskManager {
   private constructor() {
     configService.subscribe(() => {
       this._notifyConfigChanged();
-      this._stopAllIfBackgroundDisabled();
+      this._syncBackgroundTaskState();
     });
 
     backgroundRuntimeState.subscribe(() => {
-      this._stopAllIfBackgroundDisabled();
+      this._syncBackgroundTaskState();
     });
 
     AppState.addEventListener('change', (nextState) => {
@@ -45,9 +45,10 @@ class LongRunningTaskManager {
       this._appState = nextState;
       if (!wasBackground && nextState === 'background') {
         this._notifyBackground();
-        this._stopAllIfBackgroundDisabled();
+        this._syncBackgroundTaskState();
       } else if (wasBackground && nextState !== 'background') {
         this._notifyForeground();
+        this._startNonKeepAlive();
       }
     });
   }
@@ -64,7 +65,7 @@ class LongRunningTaskManager {
   /**
    * 注册一个持续任务。
    * 若已存在同名任务则覆盖。
-   * @param keepAlive 若为 true，则后台自动停止时跳过该任务，使其保持运行。
+   * @param keepAlive 若为 true，此任务不受后台任务总开关控制，使其保持运行。
    */
   register(task: ILongRunningTask, keepAlive = false): void {
     this.tasks.set(task.name, task);
@@ -152,7 +153,12 @@ class LongRunningTaskManager {
     }
   }
 
-  private _stopAllIfBackgroundDisabled(): void {
+  /**
+   * 后台时根据当前配置同步任务运行状态：
+   * - 若应停止（总开关关闭或临时禁用），停止所有非 keepAlive 任务
+   * - 若应运行（总开关开启且未临时禁用），启动所有非 keepAlive 任务
+   */
+  private _syncBackgroundTaskState(): void {
     if (this._appState !== 'background') return;
     configService
       .getConfig()
@@ -160,21 +166,48 @@ class LongRunningTaskManager {
         const shouldStop =
           backgroundRuntimeState.isTempDisabled() || !config?.enableBackgroundTasks;
         if (shouldStop) {
-          const targets = Array.from(this.tasks.values()).filter(
-            (task) => !this._keepAliveTasks.has(task.name)
-          );
-          Promise.allSettled(
-            targets.map((task) =>
-              task.stop().catch((e) => {
-                console.error(`[LongRunningTaskManager] Failed to stop task "${task.name}":`, e);
-              })
-            )
-          ).catch(() => {});
+          this._stopNonKeepAlive();
+        } else {
+          this._startNonKeepAlive();
         }
       })
       .catch((e) => {
-        console.error('[LongRunningTaskManager] Failed to get config in _checkAndStopIfNeeded:', e);
+        console.error(
+          '[LongRunningTaskManager] Failed to get config in _syncBackgroundTaskState:',
+          e
+        );
       });
+  }
+
+  /**
+   * 启动所有非 keepAlive 任务（已在运行的任务会被幂等地跳过）。
+   * 在 app 从后台回到前台时调用，以恢复后台期间被停止的任务。
+   */
+  private _startNonKeepAlive(): void {
+    const targets = Array.from(this.tasks.values()).filter(
+      (task) => !this._keepAliveTasks.has(task.name)
+    );
+    Promise.allSettled(
+      targets.map((task) =>
+        task.start().catch((e) => {
+          console.error(`[LongRunningTaskManager] Failed to start task "${task.name}":`, e);
+        })
+      )
+    ).catch(() => {});
+  }
+
+  /** 停止所有非 keepAlive 任务。 */
+  private _stopNonKeepAlive(): void {
+    const targets = Array.from(this.tasks.values()).filter(
+      (task) => !this._keepAliveTasks.has(task.name)
+    );
+    Promise.allSettled(
+      targets.map((task) =>
+        task.stop().catch((e) => {
+          console.error(`[LongRunningTaskManager] Failed to stop task "${task.name}":`, e);
+        })
+      )
+    ).catch(() => {});
   }
 
   private _getOrThrow(name: string): ILongRunningTask {
@@ -191,10 +224,10 @@ export const longRunningTaskManager = LongRunningTaskManager.getInstance();
 // ─── 注册所有持续任务 ─────────────────────────────────────────
 // 在此统一声明，供后续迁移 BackgroundServiceManager 时逐步扩展。
 longRunningTaskManager.register(smsForwardingTask, true);
-longRunningTaskManager.register(foregroundServiceTask);
 longRunningTaskManager.register(clipboardMonitorTask, true);
 longRunningTaskManager.register(remoteClipboardMonitorTask, true);
 longRunningTaskManager.register(historyTrackerTask, true);
+longRunningTaskManager.register(foregroundServiceTask);
 longRunningTaskManager.register(historySyncTask);
 longRunningTaskManager.register(clipboardSyncTask);
 longRunningTaskManager.register(heartbeatTask);
