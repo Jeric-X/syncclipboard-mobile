@@ -12,6 +12,7 @@ import { setTimer, clearTimer } from 'native-timer';
 import { getAPIClient } from '../ClientFactory';
 import { profileDtoToContent } from '../../utils/clipboard/convert';
 import { clipboardSyncState } from './SyncState';
+import { configService } from '../ConfigService';
 
 /** 远程剪贴板变化回调：仅在内容哈希变化时触发 */
 export type RemoteClipboardChangedCallback = (content: ClipboardContent) => void;
@@ -22,8 +23,6 @@ class RemoteClipboardMonitor {
   private callbacks = new Set<RemoteClipboardChangedCallback>();
   private pollingTag: string | null = null;
   private _signalRConnected = false;
-  private _server: ServerConfig | null = null;
-  private _pollingInterval: number | undefined = undefined;
   /** 上次触发回调时的内容哈希，用于过滤重复通知 */
   private _lastContentHash: string | null = null;
   /**
@@ -89,13 +88,14 @@ class RemoteClipboardMonitor {
    * 建立远程监听（SignalR 或轮询）。
    * 不触发初始获取，由调用方负责。
    */
-  async connect(server: ServerConfig, pollingInterval?: number): Promise<void> {
-    this._server = server;
-    this._pollingInterval = pollingInterval;
+  async connect(): Promise<void> {
+    const server = await configService.getActiveServer();
+    if (!server) return;
+    const config = await configService.getConfig();
     if (server.type === 'syncclipboard') {
       await this._connectSignalR(server);
     } else {
-      this._startPolling(pollingInterval);
+      this._startPolling(config?.remotePollingInterval);
     }
   }
 
@@ -104,24 +104,22 @@ class RemoteClipboardMonitor {
    * 若未连接则先重连，若已连接则直接刷新。
    * 无需区分服务器类型，内部统一处理。
    */
-  async resumeAndRefresh(server: ServerConfig, pollingInterval?: number): Promise<void> {
+  async resumeAndRefresh(): Promise<void> {
     if (!this.isConnected()) {
-      await this.connect(server, pollingInterval);
+      await this.connect();
     }
     await this.refresh();
   }
 
   /**
    * App 返回前台时由外部（RemoteClipboardMonitorTask.onForeground）调用。
-   * 使用上次已知的服务器配置重新连接并刷新。
+   * 重新连接并刷新。
    */
   async handleForeground(): Promise<void> {
-    if (!this._server) return;
-    await this.resumeAndRefresh(this._server, this._pollingInterval);
+    await this.resumeAndRefresh();
   }
 
   async disconnect(): Promise<void> {
-    this._server = null;
     this._lastContentHash = null;
     this._stopPolling();
     await this._disconnectSignalR();
@@ -205,7 +203,6 @@ class RemoteClipboardMonitor {
    * @throws 无服务器连接或拉取失败时抛出异常
    */
   async fetchLatest(): Promise<ClipboardContent> {
-    if (!this._server) throw new Error('No active server');
     const apiClient = await getAPIClient();
     const profile = await apiClient.getClipboard();
     if (!profile) throw new Error('No clipboard data returned');

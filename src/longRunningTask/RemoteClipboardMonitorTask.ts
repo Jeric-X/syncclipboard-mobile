@@ -21,6 +21,7 @@ class RemoteClipboardMonitorTask extends LongRunningTask {
   readonly name = 'remoteClipboardMonitor';
 
   private _activeServer: ServerConfig | null = null;
+  private _activePollingInterval: number | undefined = undefined;
 
   async start(): Promise<void> {
     const server = await configService.getActiveServer();
@@ -28,13 +29,15 @@ class RemoteClipboardMonitorTask extends LongRunningTask {
       clipboardSyncState.setRemoteContent(null);
       return;
     }
-    this._activeServer = server;
     const config = await configService.getConfig();
-    await remoteClipboardMonitor.connect(server, config?.remotePollingInterval);
+    this._activeServer = server;
+    this._activePollingInterval = config?.remotePollingInterval;
+    await remoteClipboardMonitor.connect();
   }
 
   async stop(): Promise<void> {
     this._activeServer = null;
+    this._activePollingInterval = undefined;
     await remoteClipboardMonitor.disconnect();
   }
 
@@ -44,20 +47,23 @@ class RemoteClipboardMonitorTask extends LongRunningTask {
 
   override async onConfigChanged(): Promise<void> {
     const newServer = await configService.getActiveServer();
-    const serverChanged = JSON.stringify(newServer) !== JSON.stringify(this._activeServer);
+    const config = await configService.getConfig();
+    const newPollingInterval = config?.remotePollingInterval;
 
-    if (serverChanged) {
+    const serverChanged = JSON.stringify(newServer) !== JSON.stringify(this._activeServer);
+    const pollingIntervalChanged = newPollingInterval !== this._activePollingInterval;
+
+    if (!newServer) {
       await this.stop();
-      if (newServer) {
-        await this.start();
-      } else {
-        clipboardSyncState.setRemoteContent(null);
-      }
-    } else if (this._activeServer) {
-      const config = await configService.getConfig();
-      if (!remoteClipboardMonitor.isConnected()) {
-        await remoteClipboardMonitor.connect(this._activeServer, config?.remotePollingInterval);
-      }
+      clipboardSyncState.setRemoteContent(null);
+      return;
+    }
+
+    if (serverChanged || pollingIntervalChanged) {
+      await this.stop();
+      await this.start();
+    } else if (!remoteClipboardMonitor.isConnected()) {
+      await this.start();
     }
   }
 
