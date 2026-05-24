@@ -133,8 +133,8 @@ class ClipboardChangedHandler {
     }
 
     try {
-      const result = await this.copyToLocalClipboard(content);
-      if (result.success && Platform.OS === 'android') {
+      await this.copyToLocalClipboard(content);
+      if (Platform.OS === 'android') {
         const preview = this.getContentPreview(content);
         updateForegroundNotification(`已下载: ${preview}`);
         if (config?.syncToastEnabled !== false) {
@@ -153,19 +153,11 @@ class ClipboardChangedHandler {
     return content.fileName || content.type;
   }
 
-  private async copyToLocalClipboard(
-    content: ClipboardContent
-  ): Promise<{ success: boolean; message?: string }> {
-    const { copyToLocalClipboard } = await import('../../utils/clipboard');
-    const result = await copyToLocalClipboard(content);
-
-    if (result.success) {
-      this.lastLocalProfileHash = content.profileHash || content.text;
-      console.log('[ClipboardChangedHandler] Copied to local clipboard');
-    } else {
-      console.error(`[ClipboardChangedHandler] Copy failed: ${result.message}`);
-    }
-    return result;
+  private async copyToLocalClipboard(content: ClipboardContent): Promise<void> {
+    const { localClipboard } = await import('../clipboard/LocalClipboard');
+    await localClipboard.setClipboardContent(content);
+    this.lastLocalProfileHash = content.profileHash || content.text;
+    console.log('[ClipboardChangedHandler] Copied to local clipboard');
   }
 
   async handleAutoUpload(content: ClipboardContent): Promise<void> {

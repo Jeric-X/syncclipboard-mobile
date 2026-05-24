@@ -14,9 +14,28 @@ import { prepareTempFilePath, CLIPBOARD_TEMP_DIR } from '@/utils/fileStorage';
 import { nativeSetClipboardImageFromFile } from 'native-util';
 
 /**
+ * 剪贴板复制生命周期回调，由外部模块（如 ClipboardMonitor）注册
+ */
+export interface CopyLifecycleCallbacks {
+  /** 复制开始前调用（暹停轮询） */
+  onBeforeCopy: () => void;
+  /** 复制结束后调用，无论成功与否（恢复轮询） */
+  onAfterCopy: () => void;
+}
+
+/**
  * 剪贴板管理器类
  */
 export class LocalClipboard {
+  private copyLifecycleCallbacks: CopyLifecycleCallbacks | null = null;
+
+  /**
+   * 注册复制生命周期回调（由 ClipboardMonitor 调用）
+   */
+  registerCopyLifecycleCallbacks(callbacks: CopyLifecycleCallbacks): void {
+    this.copyLifecycleCallbacks = callbacks;
+  }
+
   /**
    * 获取当前剪贴板内容
    */
@@ -271,9 +290,28 @@ export class LocalClipboard {
   /**
    * 设置文本到剪贴板
    */
-  async setTextContent(text: string): Promise<void> {
+  async setTextContent(content: ClipboardContent): Promise<void> {
     try {
-      await Clipboard.setStringAsync(text);
+      let text = content.text;
+      if (content.type === 'Text' && content.fileUri && content.hasData) {
+        try {
+          const response = await fetch(content.fileUri);
+          text = await response.text();
+          console.log(
+            `[ClipboardManager] Read complete text from file for profileHash: ${content.profileHash}, length: ${text.length}`
+          );
+        } catch (error) {
+          console.error('[ClipboardManager] Failed to read text file:', error);
+          if (isTextInvalid(content.text)) {
+            throw new Error('无法读取完整文本');
+          }
+          // fallback to preview text
+        }
+      }
+      if (isTextInvalid(text)) {
+        return;
+      }
+      await Clipboard.setStringAsync(text!);
     } catch (error) {
       console.error('[ClipboardManager] Failed to set text content:', error);
 
@@ -302,33 +340,35 @@ export class LocalClipboard {
   }
 
   /**
-   * 设置剪贴板内容
+   * 设置剪贴板内容。写入期间自动暂停剪贴板监听，完成后恢复并立即触发一次检查。
+   * 写入失败时直接抛出异常，由调用方处理。
    */
   async setClipboardContent(content: ClipboardContent): Promise<void> {
-    switch (content.type) {
-      case 'Text':
-        if (!isTextInvalid(content.text)) {
-          await this.setTextContent(content.text);
-        }
-        break;
+    this.copyLifecycleCallbacks?.onBeforeCopy();
+    try {
+      switch (content.type) {
+        case 'Text':
+          await this.setTextContent(content);
+          break;
 
-      case 'Image':
-        if (content.fileUri) {
-          await this.setImageContent(content.fileUri);
-        }
-        break;
+        case 'Image':
+          if (content.fileUri) {
+            await this.setImageContent(content.fileUri);
+          }
+          break;
 
-      case 'File':
-      case 'Group':
-        // 文件和文件组暂不支持直接设置到剪贴板
-        // 可以设置文件路径或名称作为文本
-        if (!isTextInvalid(content.text)) {
-          await this.setTextContent(content.text);
-        }
-        break;
+        case 'File':
+        case 'Group':
+          // 文件和文件组暂不支持直接设置到剪贴板
+          // 可以设置文件路径或名称作为文本
+          await this.setTextContent(content);
+          break;
 
-      default:
-        throw new Error(`Unsupported clipboard type: ${content.type}`);
+        default:
+          throw new Error(`Unsupported clipboard type: ${content.type}`);
+      }
+    } finally {
+      this.copyLifecycleCallbacks?.onAfterCopy();
     }
   }
 

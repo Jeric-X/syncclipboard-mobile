@@ -38,7 +38,6 @@ import { MessageToast } from '@/components/MessageToast';
 import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
 import { TransferQueueModal } from '@/components/TransferQueueModal';
 import { WordPickerScreen } from '@/screens/WordPickerScreen';
-import { copyToLocalClipboard } from '@/utils/clipboard';
 import { openFile, saveFile, shareFile, saveToGallery } from '@/utils/fileActions';
 import { isTextInvalid } from '@/utils/index';
 import { useMessageStore } from '@/stores/messageStore';
@@ -218,22 +217,20 @@ export function HistoryScreen() {
       localClipboardHash: item.localClipboardHash,
       hasData: item.hasData,
     };
-    const result = await copyToLocalClipboard(content);
-    if (result.success) {
-      // 更新 lastAccessed，使按访问时间排序时记录移到顶部
-      historyStorage.updateLastAccessed(item.profileHash);
-    }
-    return result;
+    const { localClipboard } = await import('@/services');
+    await localClipboard.setClipboardContent(content);
+    // 更新 lastAccessed，使按访问时间排序时记录移到顶部
+    historyStorage.updateLastAccessed(item.profileHash);
   }, []);
 
   // 点击列表项 - 复制到剪贴板
   const handleItemPress = useCallback(
     async (item: HistoryItem) => {
-      const result = await copyItemWithSync(item);
-      if (result.success) {
-        showMessage(result.message, 'success');
-      } else {
-        showMessage(result.message || '复制失败', 'error');
+      try {
+        await copyItemWithSync(item);
+        showMessage(item.type === 'Image' ? '已复制图片到剪贴板' : '已复制到剪贴板', 'success');
+      } catch (error) {
+        showMessage(error instanceof Error ? error.message || '复制失败' : '复制失败', 'error');
       }
     },
     [showMessage, copyItemWithSync]

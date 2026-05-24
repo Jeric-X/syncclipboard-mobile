@@ -18,7 +18,6 @@ import { CurrentClipboardCard } from '@/components/CurrentClipboardCard';
 import { MessageToast } from '@/components/MessageToast';
 import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
 import { WordPickerScreen } from '@/screens/WordPickerScreen';
-import { copyToLocalClipboard } from '@/utils/clipboard';
 import { useMessageStore } from '@/stores/messageStore';
 import { useErrorStore } from '@/stores/errorStore';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
@@ -65,14 +64,10 @@ export function HomeScreen() {
 
   // 复制远程内容到本地剪贴板，同时通知服务记录哈希
   const copyRemoteToLocal = async (content: ClipboardContent, logPrefix: string = '') => {
-    const result = await copyToLocalClipboard(content);
-    if (result.success) {
-      getClipboardSyncService().recordLocalHash(content.profileHash || content.text);
-      console.log(`[HomeScreen] ${logPrefix}Copy to local clipboard completed`);
-    } else {
-      console.error(`[HomeScreen] ${logPrefix}Copy to local clipboard failed: ${result.message}`);
-    }
-    return result;
+    const { localClipboard } = await import('@/services');
+    await localClipboard.setClipboardContent(content);
+    getClipboardSyncService().recordLocalHash(content.profileHash || content.text);
+    console.log(`[HomeScreen] ${logPrefix}Copy to local clipboard completed`);
   };
 
   // 复制本地剪贴板内容（简单模式，直接设置到剪贴板）
@@ -342,11 +337,17 @@ export function HomeScreen() {
                   actionProgress={downloadProgress}
                   onCancelAction={handleCancelDownload}
                   onCopy={async (content) => {
-                    const result = await copyRemoteToLocal(content, 'Manual copy: ');
-                    if (result.success) {
-                      showMessage('已复制到剪贴板', 'success');
-                    } else {
-                      showMessage(result.message || '复制失败', 'error');
+                    try {
+                      await copyRemoteToLocal(content, 'Manual copy: ');
+                      showMessage(
+                        content.type === 'Image' ? '已复制图片到剪贴板' : '已复制到剪贴板',
+                        'success'
+                      );
+                    } catch (error) {
+                      showMessage(
+                        error instanceof Error ? error.message || '复制失败' : '复制失败',
+                        'error'
+                      );
                     }
                   }}
                   onWordPick={setWordPickerText}

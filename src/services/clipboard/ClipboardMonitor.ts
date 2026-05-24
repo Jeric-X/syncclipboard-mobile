@@ -36,6 +36,12 @@ export class ClipboardMonitor {
   constructor(clipboardManager: LocalClipboard, options?: ClipboardMonitorOptions) {
     this.clipboardManager = clipboardManager;
 
+    // 注册复制生命周期回调，避免循环引用
+    clipboardManager.registerCopyLifecycleCallbacks({
+      onBeforeCopy: () => this.pausePolling(),
+      onAfterCopy: () => this.resumePolling(),
+    });
+
     if (options) {
       this.options = { ...this.options, ...options };
     }
@@ -279,6 +285,7 @@ export class ClipboardMonitor {
   /**
    * 恢复被 pausePolling 暂停的轮询计时器。
    * 会重置计时器间隔，下次轮询从调用此方法起重新计时。
+   * 同时立即触发一次检查，不必等待下一个周期。
    * 后台且后台上传未启用时，不恢复轮询（避免后台写入剪贴板后误重启轮询）。
    */
   resumePolling(): void {
@@ -294,6 +301,8 @@ export class ClipboardMonitor {
     }
 
     this.startPolling();
+    // 立即触发一次检查，不等待周期计时器
+    this.checkClipboard().catch(() => {});
   }
 
   /**
