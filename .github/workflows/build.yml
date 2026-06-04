@@ -28,6 +28,5 @@ jobs:
 
   publish-gitee-release:
     name: Publish Gitee Release
-    if: ${{ startsWith(github.ref, 'refs/tags/') }}
     needs: [code-style, android-build, unit-tests]
     uses: ./.github/workflows/publish-gitee-release.yml

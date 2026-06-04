@@ -12,12 +12,25 @@ jobs:
       - name: Setup SSH for Gitee
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.GITEE_PRIVATE_KEY }}" | base64 -d > ~/.ssh/id_rsa
+          # Debug: Check if secret exists
+          if [ -z "${{ secrets.GITEE_PRIVATE_KEY }}" ]; then
+            echo "ERROR: GITEE_PRIVATE_KEY secret is empty or not set!"
+            exit 1
+          fi
+          echo "Secret length: ${{ secrets.GITEE_PRIVATE_KEY.length }}"
+          # Decode base64
+          echo "${{ secrets.GITEE_PRIVATE_KEY }}" | base64 -d > ~/.ssh/id_rsa || {
+            echo "ERROR: Base64 decode failed. Secret may not be in base64 format."
+            exit 1
+          }
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan gitee.com >> ~/.ssh/known_hosts
 
       - name: Verify SSH key
         run: |
+          echo "=== File size ==="
+          ls -la ~/.ssh/id_rsa
+          echo ""
           echo "=== SSH key format ==="
           head -1 ~/.ssh/id_rsa
           echo ""
@@ -42,6 +55,7 @@ jobs:
   publish-gitee-release-create:
     name: Create Gitee Release
     needs: [sync-to-gitee]
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     outputs:
       release_id: ${{ steps.create_release.outputs.release_id }}
