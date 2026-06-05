@@ -30,3 +30,4 @@ jobs:
     name: Publish Gitee Release
     needs: [code-style, unit-tests]
     uses: ./.github/workflows/publish-gitee-release.yml
+    secrets: inherit

@@ -2,6 +2,11 @@ name: publish-gitee-release
 
 on:
   workflow_call:
+    secrets:
+      GITEE_PRIVATE_KEY:
+        required: true
+      GITEE_ACCESS_TOKEN:
+        required: true
 
 jobs:
   sync-to-gitee:
@@ -47,7 +52,7 @@ jobs:
       - name: Mirror push to Gitee
         run: |
           cd bare-repo
-          git push git@gitee.com:${{ vars.GITEE_OWNER }}/${{ vars.GITEE_REPO }}.git \
+          git push git@gitee.com:JericX/syncclipboard-mobile.git \
             '+refs/heads/*:refs/heads/*' \
             '+refs/tags/*:refs/tags/*' \
             --prune
@@ -71,8 +76,8 @@ jobs:
       - name: Delete existing releases in same channel
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_ACCESS_TOKEN }}
-          GITEE_OWNER: ${{ vars.GITEE_OWNER }}
-          GITEE_REPO: ${{ vars.GITEE_REPO }}
+          GITEE_OWNER: JericX
+          GITEE_REPO: syncclipboard-mobile
           IS_PRERELEASE: ${{ contains(github.ref_name, 'beta') }}
         run: |
           python3 - <<'PYEOF'
@@ -100,8 +105,8 @@ jobs:
         id: create_release
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_ACCESS_TOKEN }}
-          GITEE_OWNER: ${{ vars.GITEE_OWNER }}
-          GITEE_REPO: ${{ vars.GITEE_REPO }}
+          GITEE_OWNER: JericX
+          GITEE_REPO: syncclipboard-mobile
           TAG_NAME: ${{ github.ref_name }}
           IS_PRERELEASE: ${{ contains(github.ref_name, 'beta') }}
         run: |
@@ -146,8 +151,8 @@ jobs:
       - name: Upload APK to Gitee Release
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_ACCESS_TOKEN }}
-          GITEE_OWNER: ${{ vars.GITEE_OWNER }}
-          GITEE_REPO: ${{ vars.GITEE_REPO }}
+          GITEE_OWNER: JericX
+          GITEE_REPO: syncclipboard-mobile
           RELEASE_ID: ${{ needs.publish-gitee-release-create.outputs.release_id }}
         run: |
           APK=$(ls apk/*.apk | head -1)
@@ -167,8 +172,8 @@ jobs:
       - name: Update Release Title
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_ACCESS_TOKEN }}
-          GITEE_OWNER: ${{ vars.GITEE_OWNER }}
-          GITEE_REPO: ${{ vars.GITEE_REPO }}
+          GITEE_OWNER: JericX
+          GITEE_REPO: syncclipboard-mobile
           RELEASE_ID: ${{ needs.publish-gitee-release-create.outputs.release_id }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
