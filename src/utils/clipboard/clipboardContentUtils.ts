@@ -1,7 +1,8 @@
-import { File } from 'expo-file-system';
-import { nativeCopyFile } from 'native-util';
+import { File, Directory } from 'expo-file-system';
+import { nativeCopyFile, nativeUnzipFile } from 'native-util';
 import { calculateFileProfileHash, calculateTextHash } from '@/utils/hash';
 import { prepareTempFilePath } from '@/utils/fileStorage';
+import { saveFileToDirectory } from '@/utils/fileActions';
 import type { ClipboardContent } from '@/types/clipboard';
 import type { ClipboardContentType } from '@/types/api';
 
@@ -57,4 +58,37 @@ export async function createContentFromFile(
     hasData: true,
     timestamp: Date.now(),
   };
+}
+
+/**
+ * 保存剪贴板内容数据到指定目录
+ * 注意：此函数不处理图片类型，图片类型应在调用处直接使用 saveToGallery
+ *
+ * @param content 剪贴板内容
+ * @param directoryUri 目标目录 URI（必需）
+ */
+export async function saveContentDataToDirectory(
+  content: ClipboardContent,
+  directoryUri: string
+): Promise<void> {
+  if (!content.fileUri) {
+    throw new Error('No file data to save');
+  }
+
+  // 检查目标目录是否存在
+  const targetDir = new Directory(directoryUri);
+  if (!targetDir.exists) {
+    throw new Error(`Target directory does not exist: ${directoryUri}`);
+  }
+
+  const fileName = content.fileName || 'file';
+
+  // Group 类型：直接解压缩到目标目录
+  if (content.type === 'Group') {
+    await nativeUnzipFile(content.fileUri, directoryUri);
+    return;
+  }
+
+  // 其他类型：直接保存文件
+  await saveFileToDirectory(content.fileUri, directoryUri, fileName);
 }

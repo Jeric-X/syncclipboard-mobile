@@ -259,7 +259,7 @@ export function historyItemToDto(item: HistoryItem): HistoryRecordDto {
 
   return {
     hash,
-    type: item.type as 'Text' | 'Image' | 'File',
+    type: item.type,
     text: item.text,
     createTime: item.timestamp ? new Date(item.timestamp).toISOString() : undefined,
     lastModified: item.lastModified ? new Date(item.lastModified).toISOString() : undefined,

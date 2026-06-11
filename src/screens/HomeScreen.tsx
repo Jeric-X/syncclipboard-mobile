@@ -266,14 +266,7 @@ export function HomeScreen() {
   // 检查是否需要下载文件
   const needsDownload = useMemo(() => {
     if (!remoteContent) return false;
-    return (
-      (remoteContent.type === 'Text' &&
-        remoteContent.hasData &&
-        remoteContent.fileName &&
-        !remoteContent.fileUri) ||
-      (remoteContent.type === 'Image' && remoteContent.fileName && !remoteContent.fileUri) ||
-      (remoteContent.type === 'File' && remoteContent.fileName && !remoteContent.fileUri)
-    );
+    return !!(remoteContent.hasData && remoteContent.fileName && !remoteContent.fileUri);
   }, [remoteContent]);
 
   // 下载远程剪贴板的文件数据

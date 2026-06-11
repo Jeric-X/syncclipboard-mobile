@@ -44,10 +44,13 @@ import { MessageToast } from '@/components/MessageToast';
 import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
 import { TransferQueueModal } from '@/components/TransferQueueModal';
 import { WordPickerScreen } from '@/screens/WordPickerScreen';
-import { openFile, saveFile, shareFile, saveToGallery } from '@/utils/fileActions';
+import { openFile, shareFile, saveToGallery } from '@/utils/fileActions';
 import { isTextInvalid } from '@/utils/index';
+import { saveContentDataToDirectory } from '@/utils/clipboard/clipboardContentUtils';
+import { historyItemToContent } from '@/utils/clipboard/convert';
 import { useMessageStore } from '@/stores/messageStore';
 import { useErrorStore } from '@/stores/errorStore';
+import * as FileSystem from 'expo-file-system/legacy';
 import { calculateTextHash } from '@/utils/hash';
 import { createContentFromFile } from '@/utils/clipboard/clipboardContentUtils';
 import { isHistorySyncEnabled } from '@/utils/config';
@@ -280,18 +283,25 @@ export function HistoryScreen() {
     async (item: HistoryItem) => {
       if (!item.fileUri) return;
       try {
+        // 图片类型直接保存到相册
         if (item.type === 'Image') {
           await saveToGallery(item.fileUri);
           showMessage(t('clipboard.savedToGallery'), 'success');
-        } else {
-          await saveFile(item.fileUri, item.dataName);
-          showMessage(t('clipboard.savedToDevice'), 'success');
+          return;
         }
-      } catch (error) {
-        if (error instanceof Error && error.message === 'Storage permission denied') {
+
+        // 其他类型：先选择文件夹
+        const permissions =
+          await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (!permissions.granted) {
           showMessage(t('history.saveCanceled'), 'info');
           return;
         }
+
+        const content = historyItemToContent(item);
+        await saveContentDataToDirectory(content, permissions.directoryUri);
+        showMessage(t('clipboard.savedToDevice'), 'success');
+      } catch (error) {
         if (error instanceof Error && error.message === 'Media library permission denied') {
           showMessage(t('clipboard.galleryPermissionRequired'), 'error');
           return;
@@ -883,7 +893,7 @@ export function HistoryScreen() {
       all: sortedItems,
       Text: sortedItems.filter((item) => item.type === 'Text'),
       Image: sortedItems.filter((item) => item.type === 'Image'),
-      File: sortedItems.filter((item) => item.type === 'File'),
+      File: sortedItems.filter((item) => item.type === 'File' || item.type === 'Group'),
       starred: sortedItems.filter((item) => item.starred),
     };
     return result;

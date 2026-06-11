@@ -185,7 +185,7 @@ const zh = {
     remotePollingSet: '已设置远程轮询间隔为 {{seconds}}秒',
     localPollingSet: '已设置本地轮询间隔为 {{seconds}}秒',
     autoSaveSyncFile: '自动保存同步文件',
-    autoSaveSyncFileDesc: '同步文件后自动保存到指定路径',
+    autoSaveSyncFileDesc: '执行快捷下载时自动保存文件到指定路径',
     autoSaveSyncFileEnabled: '已启用自动保存同步文件',
     autoSaveSyncFileDisabled: '已禁用自动保存同步文件',
     syncFileSavePath: '保存路径',

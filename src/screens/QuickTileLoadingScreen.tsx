@@ -9,11 +9,13 @@ import {
   setLocalClipboardFromRemote,
 } from '@/services/sync/ClipboardSyncActions';
 import { localClipboard } from '@/services/clipboard/LocalClipboard';
-import { openFile, shareFile, saveFile, saveToGallery } from '@/utils/fileActions';
+import { openFile, shareFile } from '@/utils/fileActions';
 import { isTextInvalid } from '@/utils/index';
 import { QuickLoadingPage, SuccessButtonConfig } from '@/components/QuickLoadingPage';
+import { saveContentDataToDirectory } from '@/utils/clipboard/clipboardContentUtils';
 import type { ProgressInfo } from 'native-util';
 import * as Clipboard from 'expo-clipboard';
+import * as FileSystem from 'expo-file-system/legacy';
 
 interface QuickTileLoadingScreenProps {
   direction: SyncDirection;
@@ -91,6 +93,29 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
     return match ? match[0] : null;
   }, [fileContent]);
 
+  // 统一的保存处理函数
+  const handleSave = useCallback(async () => {
+    if (!fileContent || !fileContent.fileUri) return;
+
+    try {
+      // 请求目录权限
+      const permissions =
+        await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+      if (!permissions.granted) {
+        ToastAndroid.show(t('history.saveCanceled'), ToastAndroid.SHORT);
+        return;
+      }
+
+      // 保存到用户选择的目录
+      await saveContentDataToDirectory(fileContent, permissions.directoryUri);
+      ToastAndroid.show(t('quickTile.savedToDevice'), ToastAndroid.SHORT);
+    } catch (error) {
+      console.error('[QuickTileLoadingScreen] Failed to save file:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      ToastAndroid.show(`${t('quickTile.saveFailed')}: ${errorMessage}`, ToastAndroid.LONG);
+    }
+  }, [fileContent, t]);
+
   const successButtons: SuccessButtonConfig[] | undefined = fileContent
     ? fileContent.type === 'Text' && textUrl
       ? [
@@ -114,48 +139,39 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
             },
           },
         ]
-      : [
-          {
-            label: t('clipboard.open'),
-            primary: true,
-            onPress: async () => {
-              try {
-                await openFile(fileContent.fileUri!);
-              } catch {}
+      : fileContent.type === 'Group'
+        ? [
+            {
+              label: t('clipboard.save'),
+              primary: true,
+              onPress: handleSave,
             },
-          },
-          {
-            label: t('clipboard.save'),
-            primary: true,
-            onPress: async () => {
-              try {
-                if (fileContent.type === 'Image') {
-                  await saveToGallery(fileContent.fileUri!);
-                  ToastAndroid.show(t('quickTile.savedToGallery'), ToastAndroid.SHORT);
-                } else {
-                  await saveFile(fileContent.fileUri!, fileContent.fileName);
-                  ToastAndroid.show(t('quickTile.savedToDevice'), ToastAndroid.SHORT);
-                }
-              } catch (error) {
-                console.error('[QuickTileLoadingScreen] Failed to save file:', error);
-                if (error instanceof Error && error.message === 'Media library permission denied') {
-                  ToastAndroid.show(t('quickTile.galleryPermissionRequired'), ToastAndroid.SHORT);
-                  return;
-                }
-                ToastAndroid.show(t('quickTile.saveFailed'), ToastAndroid.SHORT);
-              }
+          ]
+        : [
+            {
+              label: t('clipboard.open'),
+              primary: true,
+              onPress: async () => {
+                try {
+                  await openFile(fileContent.fileUri!);
+                } catch {}
+              },
             },
-          },
-          {
-            label: t('clipboard.share'),
-            primary: true,
-            onPress: async () => {
-              try {
-                await shareFile(fileContent.fileUri!, fileContent.fileName);
-              } catch {}
+            {
+              label: t('clipboard.save'),
+              primary: true,
+              onPress: handleSave,
             },
-          },
-        ]
+            {
+              label: t('clipboard.share'),
+              primary: true,
+              onPress: async () => {
+                try {
+                  await shareFile(fileContent.fileUri!, fileContent.fileName);
+                } catch {}
+              },
+            },
+          ]
     : undefined;
 
   return (

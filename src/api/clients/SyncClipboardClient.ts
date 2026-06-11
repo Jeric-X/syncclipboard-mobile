@@ -10,7 +10,7 @@ import {
   ProgressInfo,
 } from 'native-util';
 import { APIClient, APIClientConfig, PutContentOptions, ISyncClipboardAPI } from './APIClient';
-import { ProfileDto, ServerInfo } from '@/types/api';
+import { ProfileDto, ServerInfo, ClipboardContentType } from '@/types/api';
 import type { ClipboardContent } from '@/types/clipboard';
 import { ValidationError, ServerError } from '@/errors';
 import { isTextInvalid } from '@/utils/index';
@@ -174,7 +174,7 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
       }
       const record: HistoryRecordDto = {
         hash: profile.hash,
-        type: profile.type as 'Text' | 'Image' | 'File',
+        type: profile.type,
         text: profile.text,
         hasData: profile.hasData,
         size: profile.size,
@@ -353,7 +353,7 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
    * 更新历史记录 (IHistoryAPI)
    */
   async updateRecord(
-    type: 'Text' | 'Image' | 'File',
+    type: ClipboardContentType,
     profileId: string,
     update: HistoryRecordUpdateDto,
     signal?: AbortSignal

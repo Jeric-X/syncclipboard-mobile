@@ -13,6 +13,8 @@ import android.os.Environment
 import android.os.PowerManager
 import android.provider.MediaStore
 import android.provider.Settings
+import android.provider.DocumentsContract
+import androidx.documentfile.provider.DocumentFile
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
@@ -401,6 +403,182 @@ class NativeUtilModule : Module() {
                         "jobId" to jobId,
                         "progress" to progress,
                         "bytesWritten" to bytesWritten.toDouble(),
+                        "totalBytes" to totalBytes.toDouble()
+                    ))
+                    future.complete("success")
+                } catch (e: Exception) {
+                    cancelFlags.remove(jobId)
+                    future.complete(ZipErrorException(e.message ?: "Unknown error", e))
+                }
+            }
+
+            return@Function jobId
+        }
+
+        Function("startUnzipFile") { zipUri: String, destDirUri: String ->
+            val jobId = UUID.randomUUID().toString()
+            val cancelFlag = AtomicBoolean(false)
+            cancelFlags[jobId] = cancelFlag
+            val future = CompletableFuture<Any>()
+            pendingJobs[jobId] = future
+
+            executor.submit {
+                try {
+                    val context = appContext.reactContext
+                    if (context == null) {
+                        cancelFlags.remove(jobId)
+                        future.complete(ZipErrorException("No context available"))
+                        return@submit
+                    }
+
+                    val zipFile = File(resolveFilePath(zipUri))
+                    if (!zipFile.exists()) {
+                        cancelFlags.remove(jobId)
+                        future.complete(FileNotFoundException(zipFile.absolutePath))
+                        return@submit
+                    }
+
+                    val totalBytes = zipFile.length()
+                    var bytesRead = 0L
+                    var lastReportTime = 0L
+                    val buffer = ByteArray(CHUNK_SIZE)
+
+                    // 使用 DocumentFile API 统一处理所有 URI 类型
+                    val destUri = Uri.parse(destDirUri)
+                    val rootDoc = if (destUri.scheme == "content") {
+                        DocumentFile.fromTreeUri(context, destUri)
+                    } else {
+                        DocumentFile.fromFile(File(resolveFilePath(destDirUri)))
+                    }
+
+                    if (rootDoc == null || !rootDoc.exists()) {
+                        cancelFlags.remove(jobId)
+                        future.complete(ZipErrorException("Destination directory does not exist"))
+                        return@submit
+                    }
+
+                    // 用于缓存已创建的目录路径
+                    val createdDirs = mutableSetOf<String>()
+
+                    java.util.zip.ZipInputStream(FileInputStream(zipFile)).use { zipIn ->
+                        var entry: java.util.zip.ZipEntry?
+                        while (zipIn.nextEntry.also { entry = it } != null) {
+                            if (cancelFlag.get()) {
+                                cancelFlags.remove(jobId)
+                                future.complete(CancelledException())
+                                return@submit
+                            }
+
+                            val entryName = entry!!.name
+                            val isDirectory = entry!!.isDirectory
+                            android.util.Log.d("NativeUnzip", "Processing entry: $entryName, isDir: $isDirectory")
+
+                            // 解析路径：分离父目录和文件名
+                            val pathParts = entryName.split("/")
+                            var currentParent: DocumentFile = rootDoc!!
+
+                            // 创建所有父目录
+                            for (i in 0 until pathParts.size - 1) {
+                                val dirName = pathParts[i]
+                                if (dirName.isEmpty()) continue
+
+                                val dirPath = pathParts.subList(0, i + 1).joinToString("/")
+                                android.util.Log.d("NativeUnzip", "  Creating parent dir[$i]: $dirName, path: $dirPath")
+
+                                // 查找或创建目录
+                                val existingDir = currentParent.findFile(dirName)
+                                if (existingDir != null && existingDir.isDirectory) {
+                                    // 目录已存在
+                                    android.util.Log.d("NativeUnzip", "    Dir exists: $dirName")
+                                    currentParent = existingDir
+                                } else {
+                                    // 目录不存在，创建它
+                                    val newDir = currentParent.createDirectory(dirName)
+                                    if (newDir == null) {
+                                        android.util.Log.e("NativeUnzip", "    Failed to create dir: $dirName")
+                                        cancelFlags.remove(jobId)
+                                        future.complete(ZipErrorException("Failed to create directory: $dirName"))
+                                        return@submit
+                                    }
+                                    android.util.Log.d("NativeUnzip", "    Created dir: $dirName")
+                                    currentParent = newDir
+                                }
+                                createdDirs.add(dirPath)
+                            }
+
+                            if (isDirectory) {
+                                // 创建目录（如果还没创建）
+                                val dirPath = entryName.trimEnd('/')
+                                if (!createdDirs.contains(dirPath)) {
+                                    val dirName = pathParts.last()
+                                    if (dirName.isNotEmpty()) {
+                                        val existingDir = currentParent.findFile(dirName)
+                                        if (existingDir == null || !existingDir.isDirectory) {
+                                            currentParent.createDirectory(dirName)
+                                        }
+                                    }
+                                    createdDirs.add(dirPath)
+                                }
+                            } else {
+                                // 创建文件并写入内容
+                                val fileName = pathParts.last()
+                                android.util.Log.d("NativeUnzip", "  Creating file: $fileName")
+
+                                // 查找已存在的文件并删除
+                                val existingFile = currentParent.findFile(fileName)
+                                if (existingFile != null && existingFile.isFile) {
+                                    existingFile.delete()
+                                    android.util.Log.d("NativeUnzip", "    Deleted existing file")
+                                }
+
+                                // 创建新文件
+                                val newFile = currentParent.createFile("application/octet-stream", fileName)
+                                if (newFile == null) {
+                                    cancelFlags.remove(jobId)
+                                    future.complete(ZipErrorException("Failed to create file: $fileName"))
+                                    return@submit
+                                }
+
+                                // 写入文件内容
+                                context.contentResolver.openOutputStream(newFile.uri)?.use { output ->
+                                    var read: Int
+                                    while (zipIn.read(buffer).also { read = it } != -1) {
+                                        if (cancelFlag.get()) {
+                                            cancelFlags.remove(jobId)
+                                            future.complete(CancelledException())
+                                            return@submit
+                                        }
+                                        output.write(buffer, 0, read)
+                                        bytesRead += read
+
+                                        val currentTime = System.currentTimeMillis()
+                                        if (currentTime - lastReportTime >= 500) {
+                                            lastReportTime = currentTime
+                                            val progress = if (totalBytes > 0) {
+                                                bytesRead.toDouble() / totalBytes.toDouble()
+                                            } else {
+                                                -1.0
+                                            }
+                                            sendEvent(EVENT_ZIP_PROGRESS, mapOf(
+                                                "jobId" to jobId,
+                                                "progress" to progress,
+                                                "bytesWritten" to bytesRead.toDouble(),
+                                                "totalBytes" to totalBytes.toDouble()
+                                            ))
+                                        }
+                                    }
+                                }
+                            }
+                            zipIn.closeEntry()
+                        }
+                    }
+
+                    cancelFlags.remove(jobId)
+                    val progress = if (totalBytes > 0) 1.0 else -1.0
+                    sendEvent(EVENT_ZIP_PROGRESS, mapOf(
+                        "jobId" to jobId,
+                        "progress" to progress,
+                        "bytesWritten" to bytesRead.toDouble(),
                         "totalBytes" to totalBytes.toDouble()
                     ))
                     future.complete("success")

@@ -114,8 +114,6 @@ export async function downloadRemoteClipboard(
       const cachedFile = new File(cachedItem.fileUri);
       if (cachedFile.exists) {
         const result = { ...actualContent, fileUri: cachedItem.fileUri };
-        // 仍需保存到用户指定目录
-        await saveSyncFileToUserPath(result);
         return result;
       }
     }
@@ -134,11 +132,6 @@ export async function downloadRemoteClipboard(
         sig
       );
       clipboardSyncState.setState({ remoteContent: result });
-
-      // 下载完成后，自动保存到用户指定目录
-      if (result) {
-        await saveSyncFileToUserPath(result);
-      }
 
       return result;
     } finally {
@@ -201,5 +194,11 @@ export async function setLocalClipboardFromRemote(
       setJustSetLocalHash(hash);
     }
   }
+
+  // 快捷下载完成后，自动保存到用户指定目录
+  if (finalContent) {
+    await saveSyncFileToUserPath(finalContent);
+  }
+
   return finalContent;
 }

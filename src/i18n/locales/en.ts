@@ -193,7 +193,7 @@ const en: DeepString<typeof zh> = {
     remotePollingSet: 'Remote polling interval set to {{seconds}}s',
     localPollingSet: 'Local polling interval set to {{seconds}}s',
     autoSaveSyncFile: 'Auto-save synced files',
-    autoSaveSyncFileDesc: 'Automatically save synced files to a specified path',
+    autoSaveSyncFileDesc: 'Automatically save files to a specified path during quick download',
     autoSaveSyncFileEnabled: 'Auto-save synced files enabled',
     autoSaveSyncFileDisabled: 'Auto-save synced files disabled',
     syncFileSavePath: 'Save path',

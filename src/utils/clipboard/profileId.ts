@@ -3,6 +3,8 @@
  * ProfileId 工具函数
  */
 
+import { ClipboardContentType } from '@/types/api';
+
 /**
  * 生成 profileId
  */
@@ -15,14 +17,14 @@ export function getProfileId(type: string, hash: string): string {
  */
 export function parseProfileId(
   profileId: string
-): { type: 'Text' | 'Image' | 'File'; hash: string } | null {
+): { type: ClipboardContentType; hash: string } | null {
   const parts = profileId.split('-');
   if (parts.length < 2) {
     return null;
   }
-  const type = parts[0] as 'Text' | 'Image' | 'File';
+  const type = parts[0] as ClipboardContentType;
   const hash = parts.slice(1).join('-');
-  if (!['Text', 'Image', 'File'].includes(type)) {
+  if (!['Text', 'Image', 'File', 'Group'].includes(type)) {
     return null;
   }
   return { type, hash };

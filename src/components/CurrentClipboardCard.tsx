@@ -19,8 +19,10 @@ import { useTranslation } from 'react-i18next';
 import { ClipboardContent } from '@/types/clipboard';
 import { useSettingsStore } from '@/stores';
 import { useMessageStore } from '@/stores/messageStore';
-import { openFile, shareFile, saveFile, saveToGallery } from '@/utils/fileActions';
+import { openFile, shareFile, saveToGallery } from '@/utils/fileActions';
 import { formatFileSize, formatSizeWithType, isTextInvalid } from '@/utils';
+import { saveContentDataToDirectory } from '@/utils/clipboard/clipboardContentUtils';
+import * as FileSystem from 'expo-file-system/legacy';
 
 interface DownloadProgress {
   progress: number;
@@ -128,6 +130,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
       case 'Image':
         return '🖼️';
       case 'File':
+      case 'Group':
         return '📄';
       default:
         return '📋';
@@ -141,6 +144,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
       case 'Image':
         return t('common.typeImage');
       case 'File':
+      case 'Group':
         return t('common.typeFile');
       default:
         return t('common.typeUnknown');
@@ -174,6 +178,9 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
     if (clipboard.type === 'File') {
       return clipboard.fileName || t('clipboard.fileFallback');
     }
+    if (clipboard.type === 'Group') {
+      return clipboard.text || clipboard.fileName || t('clipboard.fileFallback');
+    }
     return '';
   };
 
@@ -200,13 +207,19 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
       return !!(clipboard.fileName && !clipboard.fileUri && !clipboard.fileData);
     }
 
+    // Group类型：有 fileName 但没有 fileUri 或 fileData
+    if (clipboard.type === 'Group') {
+      return !!(clipboard.fileName && !clipboard.fileUri && !clipboard.fileData);
+    }
+
     return false;
   };
 
   const showActionButton = isRemote ? !!(onAction && needsFileDownload()) : !!onAction;
 
-  // 可以"打开"的非文本类型（有 fileUri）
-  const canOpenFile = clipboard.type !== 'Text' && !!clipboard.fileUri;
+  // 可以"打开"的非文本类型（有 fileUri）- Group类型不支持打开
+  const canOpenFile =
+    clipboard.type !== 'Text' && clipboard.type !== 'Group' && !!clipboard.fileUri;
 
   // 打开文件
   const handleOpenFile = async () => {
@@ -218,9 +231,12 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
     }
   };
 
-  // 判断是否显示分享按钮（非Text类型且有文件URI）
+  // 判断是否显示分享按钮（非Text类型且有文件URI，Group类型除外）
   const canShowShareButton = (() => {
     if (!clipboard || clipboard.type === 'Text') return false;
+
+    // Group类型不显示分享按钮
+    if (clipboard.type === 'Group') return false;
 
     // 图片类型：需要有 fileUri
     if (clipboard.type === 'Image') return !!clipboard.fileUri;
@@ -231,19 +247,40 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   })();
 
   // 判断是否显示保存按钮（非Text类型且有文件URI）
-  const canShowSaveButton = canShowShareButton;
+  const canShowSaveButton = (() => {
+    if (!clipboard || clipboard.type === 'Text') return false;
+
+    // 图片类型：需要有 fileUri
+    if (clipboard.type === 'Image') return !!clipboard.fileUri;
+    // 文件类型：需要有 fileUri
+    if (clipboard.type === 'File') return !!clipboard.fileUri;
+    // Group类型：需要有 fileUri
+    if (clipboard.type === 'Group') return !!clipboard.fileUri;
+
+    return false;
+  })();
 
   // 保存文件到用户选择的目录（图片类型保存到相册）
   const handleSaveFile = async () => {
-    if (!clipboard.fileUri) return;
+    if (!clipboard || !clipboard.fileUri) return;
     try {
+      // 图片类型直接保存到相册
       if (clipboard.type === 'Image') {
         await saveToGallery(clipboard.fileUri);
         showMessage(t('clipboard.savedToGallery'), 'success');
-      } else {
-        await saveFile(clipboard.fileUri, clipboard.fileName);
-        showMessage(t('clipboard.savedToDevice'), 'success');
+        return;
       }
+
+      // 其他类型：先选择文件夹
+      const permissions =
+        await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+      if (!permissions.granted) {
+        showMessage(t('history.saveCanceled'), 'info');
+        return;
+      }
+
+      await saveContentDataToDirectory(clipboard, permissions.directoryUri);
+      showMessage(t('clipboard.savedToDevice'), 'success');
     } catch (error) {
       if (error instanceof Error && error.message === 'Media library permission denied') {
         showMessage(t('clipboard.galleryPermissionRequired'), 'error');
@@ -337,6 +374,14 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
           <View style={styles.mediaPreview}>
             <Text style={[styles.mediaLabel, { color: theme.colors.textSecondary }]}>
               {clipboard.fileName || t('common.typeFile')}
+            </Text>
+          </View>
+        )}
+
+        {clipboard.type === 'Group' && (
+          <View style={styles.mediaPreview}>
+            <Text style={[styles.mediaLabel, { color: theme.colors.textSecondary }]}>
+              {clipboard.text || clipboard.fileName || t('common.typeFileGroup')}
             </Text>
           </View>
         )}

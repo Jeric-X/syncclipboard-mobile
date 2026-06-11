@@ -11,6 +11,7 @@ import { getHistoryFileDir } from '@/utils/fileStorage';
 import { historyItemToContent } from '@/utils/clipboard/convert';
 import { File } from 'expo-file-system';
 import type { ProgressDetail } from '@/types/progress';
+import { parseProfileId } from '@/utils/clipboard/profileId';
 
 export type TransferType = 'upload' | 'download';
 export type TransferTaskStatus =
@@ -169,7 +170,6 @@ export class HistoryTransferQueue {
       return existingTask;
     }
 
-    const { parseProfileId } = await import('@/utils');
     const parsed = parseProfileId(profileId);
     const item = parsed ? await this.historyStorage.getItem(parsed.hash) : null;
     const displayName = item?.text || profileId;
@@ -678,7 +678,6 @@ export class HistoryTransferQueue {
       throw new HistoryAPINotInitializedError();
     }
 
-    const { parseProfileId } = await import('@/utils');
     const parsed = parseProfileId(task.profileId);
     if (!parsed) {
       throw new Error(`Invalid profileId format: ${task.profileId}`);

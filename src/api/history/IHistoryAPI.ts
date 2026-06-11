@@ -10,6 +10,7 @@ import {
   HistoryQueryParams,
   HistoryStatisticsDto,
 } from '@/types/history';
+import { ClipboardContentType } from '@/types/api';
 
 /**
  * History API 接口
@@ -18,7 +19,7 @@ export interface IHistoryAPI {
   queryRecords(params: HistoryQueryParams, signal?: AbortSignal): Promise<HistoryRecordDto[]>;
   getRecord(profileId: string, signal?: AbortSignal): Promise<HistoryRecordDto>;
   updateRecord(
-    type: 'Text' | 'Image' | 'File',
+    type: ClipboardContentType,
     profileId: string,
     update: HistoryRecordUpdateDto,
     signal?: AbortSignal

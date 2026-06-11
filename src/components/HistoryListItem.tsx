@@ -139,9 +139,8 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
         case 'Image':
           return '🖼️';
         case 'File':
-          return '📄';
         case 'Group':
-          return '📦';
+          return '📄';
         default:
           return '📋';
       }
@@ -154,9 +153,8 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
         case 'Image':
           return t('common.typeImage');
         case 'File':
-          return t('common.typeFile');
         case 'Group':
-          return t('common.typeFileGroup');
+          return t('common.typeFile');
         default:
           return t('common.typeUnknown');
       }
@@ -266,10 +264,8 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
               </Text>
             </View>
 
-            {/* 预览文本 - 另起一行（文本类型始终显示，图片/文件类型在本地文件未就绪时显示） */}
-            {(item.type === 'Text' ||
-              item.type === 'File' ||
-              (item.type === 'Image' && !localFileReady)) && (
+            {/* 预览文本 - 另起一行（非图片类型始终显示，图片类型在本地文件未就绪时显示） */}
+            {(item.type !== 'Image' || !localFileReady) && (
               <Text
                 style={[styles.previewText, { color: theme.colors.text }]}
                 numberOfLines={10}
@@ -415,32 +411,29 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                     </View>
                   )}
                 {/* 未下载标识 - 图片/文件类型但本地文件未就绪，仅当启用同步且不在传输中时显示 */}
-                {enableHistorySync &&
-                  !isTransferring &&
-                  (item.type === 'Image' || item.type === 'File') &&
-                  !localFileReady && (
-                    <TouchableOpacity
-                      style={styles.syncBadge}
-                      onPress={() => onDownload?.(item)}
-                      disabled={!onDownload}
+                {enableHistorySync && !isTransferring && !localFileReady && (
+                  <TouchableOpacity
+                    style={styles.syncBadge}
+                    onPress={() => onDownload?.(item)}
+                    disabled={!onDownload}
+                  >
+                    <Ionicons
+                      name="cloud-download-outline"
+                      size={14}
+                      color={onDownload ? theme.colors.primary : theme.colors.textTertiary}
+                    />
+                    <Text
+                      style={[
+                        styles.syncBadgeText,
+                        {
+                          color: onDownload ? theme.colors.primary : theme.colors.textTertiary,
+                        },
+                      ]}
                     >
-                      <Ionicons
-                        name="cloud-download-outline"
-                        size={14}
-                        color={onDownload ? theme.colors.primary : theme.colors.textTertiary}
-                      />
-                      <Text
-                        style={[
-                          styles.syncBadgeText,
-                          {
-                            color: onDownload ? theme.colors.primary : theme.colors.textTertiary,
-                          },
-                        ]}
-                      >
-                        {t('history.syncStatusNotDownloaded')}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
+                      {t('history.syncStatusNotDownloaded')}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
               <View style={styles.actionsRow}>
                 {/* 收藏按钮 */}
@@ -544,7 +537,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                     )}
                   </>
                 )}
-                {(item.type === 'File' || item.type === 'Group') && (
+                {item.type === 'File' && (
                   <>
                     {item.fileUri && onOpen && (
                       <TouchableOpacity
@@ -575,6 +568,19 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                         hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                       >
                         <Share width={15} height={15} color={theme.colors.primary} />
+                      </TouchableOpacity>
+                    )}
+                  </>
+                )}
+                {item.type === 'Group' && (
+                  <>
+                    {item.fileUri && onSave && (
+                      <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={() => onSave(item)}
+                        hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                      >
+                        <Download width={15} height={15} color={theme.colors.primary} />
                       </TouchableOpacity>
                     )}
                   </>

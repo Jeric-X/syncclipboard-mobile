@@ -372,7 +372,7 @@ const ContentPreview: React.FC<{ content: ClipboardContent }> = ({ content }) =>
   }
 
   // File (or Image without local URI)
-  const label = content.fileName || content.text || '未知文件';
+  const label = content.text || content.fileName || '未知文件';
   const size = content.fileSize != null ? ` · ${(content.fileSize / 1024).toFixed(1)} KB` : '';
   return (
     <View
@@ -382,7 +382,7 @@ const ContentPreview: React.FC<{ content: ClipboardContent }> = ({ content }) =>
       ]}
     >
       <Text style={[styles.previewFileIcon, { color: theme.colors.primary }]}>📄</Text>
-      <Text style={[styles.previewFileName, { color: theme.colors.text }]} numberOfLines={2}>
+      <Text style={[styles.previewFileName, { color: theme.colors.text }]} numberOfLines={10}>
         {label}
       </Text>
       {size !== '' && (

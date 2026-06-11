@@ -3,12 +3,14 @@
  * 历史记录相关类型定义
  */
 
+import { ClipboardContentType } from './api';
+
 /**
  * 历史记录 DTO（服务器格式）
  */
 export interface HistoryRecordDto {
   hash: string;
-  type: 'Text' | 'Image' | 'File';
+  type: ClipboardContentType;
   text?: string;
   createTime?: string;
   lastModified?: string;
