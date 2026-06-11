@@ -13,7 +13,6 @@ import android.os.Environment
 import android.os.PowerManager
 import android.provider.MediaStore
 import android.provider.Settings
-import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
@@ -438,7 +437,14 @@ class NativeUtilModule : Module() {
                         return@submit
                     }
 
-                    val totalBytes = zipFile.length()
+                    // 预计算解压后总大小（未压缩），用于准确进度展示
+                    val totalBytes = try {
+                        java.util.zip.ZipFile(zipFile).use { zf ->
+                            zf.entries().asSequence().sumOf { it.size }
+                        }
+                    } catch (e: Exception) {
+                        zipFile.length() // 回退到压缩文件大小
+                    }
                     var bytesRead = 0L
                     var lastReportTime = 0L
                     val buffer = ByteArray(CHUNK_SIZE)
@@ -471,7 +477,9 @@ class NativeUtilModule : Module() {
 
                             val entryName = entry!!.name
                             val isDirectory = entry!!.isDirectory
-                            android.util.Log.d("NativeUnzip", "Processing entry: $entryName, isDir: $isDirectory")
+                            if (BuildConfig.DEBUG) {
+                                android.util.Log.d("NativeUnzip", "Processing entry: $entryName, isDir: $isDirectory")
+                            }
 
                             // 解析路径：分离父目录和文件名
                             val pathParts = entryName.split("/")
@@ -483,13 +491,17 @@ class NativeUtilModule : Module() {
                                 if (dirName.isEmpty()) continue
 
                                 val dirPath = pathParts.subList(0, i + 1).joinToString("/")
-                                android.util.Log.d("NativeUnzip", "  Creating parent dir[$i]: $dirName, path: $dirPath")
+                                if (BuildConfig.DEBUG) {
+                                    android.util.Log.d("NativeUnzip", "  Creating parent dir[$i]: $dirName, path: $dirPath")
+                                }
 
                                 // 查找或创建目录
                                 val existingDir = currentParent.findFile(dirName)
                                 if (existingDir != null && existingDir.isDirectory) {
                                     // 目录已存在
-                                    android.util.Log.d("NativeUnzip", "    Dir exists: $dirName")
+                                    if (BuildConfig.DEBUG) {
+                                        android.util.Log.d("NativeUnzip", "    Dir exists: $dirName")
+                                    }
                                     currentParent = existingDir
                                 } else {
                                     // 目录不存在，创建它
@@ -500,7 +512,9 @@ class NativeUtilModule : Module() {
                                         future.complete(ZipErrorException("Failed to create directory: $dirName"))
                                         return@submit
                                     }
-                                    android.util.Log.d("NativeUnzip", "    Created dir: $dirName")
+                                    if (BuildConfig.DEBUG) {
+                                        android.util.Log.d("NativeUnzip", "    Created dir: $dirName")
+                                    }
                                     currentParent = newDir
                                 }
                                 createdDirs.add(dirPath)
@@ -522,13 +536,17 @@ class NativeUtilModule : Module() {
                             } else {
                                 // 创建文件并写入内容
                                 val fileName = pathParts.last()
-                                android.util.Log.d("NativeUnzip", "  Creating file: $fileName")
+                                if (BuildConfig.DEBUG) {
+                                    android.util.Log.d("NativeUnzip", "  Creating file: $fileName")
+                                }
 
                                 // 查找已存在的文件并删除
                                 val existingFile = currentParent.findFile(fileName)
                                 if (existingFile != null && existingFile.isFile) {
                                     existingFile.delete()
-                                    android.util.Log.d("NativeUnzip", "    Deleted existing file")
+                                    if (BuildConfig.DEBUG) {
+                                        android.util.Log.d("NativeUnzip", "    Deleted existing file")
+                                    }
                                 }
 
                                 // 创建新文件

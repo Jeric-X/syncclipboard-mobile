@@ -9,7 +9,7 @@ import {
   setLocalClipboardFromRemote,
 } from '@/services/sync/ClipboardSyncActions';
 import { localClipboard } from '@/services/clipboard/LocalClipboard';
-import { openFile, shareFile } from '@/utils/fileActions';
+import { openFile, shareFile, saveToGallery } from '@/utils/fileActions';
 import { isTextInvalid } from '@/utils/index';
 import { QuickLoadingPage, SuccessButtonConfig } from '@/components/QuickLoadingPage';
 import { saveContentDataToDirectory } from '@/utils/clipboard/clipboardContentUtils';
@@ -93,12 +93,19 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
     return match ? match[0] : null;
   }, [fileContent]);
 
-  // 统一的保存处理函数
+  // 统一的保存处理函数（按类型分支）
   const handleSave = useCallback(async () => {
     if (!fileContent || !fileContent.fileUri) return;
 
     try {
-      // 请求目录权限
+      // 图片类型直接保存到相册
+      if (fileContent.type === 'Image') {
+        await saveToGallery(fileContent.fileUri);
+        ToastAndroid.show(t('clipboard.savedToGallery'), ToastAndroid.SHORT);
+        return;
+      }
+
+      // Group / File 类型：选择目录后保存（Group 自动解压）
       const permissions =
         await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
       if (!permissions.granted) {
@@ -106,7 +113,6 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
         return;
       }
 
-      // 保存到用户选择的目录
       await saveContentDataToDirectory(fileContent, permissions.directoryUri);
       ToastAndroid.show(t('quickTile.savedToDevice'), ToastAndroid.SHORT);
     } catch (error) {

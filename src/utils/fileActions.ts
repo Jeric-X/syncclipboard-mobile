@@ -89,15 +89,20 @@ export async function openFile(fileUri: string): Promise<void> {
  * @param directoryUri 目标目录 URI
  * @param fileName 文件名
  * @param mimeType MIME 类型（可选，不提供则自动推断）
- * @returns 保存后的文件 URI
  */
 export async function saveFileToDirectory(
   fileUri: string,
   directoryUri: string,
   fileName: string,
   mimeType?: string
-): Promise<string> {
+): Promise<void> {
   const resolvedMimeType = mimeType ?? getMimeTypeFromUri(fileUri);
+
+  // 只有 Downloads 根目录才切换为 MediaStore（Android 11+ 限制根目录）
+  if (isDownloadsRootUri(directoryUri)) {
+    await nativeSaveFileToDownloads(fileUri, fileName, resolvedMimeType, 'Download/');
+    return;
+  }
 
   // 先检查文件是否存在，如果存在则删除
   const destDir = new Directory(directoryUri);
@@ -113,7 +118,6 @@ export async function saveFileToDirectory(
   );
 
   await nativeCopyFile(fileUri, destUri);
-  return destUri;
 }
 
 /**
@@ -127,12 +131,6 @@ export async function saveFile(fileUri: string, fileName?: string): Promise<void
   const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
   if (!permissions.granted) {
     throw new Error('Storage permission denied');
-  }
-
-  // 只有 Downloads 根目录才切换为 MediaStore（Android 11+ 限制根目录）
-  if (isDownloadsRootUri(permissions.directoryUri)) {
-    await nativeSaveFileToDownloads(fileUri, name, mimeType, 'Download/');
-    return;
   }
 
   await saveFileToDirectory(fileUri, permissions.directoryUri, name, mimeType);

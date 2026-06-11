@@ -410,7 +410,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                       </Text>
                     </View>
                   )}
-                {/* 未下载标识 - 图片/文件类型但本地文件未就绪，仅当启用同步且不在传输中时显示 */}
+                {/* 未下载标识 - 本地文件未就绪，仅当启用同步且不在传输中时显示 */}
                 {enableHistorySync && !isTransferring && !localFileReady && (
                   <TouchableOpacity
                     style={styles.syncBadge}
