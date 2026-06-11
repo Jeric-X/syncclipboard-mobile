@@ -438,10 +438,11 @@ class NativeUtilModule : Module() {
                     }
 
                     // 预计算解压后总大小（未压缩），用于准确进度展示
+                    // ZipEntry.size 在未知时可能为 -1，需过滤并回退
                     val totalBytes = try {
                         java.util.zip.ZipFile(zipFile).use { zf ->
-                            zf.entries().asSequence().sumOf { it.size }
-                        }
+                            zf.entries().asSequence().sumOf { if (it.size > 0) it.size else 0L }
+                        }.takeIf { it > 0 } ?: zipFile.length()
                     } catch (e: Exception) {
                         zipFile.length() // 回退到压缩文件大小
                     }

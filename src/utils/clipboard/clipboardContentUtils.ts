@@ -62,7 +62,6 @@ export async function createContentFromFile(
 
 /**
  * 保存剪贴板内容数据到指定目录
- * 注意：此函数不处理图片类型，图片类型应在调用处直接使用 saveToGallery
  *
  * @param content 剪贴板内容
  * @param directoryUri 目标目录 URI（必需）
