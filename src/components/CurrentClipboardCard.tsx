@@ -3,7 +3,7 @@
  * 当前剪贴板内容卡片
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import { openFile, shareFile, saveToGallery } from '@/utils/fileActions';
 import { formatFileSize, formatSizeWithType, isTextInvalid } from '@/utils';
 import { saveContentDataToDirectory } from '@/utils/clipboard/clipboardContentUtils';
 import * as FileSystem from 'expo-file-system/legacy';
+import type { ProgressInfo } from 'native-util';
 
 interface DownloadProgress {
   progress: number;
@@ -57,6 +58,11 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   const { showMessage } = useMessageStore();
   const isDebugMode = config?.debugMode ?? false;
   const [, setUpdateTrigger] = useState(0);
+
+  // 保存操作状态
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveProgress, setSaveProgress] = useState<ProgressInfo | null>(null);
+  const saveAbortControllerRef = useRef<AbortController | null>(null);
 
   // 监控 clipboard 变化并强制更新
   useEffect(() => {
@@ -260,12 +266,18 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
     return false;
   })();
 
+  // 取消保存
+  const handleCancelSave = () => {
+    saveAbortControllerRef.current?.abort();
+  };
+
   // 保存文件到用户选择的目录（图片类型保存到相册）
   const handleSaveFile = async () => {
     if (!clipboard || !clipboard.fileUri) return;
     try {
       // 图片类型直接保存到相册
       if (clipboard.type === 'Image') {
+        setIsSaving(true);
         await saveToGallery(clipboard.fileUri);
         showMessage(t('clipboard.savedToGallery'), 'success');
         return;
@@ -279,15 +291,34 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         return;
       }
 
-      await saveContentDataToDirectory(clipboard, permissions.directoryUri);
+      // 创建 AbortController 用于取消
+      const abortController = new AbortController();
+      saveAbortControllerRef.current = abortController;
+      setIsSaving(true);
+      setSaveProgress(null);
+
+      await saveContentDataToDirectory(
+        clipboard,
+        permissions.directoryUri,
+        abortController.signal,
+        (info) => setSaveProgress(info)
+      );
       showMessage(t('clipboard.savedToDevice'), 'success');
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        // 用户取消，不显示错误
+        return;
+      }
       if (error instanceof Error && error.message === 'Media library permission denied') {
         showMessage(t('clipboard.galleryPermissionRequired'), 'error');
         return;
       }
       console.error('[CurrentClipboardCard] Failed to save file:', error);
       showMessage(t('clipboard.saveFailed'), 'error');
+    } finally {
+      setIsSaving(false);
+      setSaveProgress(null);
+      saveAbortControllerRef.current = null;
     }
   };
 
@@ -460,15 +491,36 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         {/* 非Text类型且已下载：保存按钮 */}
         {canShowSaveButton && (
           <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
-            onPress={handleSaveFile}
+            style={[
+              styles.actionButton,
+              { backgroundColor: theme.colors.primary },
+              isSaving && styles.actionButtonLast,
+            ]}
+            onPress={isSaving ? handleCancelSave : handleSaveFile}
           >
+            {isSaving && saveProgress && (
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    backgroundColor: theme.colors.primary,
+                    width: `${Math.min(saveProgress.progress * 100, 100)}%`,
+                  },
+                ]}
+              />
+            )}
             <Text
               style={[styles.actionButtonText, { color: theme.colors.white }]}
               numberOfLines={1}
               adjustsFontSizeToFit
             >
-              {t('clipboard.save')}
+              {isSaving && saveProgress && saveProgress.totalBytes > 0
+                ? `${(saveProgress.progress * 100).toFixed(0)}% ${formatFileSize(
+                    saveProgress.bytesTransferred
+                  )} / ${formatFileSize(saveProgress.totalBytes)}`
+                : isSaving
+                  ? t('clipboard.saving')
+                  : t('clipboard.save')}
             </Text>
           </TouchableOpacity>
         )}

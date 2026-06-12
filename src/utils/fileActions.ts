@@ -7,7 +7,7 @@ import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
-import { nativeCopyFileToDirectory } from 'native-util';
+import { nativeCopyFileToDirectory, type ProgressInfo } from 'native-util';
 import i18n from '@/i18n';
 
 const APP_PACKAGE = 'com.jericx.syncclipboardmobile';
@@ -22,14 +22,18 @@ const APP_PACKAGE = 'com.jericx.syncclipboardmobile';
  * @param directoryUri 目标目录 URI
  * @param fileName     目标文件名，为空则使用源文件名
  * @param overwrite    是否覆盖同名文件
+ * @param signal       取消信号
+ * @param onProgress   进度回调
  */
 export async function copyFileToDirectory(
   fileUri: string,
   directoryUri: string,
   fileName: string = '',
-  overwrite: boolean = false
+  overwrite: boolean = false,
+  signal?: AbortSignal,
+  onProgress?: (info: ProgressInfo) => void
 ): Promise<void> {
-  await nativeCopyFileToDirectory(fileUri, directoryUri, fileName, overwrite);
+  await nativeCopyFileToDirectory(fileUri, directoryUri, fileName, overwrite, signal, onProgress);
 }
 
 /**

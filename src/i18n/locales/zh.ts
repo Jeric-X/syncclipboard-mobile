@@ -91,6 +91,7 @@ const zh = {
     savedToGallery: '已保存到相册',
     savedToDevice: '已储存到设备',
     galleryPermissionRequired: '需要相册权限才能保存图片',
+    saving: '正在保存...',
     saveFailed: '保存失败',
     onlyImageToGallery: '仅支持保存图片到相册',
   },

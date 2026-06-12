@@ -28,6 +28,13 @@ export interface ZipProgressEvent {
   totalBytes: number;
 }
 
+export interface CopyProgressEvent {
+  jobId: string;
+  progress: number;
+  bytesCopied: number;
+  totalBytes: number;
+}
+
 export interface ProgressInfo {
   progress: number;
   bytesTransferred: number;
@@ -52,12 +59,12 @@ export interface NativeUtilModuleType {
   ): string;
   startZipFiles(fileUris: string[], destUri: string): string;
   startUnzipFile(zipUri: string, destDirUri: string): string;
-  copyFileToDirectory(
+  startCopyFileToDirectory(
     srcUri: string,
     directoryUri: string,
     fileName: string,
     overwrite: boolean
-  ): Promise<void>;
+  ): string;
   isIgnoringBatteryOptimizations(): boolean;
   requestIgnoreBatteryOptimizations(): boolean;
   setExcludeFromRecents(exclude: boolean): boolean;
@@ -149,12 +156,60 @@ export async function nativeCopyFileToDirectory(
   srcUri: string,
   directoryUri: string,
   fileName: string = '',
-  overwrite: boolean = false
+  overwrite: boolean = false,
+  signal?: AbortSignal,
+  onProgress?: (info: ProgressInfo) => void
 ): Promise<void> {
   if (Platform.OS !== 'android') {
     throw new Error('NativeUtilModule is not available on this platform');
   }
-  await NativeUtilModule.copyFileToDirectory(srcUri, directoryUri, fileName, overwrite);
+
+  if (signal?.aborted) {
+    throw new DOMException('Copy aborted', 'AbortError');
+  }
+
+  let progressSub: EventSubscription | null = null;
+  let resolvedJobId: string | null = null;
+  if (onProgress) {
+    progressSub = NativeUtilModule.addListener('onCopyProgress', (event: CopyProgressEvent) => {
+      if (resolvedJobId && event.jobId === resolvedJobId) {
+        onProgress({
+          progress: event.progress,
+          bytesTransferred: event.bytesCopied,
+          totalBytes: event.totalBytes,
+        });
+      }
+    });
+  }
+
+  const jobId = NativeUtilModule.startCopyFileToDirectory(
+    srcUri,
+    directoryUri,
+    fileName,
+    overwrite
+  );
+  resolvedJobId = jobId;
+
+  const abortHandler = () => NativeUtilModule.cancelJob(jobId);
+  signal?.addEventListener('abort', abortHandler);
+
+  try {
+    await NativeUtilModule.waitForJob(jobId);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      ((error as { code?: string }).code === 'CANCELLED' ||
+        error.message === 'Operation was cancelled')
+    ) {
+      const abortError = new Error('Operation was aborted');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
+    throw error;
+  } finally {
+    signal?.removeEventListener('abort', abortHandler);
+    progressSub?.remove();
+  }
 }
 
 export async function nativeCalculateFileHash(

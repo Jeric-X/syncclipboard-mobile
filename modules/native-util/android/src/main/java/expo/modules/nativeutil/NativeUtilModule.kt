@@ -41,6 +41,7 @@ class NativeUtilModule : Module() {
         private const val EVENT_UPLOAD_PROGRESS = "onUploadProgress"
         private const val EVENT_DOWNLOAD_PROGRESS = "onDownloadProgress"
         private const val EVENT_ZIP_PROGRESS = "onZipProgress"
+        private const val EVENT_COPY_PROGRESS = "onCopyProgress"
     }
 
     private val executor = Executors.newCachedThreadPool()
@@ -50,7 +51,7 @@ class NativeUtilModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("NativeUtilModule")
 
-        Events(EVENT_HASH_PROGRESS, EVENT_UPLOAD_PROGRESS, EVENT_DOWNLOAD_PROGRESS, EVENT_ZIP_PROGRESS)
+        Events(EVENT_HASH_PROGRESS, EVENT_UPLOAD_PROGRESS, EVENT_DOWNLOAD_PROGRESS, EVENT_ZIP_PROGRESS, EVENT_COPY_PROGRESS)
 
         Function("moveTaskToBack") {
             appContext.currentActivity?.moveTaskToBack(true) ?: false
@@ -205,27 +206,36 @@ class NativeUtilModule : Module() {
             cancelFlags[jobId]?.set(true)
         }
 
-        AsyncFunction("copyFileToDirectory") { srcUri: String, directoryUri: String, fileName: String, overwrite: Boolean, promise: Promise ->
+        Function("startCopyFileToDirectory") { srcUri: String, directoryUri: String, fileName: String, overwrite: Boolean ->
+            val jobId = UUID.randomUUID().toString()
+            val cancelFlag = AtomicBoolean(false)
+            cancelFlags[jobId] = cancelFlag
+            val future = CompletableFuture<Any>()
+            pendingJobs[jobId] = future
+
             executor.submit {
                 try {
                     val srcPath = resolveFilePath(srcUri)
                     val src = File(srcPath)
                     if (!src.exists()) {
-                        promise.reject(FileNotFoundException(srcPath))
+                        cancelFlags.remove(jobId)
+                        future.complete(FileNotFoundException(srcPath))
                         return@submit
                     }
 
                     val resolvedName = fileName.ifEmpty { src.name }
 
                     val context = appContext.reactContext ?: run {
-                        promise.reject(CodedException("Context not available"))
+                        cancelFlags.remove(jobId)
+                        future.complete(CodedException("Context not available"))
                         return@submit
                     }
 
                     val destUri = Uri.parse(directoryUri)
                     val root = WritableLocation.fromUri(context, destUri)
                         ?: run {
-                            promise.reject(CodedException("Destination directory does not exist: $directoryUri"))
+                            cancelFlags.remove(jobId)
+                            future.complete(CodedException("Destination directory does not exist: $directoryUri"))
                             return@submit
                         }
 
@@ -236,19 +246,56 @@ class NativeUtilModule : Module() {
                     output.use { out ->
                         FileInputStream(src).channel.use { srcChannel ->
                             val destChannel = Channels.newChannel(out)
-                            var position = 0L
                             val size = srcChannel.size()
-                            while (position < size) {
-                                position += srcChannel.transferTo(position, size - position, destChannel)
+                            var bytesCopied = 0L
+                            var lastReportTime = 0L
+
+                            while (bytesCopied < size) {
+                                if (cancelFlag.get()) {
+                                    cancelFlags.remove(jobId)
+                                    future.complete(CancelledException())
+                                    return@submit
+                                }
+
+                                val chunkSize = minOf(size - bytesCopied, CHUNK_SIZE.toLong())
+                                val transferred = srcChannel.transferTo(bytesCopied, chunkSize, destChannel)
+                                bytesCopied += transferred
+
+                                val currentTime = System.currentTimeMillis()
+                                if (currentTime - lastReportTime >= 500) {
+                                    lastReportTime = currentTime
+                                    val progress = if (size > 0) {
+                                        minOf(1.0, bytesCopied.toDouble() / size.toDouble())
+                                    } else {
+                                        1.0
+                                    }
+                                    sendEvent(EVENT_COPY_PROGRESS, mapOf(
+                                        "jobId" to jobId,
+                                        "progress" to progress,
+                                        "bytesCopied" to bytesCopied.toDouble(),
+                                        "totalBytes" to size.toDouble()
+                                    ))
+                                }
                             }
                         }
                     }
 
-                    promise.resolve(null)
+                    cancelFlags.remove(jobId)
+                    sendEvent(EVENT_COPY_PROGRESS, mapOf(
+                        "jobId" to jobId,
+                        "progress" to 1.0,
+                        "bytesCopied" to src.length().toDouble(),
+                        "totalBytes" to src.length().toDouble()
+                    ))
+                    future.complete("success")
                 } catch (e: Exception) {
-                    promise.reject(CodedException(e.message ?: "Unknown error"))
+                    NativeLogger.e("NativeCopyFileToDirectory", "Copy file failed", e)
+                    cancelFlags.remove(jobId)
+                    future.complete(CodedException(e.message ?: "Unknown error"))
                 }
             }
+
+            return@Function jobId
         }
 
         AsyncFunction("copyFile") { srcUri: String, destUri: String, promise: Promise ->

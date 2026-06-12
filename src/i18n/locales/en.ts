@@ -98,6 +98,7 @@ const en: DeepString<typeof zh> = {
     savedToGallery: 'Saved to gallery',
     savedToDevice: 'Saved to device',
     galleryPermissionRequired: 'Gallery permission required to save image',
+    saving: 'Saving...',
     saveFailed: 'Save failed',
     onlyImageToGallery: 'Only images can be saved to gallery',
   },

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ToastAndroid, Linking } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { SyncDirection } from '@/types/sync';
@@ -10,7 +10,7 @@ import {
 } from '@/services/sync/ClipboardSyncActions';
 import { localClipboard } from '@/services/clipboard/LocalClipboard';
 import { openFile, shareFile, saveToGallery } from '@/utils/fileActions';
-import { isTextInvalid } from '@/utils/index';
+import { isTextInvalid, formatFileSize } from '@/utils/index';
 import { QuickLoadingPage, SuccessButtonConfig } from '@/components/QuickLoadingPage';
 import { saveContentDataToDirectory } from '@/utils/clipboard/clipboardContentUtils';
 import { saveSyncFileToUserPath } from '@/services/sync/SyncFileSaveService';
@@ -39,6 +39,18 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
   const [loadingText, setLoadingText] = useState<string>(
     isUpload ? t('quickTile.uploadingClipboard') : t('quickTile.downloadingClipboard')
   );
+
+  // 保存操作状态
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveProgress, setSaveProgress] = useState<ProgressInfo | null>(null);
+  const saveAbortControllerRef = useRef<AbortController | null>(null);
+
+  // 组件卸载时取消正在进行的保存操作
+  useEffect(() => {
+    return () => {
+      saveAbortControllerRef.current?.abort();
+    };
+  }, []);
 
   const task = useCallback(
     async (signal: AbortSignal) => {
@@ -102,6 +114,11 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
     return match ? match[0] : null;
   }, [fileContent]);
 
+  // 取消保存
+  const handleCancelSave = useCallback(() => {
+    saveAbortControllerRef.current?.abort();
+  }, []);
+
   // 统一的保存处理函数（按类型分支）
   const handleSave = useCallback(async () => {
     if (!fileContent || !fileContent.fileUri) return;
@@ -109,6 +126,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
     try {
       // 图片类型直接保存到相册
       if (fileContent.type === 'Image') {
+        setIsSaving(true);
         await saveToGallery(fileContent.fileUri);
         ToastAndroid.show(t('clipboard.savedToGallery'), ToastAndroid.SHORT);
         return;
@@ -122,14 +140,53 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
         return;
       }
 
-      await saveContentDataToDirectory(fileContent, permissions.directoryUri);
+      const abortController = new AbortController();
+      saveAbortControllerRef.current = abortController;
+      setIsSaving(true);
+      setSaveProgress(null);
+
+      await saveContentDataToDirectory(
+        fileContent,
+        permissions.directoryUri,
+        abortController.signal,
+        (info) => setSaveProgress(info)
+      );
       ToastAndroid.show(t('quickTile.savedToDevice'), ToastAndroid.SHORT);
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        // 用户取消，不显示错误
+        return;
+      }
       console.error('[QuickTileLoadingScreen] Failed to save file:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       ToastAndroid.show(`${t('quickTile.saveFailed')}: ${errorMessage}`, ToastAndroid.LONG);
+    } finally {
+      setIsSaving(false);
+      setSaveProgress(null);
+      saveAbortControllerRef.current = null;
     }
   }, [fileContent, t]);
+
+  // 动态保存按钮配置（根据保存状态切换 label 和行为）
+  const saveButtonConfig = useMemo((): SuccessButtonConfig => {
+    if (isSaving) {
+      let label: string;
+      if (saveProgress && saveProgress.totalBytes > 0) {
+        const pct = (saveProgress.progress * 100).toFixed(0);
+        const transferred = formatFileSize(saveProgress.bytesTransferred);
+        const total = formatFileSize(saveProgress.totalBytes);
+        label = `${pct}% ${transferred} / ${total}`;
+      } else {
+        label = t('clipboard.saving');
+      }
+      return { label, primary: true, onPress: handleCancelSave };
+    }
+    return {
+      label: t('clipboard.save'),
+      primary: true,
+      onPress: handleSave,
+    };
+  }, [isSaving, saveProgress, handleCancelSave, handleSave, t]);
 
   const successButtons: SuccessButtonConfig[] | undefined = fileContent
     ? fileContent.type === 'Text' && textUrl
@@ -155,13 +212,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
           },
         ]
       : fileContent.type === 'Group'
-        ? [
-            {
-              label: t('clipboard.save'),
-              primary: true,
-              onPress: handleSave,
-            },
-          ]
+        ? [saveButtonConfig]
         : [
             {
               label: t('clipboard.open'),
@@ -172,11 +223,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
                 } catch {}
               },
             },
-            {
-              label: t('clipboard.save'),
-              primary: true,
-              onPress: handleSave,
-            },
+            saveButtonConfig,
             {
               label: t('clipboard.share'),
               primary: true,
@@ -201,6 +248,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
       progress={progress}
       previewText={previewText}
       overlayMode={overlayMode}
+      disableBackdropClose={isSaving}
     />
   );
 };

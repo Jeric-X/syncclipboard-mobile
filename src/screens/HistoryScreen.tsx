@@ -51,6 +51,7 @@ import { historyItemToContent } from '@/utils/clipboard/convert';
 import { useMessageStore } from '@/stores/messageStore';
 import { useErrorStore } from '@/stores/errorStore';
 import * as FileSystem from 'expo-file-system/legacy';
+import type { ProgressInfo } from 'native-util';
 import { calculateTextHash } from '@/utils/hash';
 import { createContentFromFile } from '@/utils/clipboard/clipboardContentUtils';
 import { isHistorySyncEnabled } from '@/utils/config';
@@ -103,6 +104,14 @@ export function HistoryScreen() {
   const [importingFile, setImportingFile] = useState(false);
   const [isReorganizing, setIsReorganizing] = useState(false);
   const [wordPickerText, setWordPickerText] = useState<string | null>(null);
+
+  // 保存操作状态
+  interface ActiveSaveState {
+    profileHash: string;
+    progress: ProgressInfo;
+    abortController: AbortController;
+  }
+  const [activeSave, setActiveSave] = useState<ActiveSaveState | null>(null);
 
   const {
     hasTasks,
@@ -278,6 +287,11 @@ export function HistoryScreen() {
     [showMessage]
   );
 
+  // 取消保存
+  const handleCancelSave = useCallback(() => {
+    activeSave?.abortController.abort();
+  }, [activeSave]);
+
   // 储存文件到设备（图片类型保存到相册）
   const handleSave = useCallback(
     async (item: HistoryItem) => {
@@ -285,6 +299,11 @@ export function HistoryScreen() {
       try {
         // 图片类型直接保存到相册
         if (item.type === 'Image') {
+          setActiveSave({
+            profileHash: item.profileHash,
+            progress: { progress: 0, bytesTransferred: 0, totalBytes: 0 },
+            abortController: new AbortController(),
+          });
           await saveToGallery(item.fileUri);
           showMessage(t('clipboard.savedToGallery'), 'success');
           return;
@@ -298,16 +317,36 @@ export function HistoryScreen() {
           return;
         }
 
+        const abortController = new AbortController();
+        setActiveSave({
+          profileHash: item.profileHash,
+          progress: { progress: 0, bytesTransferred: 0, totalBytes: 0 },
+          abortController,
+        });
+
         const content = historyItemToContent(item);
-        await saveContentDataToDirectory(content, permissions.directoryUri);
+        await saveContentDataToDirectory(
+          content,
+          permissions.directoryUri,
+          abortController.signal,
+          (info) => {
+            setActiveSave((prev) => (prev ? { ...prev, progress: info } : null));
+          }
+        );
         showMessage(t('clipboard.savedToDevice'), 'success');
       } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          // 用户取消，不显示错误
+          return;
+        }
         if (error instanceof Error && error.message === 'Media library permission denied') {
           showMessage(t('clipboard.galleryPermissionRequired'), 'error');
           return;
         }
         console.error('[HistoryScreen] Failed to save file:', error);
         showMessage(t('history.saveFailed'), 'error');
+      } finally {
+        setActiveSave(null);
       }
     },
     [showMessage]
@@ -852,12 +891,16 @@ export function HistoryScreen() {
           isMultiSelectMode={isMultiSelectMode}
           isSelected={selectedIds.has(item.profileHash)}
           showImageCopyButton={config?.showImageCopyButton ?? false}
+          activeSaveHash={activeSave?.profileHash}
+          saveProgress={activeSave?.progress}
+          onCancelSave={handleCancelSave}
         />
       );
     },
     [
       handleItemPress,
       handleShare,
+      handleSave,
       handleOpen,
       handleItemLongPress,
       handleMultiSelectPress,
@@ -871,6 +914,8 @@ export function HistoryScreen() {
       isMultiSelectMode,
       selectedIds,
       config?.showImageCopyButton,
+      activeSave,
+      handleCancelSave,
     ]
   );
 

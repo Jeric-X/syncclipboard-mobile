@@ -185,6 +185,6 @@ export async function saveContentDataToDirectory(
     return;
   }
 
-  // 其他类型：直接复制文件
-  await copyFileToDirectory(content.fileUri, directoryUri, fileName, true);
+  // 其他类型：直接复制文件（支持进度和取消）
+  await copyFileToDirectory(content.fileUri, directoryUri, fileName, true, signal, onProgress);
 }

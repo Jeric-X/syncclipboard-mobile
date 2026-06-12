@@ -334,7 +334,7 @@ export function calculateGroupHash(entries: GroupEntry[]): string {
       hasher.update(encoder.encode(`D|${entry.relativePath}\0`));
     } else {
       hasher.update(
-        encoder.encode(`F|${entry.relativePath}|${entry.length}|${entry.contentHash}\0`),
+        encoder.encode(`F|${entry.relativePath}|${entry.length}|${entry.contentHash}\0`)
       );
     }
   }
