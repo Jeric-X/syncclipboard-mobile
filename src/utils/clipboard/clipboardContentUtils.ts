@@ -93,5 +93,5 @@ export async function saveContentDataToDirectory(
   }
 
   // 其他类型：直接复制文件
-  await copyFileToDirectory(content.fileUri, directoryUri, fileName, false);
+  await copyFileToDirectory(content.fileUri, directoryUri, fileName, true);
 }

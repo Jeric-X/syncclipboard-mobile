@@ -93,7 +93,7 @@ export async function saveFile(fileUri: string, fileName?: string): Promise<void
     throw new Error('Storage permission denied');
   }
 
-  await copyFileToDirectory(fileUri, permissions.directoryUri, name, false);
+  await copyFileToDirectory(fileUri, permissions.directoryUri, name, true);
 }
 
 /**
