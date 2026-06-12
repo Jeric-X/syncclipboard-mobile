@@ -7,30 +7,29 @@ import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
-import { Directory, File } from 'expo-file-system';
-import { nativeCopyFile, nativeSaveFileToDownloads } from 'native-util';
+import { nativeCopyFileToDirectory } from 'native-util';
 import i18n from '@/i18n';
 
 const APP_PACKAGE = 'com.jericx.syncclipboardmobile';
 
 /**
- * 检测 SAF 返回的目录 URI 是否是 Downloads 根目录。
- * Android 11+ 不允许通过 SAF 写入 Downloads 根目录，需切换为 MediaStore。
- * Downloads 子目录可以正常通过 SAF 写入，无需特殊处理。
+ * 将文件复制到指定目录。
  *
- * Downloads 根目录的 URI 形式：
- * - Downloads provider root: .../tree/downloads（tree doc ID 为字面量 "downloads"）
- * - External storage provider Downloads 根: .../tree/primary%3ADownload（decoded = "primary:Download"）
+ * 底层通过 native 的 WritableLocation 统一处理 SAF 和 MediaStore 写入路径，
+ * JS 侧完全不需要感知目标目录是否为 Downloads 根目录。
+ *
+ * @param fileUri      源文件 URI
+ * @param directoryUri 目标目录 URI
+ * @param fileName     目标文件名，为空则使用源文件名
+ * @param overwrite    是否覆盖同名文件
  */
-function isDownloadsRootUri(directoryUri: string): boolean {
-  const treeMatch = directoryUri.match(/\/tree\/([^/?#]+)/i);
-  if (!treeMatch) return false;
-  const treeDocId = decodeURIComponent(treeMatch[1]);
-  // Downloads provider 根目录：tree doc ID 就是 "downloads"
-  if (treeDocId.toLowerCase() === 'downloads') return true;
-  // External storage provider 指向 Download 根目录（没有子路径）
-  if (/^primary:download$/i.test(treeDocId)) return true;
-  return false;
+export async function copyFileToDirectory(
+  fileUri: string,
+  directoryUri: string,
+  fileName: string = '',
+  overwrite: boolean = false
+): Promise<void> {
+  await nativeCopyFileToDirectory(fileUri, directoryUri, fileName, overwrite);
 }
 
 /**
@@ -84,56 +83,17 @@ export async function openFile(fileUri: string): Promise<void> {
 }
 
 /**
- * 将文件保存到指定目录（如果文件已存在则覆盖）
- * @param fileUri 源文件 URI
- * @param directoryUri 目标目录 URI
- * @param fileName 文件名
- * @param mimeType MIME 类型（可选，不提供则自动推断）
- */
-export async function saveFileToDirectory(
-  fileUri: string,
-  directoryUri: string,
-  fileName: string,
-  mimeType?: string
-): Promise<void> {
-  const resolvedMimeType = mimeType ?? getMimeTypeFromUri(fileUri);
-
-  // 只有 Downloads 根目录才切换为 MediaStore（Android 11+ 限制根目录）
-  if (isDownloadsRootUri(directoryUri)) {
-    await nativeSaveFileToDownloads(fileUri, fileName, resolvedMimeType, 'Download/');
-    return;
-  }
-
-  // 先检查文件是否存在，如果存在则删除
-  const destDir = new Directory(directoryUri);
-  const existingFile = new File(destDir, fileName);
-  if (existingFile.exists) {
-    await FileSystem.deleteAsync(existingFile.uri);
-  }
-
-  const destUri = await FileSystem.StorageAccessFramework.createFileAsync(
-    directoryUri,
-    fileName,
-    resolvedMimeType
-  );
-
-  await nativeCopyFile(fileUri, destUri);
-}
-
-/**
  * 将文件保存到用户选择的目录（弹出系统目录选择器）
- * 若用户选择了 Downloads 根目录，自动切换为 MediaStore.Downloads 写入以绕过 Android 11+ 限制。
  */
 export async function saveFile(fileUri: string, fileName?: string): Promise<void> {
   const name = fileName || fileUri.split('/').pop() || 'file';
-  const mimeType = getMimeTypeFromUri(fileUri);
 
   const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
   if (!permissions.granted) {
     throw new Error('Storage permission denied');
   }
 
-  await saveFileToDirectory(fileUri, permissions.directoryUri, name, mimeType);
+  await copyFileToDirectory(fileUri, permissions.directoryUri, name, false);
 }
 
 /**

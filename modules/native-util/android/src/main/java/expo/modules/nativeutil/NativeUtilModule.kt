@@ -1,6 +1,5 @@
 package expo.modules.nativeutil
 
-import android.content.ContentValues
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -9,11 +8,8 @@ import android.graphics.BitmapFactory
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.os.PowerManager
-import android.provider.MediaStore
 import android.provider.Settings
-import androidx.documentfile.provider.DocumentFile
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
@@ -207,7 +203,7 @@ class NativeUtilModule : Module() {
             cancelFlags[jobId]?.set(true)
         }
 
-        AsyncFunction("saveFileToDownloads") { srcUri: String, fileName: String, mimeType: String, relativePath: String, promise: Promise ->
+        AsyncFunction("copyFileToDirectory") { srcUri: String, directoryUri: String, fileName: String, overwrite: Boolean, promise: Promise ->
             executor.submit {
                 try {
                     val srcPath = resolveFilePath(srcUri)
@@ -217,66 +213,36 @@ class NativeUtilModule : Module() {
                         return@submit
                     }
 
+                    val resolvedName = fileName.ifEmpty { src.name }
+
                     val context = appContext.reactContext ?: run {
                         promise.reject(CodedException("Context not available"))
                         return@submit
                     }
 
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        val resolver = context.contentResolver
-                        val values = ContentValues().apply {
-                            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                            put(MediaStore.Downloads.MIME_TYPE, mimeType)
-                            put(MediaStore.Downloads.RELATIVE_PATH, relativePath.ifEmpty { "Download/" })
-                            put(MediaStore.Downloads.IS_PENDING, 1)
-                        }
-                        val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-                        val item = resolver.insert(collection, values) ?: run {
-                            promise.reject(CodedException("Failed to create MediaStore entry"))
+                    val destUri = Uri.parse(directoryUri)
+                    val root = WritableLocation.fromUri(context, destUri)
+                        ?: run {
+                            promise.reject(CodedException("Destination directory does not exist: $directoryUri"))
                             return@submit
                         }
-                        try {
-                            resolver.openOutputStream(item)?.use { output ->
-                                FileInputStream(src).channel.use { srcChannel ->
-                                    val destChannel = Channels.newChannel(output)
-                                    var position = 0L
-                                    val size = srcChannel.size()
-                                    while (position < size) {
-                                        position += srcChannel.transferTo(position, size - position, destChannel)
-                                    }
-                                }
-                            }
-                            values.clear()
-                            values.put(MediaStore.Downloads.IS_PENDING, 0)
-                            resolver.update(item, values, null, null)
-                            promise.resolve(null)
-                        } catch (e: Exception) {
-                            resolver.delete(item, null, null)
-                            throw e
-                        }
-                    } else {
-                        @Suppress("DEPRECATION")
-                        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                        val destDir = if (relativePath.isNotEmpty() && relativePath != "Download/") {
-                            // Strip leading "Download/" prefix since downloadsDir is already the Downloads folder
-                            val subPath = relativePath.removePrefix("Download/").trimEnd('/')
-                            if (subPath.isNotEmpty()) File(downloadsDir, subPath) else downloadsDir
-                        } else {
-                            downloadsDir
-                        }
-                        destDir.mkdirs()
-                        val destFile = File(destDir, fileName)
+
+                    // createFile 内部自动处理 SAF → MediaStore 回退
+                    // overwrite=false 且同名文件存在时抛出 IOException
+                    val output = root.createFile(resolvedName, "application/octet-stream", overwrite)
+
+                    output.use { out ->
                         FileInputStream(src).channel.use { srcChannel ->
-                            FileOutputStream(destFile).channel.use { destChannel ->
-                                var position = 0L
-                                val size = srcChannel.size()
-                                while (position < size) {
-                                    position += srcChannel.transferTo(position, size - position, destChannel)
-                                }
+                            val destChannel = Channels.newChannel(out)
+                            var position = 0L
+                            val size = srcChannel.size()
+                            while (position < size) {
+                                position += srcChannel.transferTo(position, size - position, destChannel)
                             }
                         }
-                        promise.resolve(null)
                     }
+
+                    promise.resolve(null)
                 } catch (e: Exception) {
                     promise.reject(CodedException(e.message ?: "Unknown error"))
                 }
@@ -450,22 +416,16 @@ class NativeUtilModule : Module() {
                     var lastReportTime = 0L
                     val buffer = ByteArray(CHUNK_SIZE)
 
-                    // 使用 DocumentFile API 统一处理所有 URI 类型
+                    // 使用 WritableLocation 统一处理 SAF 和 MediaStore 写入路径
+                    // 内部自动检测 Downloads 根目录并在 SAF 失败时回退到 MediaStore
                     val destUri = Uri.parse(destDirUri)
-                    val rootDoc = if (destUri.scheme == "content") {
-                        DocumentFile.fromTreeUri(context, destUri)
-                    } else {
-                        DocumentFile.fromFile(File(resolveFilePath(destDirUri)))
-                    }
+                    val root = WritableLocation.fromUri(context, destUri)
 
-                    if (rootDoc == null || !rootDoc.exists()) {
+                    if (root == null || !root.exists()) {
                         cancelFlags.remove(jobId)
                         future.complete(ZipErrorException("Destination directory does not exist"))
                         return@submit
                     }
-
-                    // 用于缓存已创建的目录路径
-                    val createdDirs = mutableSetOf<String>()
 
                     java.util.zip.ZipInputStream(FileInputStream(zipFile)).use { zipIn ->
                         var entry: java.util.zip.ZipEntry?
@@ -482,84 +442,43 @@ class NativeUtilModule : Module() {
                                 android.util.Log.d("NativeUnzip", "Processing entry: $entryName, isDir: $isDirectory")
                             }
 
-                            // 解析路径：分离父目录和文件名
+                            // 解析路径并导航/创建父目录层级
                             val pathParts = entryName.split("/")
-                            var currentParent: DocumentFile = rootDoc!!
+                            var current: WritableLocation = root
 
-                            // 创建所有父目录
                             for (i in 0 until pathParts.size - 1) {
                                 val dirName = pathParts[i]
                                 if (dirName.isEmpty()) continue
 
-                                val dirPath = pathParts.subList(0, i + 1).joinToString("/")
-                                if (BuildConfig.DEBUG) {
-                                    android.util.Log.d("NativeUnzip", "  Creating parent dir[$i]: $dirName, path: $dirPath")
-                                }
-
-                                // 查找或创建目录
-                                val existingDir = currentParent.findFile(dirName)
-                                if (existingDir != null && existingDir.isDirectory) {
-                                    // 目录已存在
+                                val subDir = current.createDirectory(dirName)
+                                if (subDir == null) {
                                     if (BuildConfig.DEBUG) {
-                                        android.util.Log.d("NativeUnzip", "    Dir exists: $dirName")
+                                        android.util.Log.e("NativeUnzip", "Failed to create dir: $dirName")
                                     }
-                                    currentParent = existingDir
-                                } else {
-                                    // 目录不存在，创建它
-                                    val newDir = currentParent.createDirectory(dirName)
-                                    if (newDir == null) {
-                                        android.util.Log.e("NativeUnzip", "    Failed to create dir: $dirName")
-                                        cancelFlags.remove(jobId)
-                                        future.complete(ZipErrorException("Failed to create directory: $dirName"))
-                                        return@submit
-                                    }
-                                    if (BuildConfig.DEBUG) {
-                                        android.util.Log.d("NativeUnzip", "    Created dir: $dirName")
-                                    }
-                                    currentParent = newDir
+                                    cancelFlags.remove(jobId)
+                                    future.complete(ZipErrorException("Failed to create directory: $dirName"))
+                                    return@submit
                                 }
-                                createdDirs.add(dirPath)
+                                current = subDir
                             }
 
                             if (isDirectory) {
-                                // 创建目录（如果还没创建）
-                                val dirPath = entryName.trimEnd('/')
-                                if (!createdDirs.contains(dirPath)) {
-                                    val dirName = pathParts.last()
-                                    if (dirName.isNotEmpty()) {
-                                        val existingDir = currentParent.findFile(dirName)
-                                        if (existingDir == null || !existingDir.isDirectory) {
-                                            currentParent.createDirectory(dirName)
-                                        }
-                                    }
-                                    createdDirs.add(dirPath)
+                                // 纯目录条目：确保目录被创建
+                                val dirName = pathParts.last()
+                                if (dirName.isNotEmpty()) {
+                                    current.createDirectory(dirName)
                                 }
                             } else {
-                                // 创建文件并写入内容
+                                // 文件条目
                                 val fileName = pathParts.last()
                                 if (BuildConfig.DEBUG) {
-                                    android.util.Log.d("NativeUnzip", "  Creating file: $fileName")
+                                    android.util.Log.d("NativeUnzip", "Creating file: $fileName")
                                 }
 
-                                // 查找已存在的文件并删除
-                                val existingFile = currentParent.findFile(fileName)
-                                if (existingFile != null && existingFile.isFile) {
-                                    existingFile.delete()
-                                    if (BuildConfig.DEBUG) {
-                                        android.util.Log.d("NativeUnzip", "    Deleted existing file")
-                                    }
-                                }
+                                // 创建文件并获取输出流（内部自动处理覆盖写入 + SAF → MediaStore 回退）
+                                val output = current.createFile(fileName, "application/octet-stream", overwrite = true)
 
-                                // 创建新文件
-                                val newFile = currentParent.createFile("application/octet-stream", fileName)
-                                if (newFile == null) {
-                                    cancelFlags.remove(jobId)
-                                    future.complete(ZipErrorException("Failed to create file: $fileName"))
-                                    return@submit
-                                }
-
-                                // 写入文件内容
-                                context.contentResolver.openOutputStream(newFile.uri)?.use { output ->
+                                output.use { out ->
                                     var read: Int
                                     while (zipIn.read(buffer).also { read = it } != -1) {
                                         if (cancelFlag.get()) {
@@ -567,14 +486,14 @@ class NativeUtilModule : Module() {
                                             future.complete(CancelledException())
                                             return@submit
                                         }
-                                        output.write(buffer, 0, read)
+                                        out.write(buffer, 0, read)
                                         bytesRead += read
 
                                         val currentTime = System.currentTimeMillis()
                                         if (currentTime - lastReportTime >= 500) {
                                             lastReportTime = currentTime
                                             val progress = if (totalBytes > 0) {
-                                                bytesRead.toDouble() / totalBytes.toDouble()
+                                                minOf(1.0, bytesRead.toDouble() / totalBytes.toDouble())
                                             } else {
                                                 -1.0
                                             }

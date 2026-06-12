@@ -52,11 +52,11 @@ export interface NativeUtilModuleType {
   ): string;
   startZipFiles(fileUris: string[], destUri: string): string;
   startUnzipFile(zipUri: string, destDirUri: string): string;
-  saveFileToDownloads(
+  copyFileToDirectory(
     srcUri: string,
+    directoryUri: string,
     fileName: string,
-    mimeType: string,
-    relativePath: string
+    overwrite: boolean
   ): Promise<void>;
   isIgnoringBatteryOptimizations(): boolean;
   requestIgnoreBatteryOptimizations(): boolean;
@@ -145,16 +145,16 @@ export async function nativeCopyFile(srcUri: string, destUri: string): Promise<v
   await NativeUtilModule.copyFile(srcUri, destUri);
 }
 
-export async function nativeSaveFileToDownloads(
+export async function nativeCopyFileToDirectory(
   srcUri: string,
-  fileName: string,
-  mimeType: string,
-  relativePath: string = 'Download/'
+  directoryUri: string,
+  fileName: string = '',
+  overwrite: boolean = false
 ): Promise<void> {
   if (Platform.OS !== 'android') {
     throw new Error('NativeUtilModule is not available on this platform');
   }
-  await NativeUtilModule.saveFileToDownloads(srcUri, fileName, mimeType, relativePath);
+  await NativeUtilModule.copyFileToDirectory(srcUri, directoryUri, fileName, overwrite);
 }
 
 export async function nativeCalculateFileHash(

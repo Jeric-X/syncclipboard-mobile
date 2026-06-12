@@ -2,7 +2,7 @@ import { File, Directory } from 'expo-file-system';
 import { nativeCopyFile, nativeUnzipFile } from 'native-util';
 import { calculateFileProfileHash, calculateTextHash } from '@/utils/hash';
 import { prepareTempFilePath } from '@/utils/fileStorage';
-import { saveFileToDirectory } from '@/utils/fileActions';
+import { copyFileToDirectory } from '@/utils/fileActions';
 import type { ClipboardContent } from '@/types/clipboard';
 import type { ClipboardContentType } from '@/types/api';
 
@@ -62,6 +62,8 @@ export async function createContentFromFile(
 
 /**
  * 保存剪贴板内容数据到指定目录
+ * - Image 类型：支持保存到目录，但建议优先使用 saveToGallery 保存到相册
+ * - 其他类型（File/Text）：直接保存文件到目标目录
  *
  * @param content 剪贴板内容
  * @param directoryUri 目标目录 URI（必需）
@@ -82,12 +84,14 @@ export async function saveContentDataToDirectory(
 
   const fileName = content.fileName || 'file';
 
-  // Group 类型：直接解压缩到目标目录
+  // Group 类型：解压缩到目标目录
+  // Downloads 根目录的回退逻辑已内置在 nativeUnzipFile 中（SAF → MediaStore），
+  // JS 侧无需额外判断。
   if (content.type === 'Group') {
     await nativeUnzipFile(content.fileUri, directoryUri);
     return;
   }
 
-  // 其他类型：直接保存文件
-  await saveFileToDirectory(content.fileUri, directoryUri, fileName);
+  // 其他类型：直接复制文件
+  await copyFileToDirectory(content.fileUri, directoryUri, fileName, false);
 }
