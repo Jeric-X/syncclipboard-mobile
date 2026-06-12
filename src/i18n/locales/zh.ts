@@ -447,6 +447,7 @@ const zh = {
     savedToDevice: '已储存到设备',
     galleryPermissionRequired: '需要相册权限才能保存图片',
     saveFailed: '保存失败',
+    savingFile: '正在保存文件...',
   },
 
   wordPicker: {
@@ -462,6 +463,8 @@ const zh = {
     processingFile: '正在处理文件…',
     uploadingText: '正在上传文字…',
     uploadingFile: '正在上传文件…',
+    processingMultipleFiles: '正在处理 {{count}} 个文件…',
+    processingFileProgress: '正在处理文件 {{current}}/{{total}}…',
     resolving: '正在解析分享内容…',
     success: '接收并上传成功',
     failed: '处理失败',

@@ -23,13 +23,15 @@ import { useSettingsStore } from './stores';
 import { initLogger } from './utils/Logger';
 import { longRunningTaskManager } from './longRunningTask/LongRunningTaskManager';
 
-interface ShareData {
+export interface ShareData {
   type: 'text' | 'file' | 'multiple';
   text?: string;
   uri?: string;
   uris?: string[];
   mimeType?: string;
   fileName?: string;
+  /** 多文件分享时每个文件的文件名 */
+  fileNames?: string[];
 }
 
 interface QuickActionAppProps {

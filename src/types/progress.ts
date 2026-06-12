@@ -7,4 +7,12 @@ export interface ProgressDetail {
   totalBytes: number;
 }
 
+/** 文件级别进度（多文件处理时使用） */
+export interface FileProgressInfo {
+  /** 当前文件序号（从 1 开始） */
+  current: number;
+  /** 文件总数 */
+  total: number;
+}
+
 export type { ProgressInfo } from 'native-util';

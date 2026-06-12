@@ -193,10 +193,6 @@ export async function calculateFileHash(
   try {
     throwIfAborted(signal);
 
-    const tag = isNativeHashModuleAvailable ? 'native' : 'js';
-    console.log(`[HashUtils] calculateFileHash start (${tag}):`, fileUri);
-    const startTime = Date.now();
-
     let hash: string;
     if (isNativeHashModuleAvailable) {
       // Android：使用原生模块，IO 线程异步执行，不阻塞 JS
@@ -206,10 +202,6 @@ export async function calculateFileHash(
       hash = await calculateFileHashJS(fileUri, signal);
     }
 
-    console.log(
-      `[HashUtils] calculateFileHash done (${tag}) in ${Date.now() - startTime}ms:`,
-      hash
-    );
     return hash;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
@@ -275,10 +267,79 @@ export async function calculateContentHash(
       return fileUri ? await calculateFileProfileHash(fileUri, fileName, signal) : undefined;
 
     case 'Group':
-      return '';
+      // Group hash 在内容创建时预先计算并存储在 profileHash 中
+      // 无法在此处重新计算（缺少每个文件的 hash 信息）
+      return content.profileHash || undefined;
     default:
       return undefined;
   }
+}
+
+/**
+ * Group 哈希条目：表示 Group 中的一个文件或目录
+ */
+export interface GroupEntry {
+  /** 相对路径，以 / 分隔，目录需要以 / 结尾 */
+  relativePath: string;
+  /** 是否为目录 */
+  isDirectory: boolean;
+  /** 文件大小（字节），目录为 0 */
+  length: number;
+  /** 文件内容的 SHA256 hash（大写十六进制），目录为空字符串 */
+  contentHash: string;
+}
+
+/**
+ * 按 UTF-8 字节序比较两个字符串
+ * 与桌面端 ByteArrayComparer 行为一致，对于包含非 ASCII 字符（如中文）的文件名
+ * 至关重要——localeCompare 会产生不同的排序结果
+ */
+function compareUtf8Bytes(a: string, b: string): number {
+  const encoder = new TextEncoder();
+  const bytesA = encoder.encode(a);
+  const bytesB = encoder.encode(b);
+  const minLen = Math.min(bytesA.length, bytesB.length);
+  for (let i = 0; i < minLen; i++) {
+    if (bytesA[i] !== bytesB[i]) {
+      return (bytesA[i] & 0xff) - (bytesB[i] & 0xff); // 无符号字节比较
+    }
+  }
+  return bytesA.length - bytesB.length;
+}
+
+/**
+ * 计算 Group 类型的哈希值，与桌面端 / 服务端算法一致
+ *
+ * 算法：
+ * 1. 按相对路径的 UTF-8 字节序排序所有条目
+ * 2. 目录格式：  "D|{relativePath}\0"
+ *    文件格式：  "F|{relativePath}|{length}|{contentHash}\0"
+ * 3. 按顺序拼接所有条目字符串
+ * 4. 将拼接后的字符串编码为 UTF-8 字节
+ * 5. 对字节进行 SHA256 哈希，返回大写十六进制字符串
+ *
+ * @param entries Group 中的条目列表
+ * @returns Group 哈希值（大写十六进制）
+ */
+export function calculateGroupHash(entries: GroupEntry[]): string {
+  // Step 1: 按 UTF-8 字节序排序（不能使用 localeCompare，非 ASCII 字符排序不同）
+  const sorted = [...entries].sort((a, b) => compareUtf8Bytes(a.relativePath, b.relativePath));
+
+  // Step 2-4: 流式生成条目字符串并计算 SHA256
+  const hasher = sha256.create();
+  const encoder = new TextEncoder();
+
+  for (const entry of sorted) {
+    if (entry.isDirectory) {
+      hasher.update(encoder.encode(`D|${entry.relativePath}\0`));
+    } else {
+      hasher.update(
+        encoder.encode(`F|${entry.relativePath}|${entry.length}|${entry.contentHash}\0`),
+      );
+    }
+  }
+
+  return hasher.hex().toUpperCase();
 }
 
 /**

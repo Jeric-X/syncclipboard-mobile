@@ -35,6 +35,11 @@ function addShareActivity(androidManifest) {
                 category: [{ $: { 'android:name': 'android.intent.category.DEFAULT' } }],
                 data: [{ $: { 'android:mimeType': '*/*' } }],
             },
+            {
+                action: [{ $: { 'android:name': 'android.intent.action.SEND_MULTIPLE' } }],
+                category: [{ $: { 'android:name': 'android.intent.category.DEFAULT' } }],
+                data: [{ $: { 'android:mimeType': '*/*' } }],
+            },
         ],
     };
     if (existingIndex >= 0) {

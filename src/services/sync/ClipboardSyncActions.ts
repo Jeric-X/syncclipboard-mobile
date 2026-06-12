@@ -12,7 +12,6 @@ import { DedupedOperation } from '@/utils/DedupedOperation';
 import { File } from 'expo-file-system';
 import i18n from '@/i18n';
 import { setJustUploadedHash, setJustSetLocalHash } from './JustSetHash';
-import { saveSyncFileToUserPath } from './SyncFileSaveService';
 
 /** 比较两个 ClipboardContent 是否代表相同内容（用于去重继承判断） */
 function isSameContent(a: ClipboardContent, b: ClipboardContent): boolean {
@@ -193,11 +192,6 @@ export async function setLocalClipboardFromRemote(
     if (hash) {
       setJustSetLocalHash(hash);
     }
-  }
-
-  // 快捷下载完成后，自动保存到用户指定目录
-  if (finalContent) {
-    await saveSyncFileToUserPath(finalContent);
   }
 
   return finalContent;

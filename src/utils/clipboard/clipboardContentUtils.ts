@@ -1,10 +1,17 @@
 import { File, Directory } from 'expo-file-system';
-import { nativeCopyFile, nativeUnzipFile } from 'native-util';
-import { calculateFileProfileHash, calculateTextHash } from '@/utils/hash';
+import { nativeCopyFile, nativeUnzipFile, nativeZipFiles } from 'native-util';
+import {
+  calculateFileHash,
+  calculateFileProfileHash,
+  calculateTextHash,
+  calculateGroupHash,
+} from '@/utils/hash';
+import type { GroupEntry } from '@/utils/hash';
 import { prepareTempFilePath } from '@/utils/fileStorage';
 import { copyFileToDirectory } from '@/utils/fileActions';
 import type { ClipboardContent } from '@/types/clipboard';
 import type { ClipboardContentType } from '@/types/api';
+import type { FileProgressInfo, ProgressInfo } from '@/types/progress';
 
 function guessContentType(mimeType: string | null | undefined): ClipboardContentType {
   if (!mimeType) return 'File';
@@ -29,6 +36,8 @@ export async function createContentFromText(
 
 export interface CreateContentFromFileOptions {
   signal?: AbortSignal;
+  /** 多文件处理时的文件级别进度回调 */
+  onProgress?: (info: FileProgressInfo) => void;
 }
 
 export async function createContentFromFile(
@@ -61,6 +70,88 @@ export async function createContentFromFile(
 }
 
 /**
+ * 多文件条目，用于 createContentFromMultipleFiles
+ */
+export interface MultipleFileEntry {
+  /** 文件内容 URI（file:// 格式） */
+  uri: string;
+  /** 文件名（仅文件名，不含路径） */
+  fileName: string;
+}
+
+export async function createContentFromMultipleFiles(
+  entries: MultipleFileEntry[],
+  options?: CreateContentFromFileOptions
+): Promise<ClipboardContent> {
+  if (!entries || entries.length === 0) {
+    throw new Error('No files provided for group content');
+  }
+
+  const signal = options?.signal;
+
+  // Step 1: 复制每个文件到临时存储并计算 hash
+  const groupEntries: GroupEntry[] = [];
+  const tempUris: string[] = [];
+  const fileNames: string[] = [];
+
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+
+    const tempPath = prepareTempFilePath(entry.fileName);
+    await nativeCopyFile(entry.uri, tempPath);
+    tempUris.push(tempPath);
+    fileNames.push(entry.fileName);
+
+    // 计算文件内容 hash（支持取消）
+    const contentHash = await calculateFileHash(tempPath, signal);
+
+    // 上报文件级别进度
+    options?.onProgress?.({ current: i + 1, total: entries.length });
+
+    const tempFile = new File(tempPath);
+    const fileInfo = tempFile.info();
+
+    groupEntries.push({
+      relativePath: entry.fileName,
+      isDirectory: false,
+      length: fileInfo?.size ?? 0,
+      contentHash: contentHash.toUpperCase(),
+    });
+  }
+
+  // Step 2: 计算 Group hash
+  const groupHash = calculateGroupHash(groupEntries);
+
+  // Step 3: 创建 zip（支持取消）
+  const timestamp = Date.now();
+  const randomPart = Math.random().toString(36).substring(2, 8);
+  const zipFileName = `File_${timestamp}_${randomPart}.zip`;
+  const zipPath = prepareTempFilePath(zipFileName);
+
+  await nativeZipFiles(tempUris, zipPath, signal);
+
+  // Step 4: 获取 zip 文件信息并返回
+  const zipFile = new File(zipPath);
+  const zipFileInfo = zipFile.info();
+  const zipSize = zipFileInfo?.size ?? 0;
+
+  // text 字段：文件名列表（排序后换行连接，与桌面端一致）
+  const text = [...fileNames].sort().join('\n');
+
+  return {
+    type: 'Group',
+    text,
+    fileUri: zipPath,
+    fileName: zipFileName,
+    fileSize: zipSize,
+    profileHash: groupHash,
+    localClipboardHash: groupHash,
+    hasData: true,
+    timestamp,
+  };
+}
+
+/**
  * 保存剪贴板内容数据到指定目录
  * - Image 类型：支持保存到目录，但建议优先使用 saveToGallery 保存到相册
  * - 其他类型（File/Text）：直接保存文件到目标目录
@@ -70,7 +161,9 @@ export async function createContentFromFile(
  */
 export async function saveContentDataToDirectory(
   content: ClipboardContent,
-  directoryUri: string
+  directoryUri: string,
+  signal?: AbortSignal,
+  onProgress?: (info: ProgressInfo) => void
 ): Promise<void> {
   if (!content.fileUri) {
     throw new Error('No file data to save');
@@ -88,7 +181,7 @@ export async function saveContentDataToDirectory(
   // Downloads 根目录的回退逻辑已内置在 nativeUnzipFile 中（SAF → MediaStore），
   // JS 侧无需额外判断。
   if (content.type === 'Group') {
-    await nativeUnzipFile(content.fileUri, directoryUri);
+    await nativeUnzipFile(content.fileUri, directoryUri, signal, onProgress);
     return;
   }
 

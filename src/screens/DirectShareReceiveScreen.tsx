@@ -9,19 +9,12 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import {
   createContentFromFile,
   createContentFromText,
+  createContentFromMultipleFiles,
 } from '@/utils/clipboard/clipboardContentUtils';
 import { setRemoteClipboard } from '@/services/sync/ClipboardSyncActions';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
 import type { ProgressInfo } from 'native-util';
-
-interface ShareData {
-  type: 'text' | 'file' | 'multiple';
-  text?: string;
-  uri?: string;
-  uris?: string[];
-  mimeType?: string;
-  fileName?: string;
-}
+import type { ShareData } from '@/QuickActionApp';
 
 interface DirectShareReceiveScreenProps {
   shareData: ShareData;
@@ -77,16 +70,23 @@ export const DirectShareReceiveScreen: React.FC<DirectShareReceiveScreenProps> =
         return;
       }
 
-      // Handle multiple files (only upload first file for now)
+      // Handle multiple files — create Group content from all files
       if (shareData.type === 'multiple' && shareData.uris && shareData.uris.length > 0) {
-        const uri = shareData.uris[0];
-        const fileName = extractFileNameFromUri(uri);
-        const mimeType = shareData.mimeType || 'application/octet-stream';
+        const entries = shareData.uris.map((uri, i) => ({
+          uri,
+          fileName: shareData.fileNames?.[i] ?? extractFileNameFromUri(uri),
+        }));
 
-        setLoadingText(t('shareReceive.uploadingFile'));
-        setPreviewText(fileName);
+        const fileListText = entries.map((e) => e.fileName).join(', ');
+        setLoadingText(t('shareReceive.processingMultipleFiles', { count: entries.length }));
+        setPreviewText(fileListText);
 
-        const content = await createContentFromFile(uri, fileName, mimeType, undefined, { signal });
+        const content = await createContentFromMultipleFiles(entries, {
+          signal,
+          onProgress: ({ current, total }) => {
+            setLoadingText(t('shareReceive.processingFileProgress', { current, total }));
+          },
+        });
 
         await setRemoteClipboard(content, signal, (info) => {
           setProgress(info ?? null);

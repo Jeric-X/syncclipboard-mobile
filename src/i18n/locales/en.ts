@@ -458,6 +458,7 @@ const en: DeepString<typeof zh> = {
     savedToDevice: 'Saved to device',
     galleryPermissionRequired: 'Gallery permission required to save image',
     saveFailed: 'Save failed',
+    savingFile: 'Saving file...',
   },
 
   wordPicker: {
@@ -473,6 +474,8 @@ const en: DeepString<typeof zh> = {
     processingFile: 'Processing file…',
     uploadingText: 'Uploading text…',
     uploadingFile: 'Uploading file…',
+    processingMultipleFiles: 'Processing {{count}} files…',
+    processingFileProgress: 'Processing file {{current}}/{{total}}…',
     resolving: 'Resolving shared content…',
     success: 'Received and uploaded',
     failed: 'Processing failed',

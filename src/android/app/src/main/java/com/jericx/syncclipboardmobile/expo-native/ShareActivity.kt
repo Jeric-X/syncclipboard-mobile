@@ -123,26 +123,32 @@ class ShareActivity : ReactActivity() {
             Log.w(TAG, "No files found in SEND_MULTIPLE intent")
             return Bundle()
         }
-        
+
         Log.d(TAG, "Multiple files share: ${uris.size} files")
-        
-        // Copy all files to cache directory
+
+        // Copy all files to cache directory and collect per-file metadata
         val copiedPaths = ArrayList<String>()
+        val fileNames = ArrayList<String>()
+
         for (uri in uris) {
+            val fileName = getFileName(uri, type)
+
             val copiedFile = copyUriToCache(uri, type)
             if (copiedFile != null) {
                 copiedPaths.add("file://${copiedFile.absolutePath}")
+                fileNames.add(fileName)
             }
         }
-        
+
         if (copiedPaths.isEmpty()) {
             Log.e(TAG, "Failed to copy any files")
             return Bundle()
         }
-        
+
         val bundle = Bundle()
         bundle.putString("type", "multiple")
         bundle.putStringArrayList("uris", copiedPaths)
+        bundle.putStringArrayList("fileNames", fileNames)
         bundle.putString("mimeType", type ?: "application/octet-stream")
         return bundle
     }

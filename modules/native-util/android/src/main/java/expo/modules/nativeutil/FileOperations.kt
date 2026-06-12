@@ -4,7 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import androidx.documentfile.provider.DocumentFile
 import java.io.File
@@ -41,11 +41,9 @@ class WritableLocation internal constructor(
      * 在此位置下创建子目录。如果目录已存在则返回已存在的目录句柄。
      * @return 子目录的 [WritableLocation]，失败返回 null
      */
-    fun createDirectory(name: String): WritableLocation? {
-        // 先查找是否已存在
-        val existing = findFile(name)
-        if (existing != null && existing.isDirectory) return existing
-        val child = strategy.createDirectory(context, name) ?: return null
+    fun createDirectory(name: String, overwrite: Boolean = false): WritableLocation? {
+        // 存在性检查和可写 DocumentFile 获取均在 strategy 层完成
+        val child = strategy.createDirectory(context, name, overwrite) ?: return null
         return WritableLocation(context, child)
     }
 
@@ -73,12 +71,8 @@ class WritableLocation internal constructor(
      */
     @Throws(IOException::class)
     fun createFile(name: String, mimeType: String = "application/octet-stream", overwrite: Boolean = false): OutputStream {
-        val existing = findFile(name)
-        if (existing != null && !existing.isDirectory) {
-            if (!overwrite) throw IOException("File already exists: $name")
-            existing.delete()
-        }
-        return strategy.createFile(context, name, mimeType)
+        // 存在性检查和覆盖逻辑已下沉至 strategy.createFile 内部
+        return strategy.createFile(context, name, mimeType, overwrite)
             ?: throw IOException("Failed to create file: $name")
     }
 
@@ -109,8 +103,8 @@ class WritableLocation internal constructor(
         private fun fromContentUri(context: Context, uri: Uri): WritableLocation? {
             val doc = DocumentFile.fromTreeUri(context, uri) ?: return null
             if (!doc.exists()) return null
-            val underDownload = isUriUnderDownloadRoot(uri)
-            val strategy = SafStrategy(doc, underDownload, relativePath = "")
+            val rootDocId = DocumentsContract.getTreeDocumentId(uri)
+            val strategy = SafTreeStrategy(doc, relativePath = "", treeUri = uri, rootDocId = rootDocId)
             return WritableLocation(context, strategy)
         }
 
@@ -119,43 +113,10 @@ class WritableLocation internal constructor(
             val file = File(path)
             if (!file.exists() || !file.isDirectory) return null
             val doc = DocumentFile.fromFile(file)
-            val underDownload = isPathUnderDownloadRoot(file)
-            val strategy = SafStrategy(doc, underDownload, relativePath = "")
+            val strategy = FileStrategy(doc, relativePath = "", baseDir = file)
             return WritableLocation(context, strategy)
         }
 
-        // ── Downloads 根目录检测 ───────────────────────────────────────
-
-        /**
-         * 检测 content:// URI 是否指向 Downloads 根目录或其子目录。
-         *
-         * Downloads 根目录可能有两种 URI 形式：
-         * - Downloads provider: `.../tree/downloads`
-         * - External storage provider: `.../tree/primary%3ADownload`（URL decode → `primary:Download`）
-         */
-        private fun isUriUnderDownloadRoot(uri: Uri): Boolean {
-            val path = uri.path ?: return false
-            val treeMatch = Regex("/tree/([^/?#]+)", RegexOption.IGNORE_CASE).find(path)
-                ?: return false
-            val treeDocId = Uri.decode(treeMatch.groupValues[1])
-            return treeDocId.equals("downloads", ignoreCase = true) ||
-                treeDocId.equals("primary:Download", ignoreCase = true)
-        }
-
-        /**
-         * 检测本地文件路径是否位于 Downloads 目录树内。
-         */
-        @Suppress("DEPRECATION")
-        private fun isPathUnderDownloadRoot(file: File): Boolean {
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            return try {
-                val canonical = file.canonicalPath
-                val downloadsCanonical = downloadsDir.canonicalPath
-                canonical == downloadsCanonical || canonical.startsWith("$downloadsCanonical/")
-            } catch (_: Exception) {
-                false
-            }
-        }
     }
 }
 
@@ -170,52 +131,85 @@ internal interface WriteStrategy {
     val isDirectory: Boolean
     val name: String?
     fun exists(): Boolean
-    fun createDirectory(context: Context, name: String): WriteStrategy?
+    fun createDirectory(context: Context, name: String, overwrite: Boolean = false): WriteStrategy?
     fun findFile(context: Context, name: String): WriteStrategy?
-    fun createFile(context: Context, name: String, mimeType: String): OutputStream?
+    /**
+     * 创建文件并打开输出流。内部自行处理存在性检查和覆盖逻辑。
+     * @param overwrite true 时若文件已存在则直接覆盖写入；false 时若存在则抛出 [IOException]
+     * @return 可写入的 [OutputStream]，创建失败返回 null
+     * @throws IOException 文件已存在且 overwrite=false
+     */
+    @Throws(IOException::class)
+    fun createFile(context: Context, name: String, mimeType: String, overwrite: Boolean): OutputStream?
     fun delete(): Boolean
 }
 
 /**
- * 基于 SAF (DocumentFile) 的写入策略。
+ * SAF 树 URI（content://）写入策略。
  *
- * 当 [underDownloadRoot] 为 true 时，记录从 Downloads 根目录到当前位置的
- * [relativePath]，以便在 SAF 文件创建失败时通过 MediaStore API 回退。
- *
- * @property doc               当前目录的 DocumentFile
- * @property underDownloadRoot 当前位置是否位于 Downloads 目录树内
- * @property relativePath      从 Downloads 根目录到当前位置的相对路径，
- *                             不含 "Download/" 前缀，末尾带 "/"
- *                             例如: ""（根）, "subdir/", "a/b/"
+ * 通过构造子文档 URI 实现零查询的文件存在性判断和覆盖写入。
+ * SAF 创建失败时若位于 Downloads 目录树内则回退 MediaStore。
  */
-internal class SafStrategy(
+internal class SafTreeStrategy(
     private val doc: DocumentFile,
-    private val underDownloadRoot: Boolean,
-    private val relativePath: String
+    private val relativePath: String,
+    private val treeUri: Uri,
+    private val rootDocId: String
 ) : WriteStrategy {
+
+    /** 当前路径是否位于 Downloads 目录树内，决定 SAF 创建失败时是否回退 MediaStore */
+    private val underDownloadRoot: Boolean = run {
+        val full = "$rootDocId/$relativePath".trimEnd('/')
+        full.equals("primary:Download", ignoreCase = true) ||
+            full.startsWith("primary:Download/", ignoreCase = true) ||
+            full.equals("downloads", ignoreCase = true) ||
+            full.startsWith("downloads/", ignoreCase = true)
+    }
 
     override val isDirectory: Boolean get() = doc.isDirectory
     override val name: String? get() = doc.name
     override fun exists(): Boolean = doc.exists()
 
-    override fun createDirectory(context: Context, name: String): WriteStrategy? {
-        val existing = doc.findFile(name)
-        if (existing != null && existing.isDirectory) {
-            return SafStrategy(existing, underDownloadRoot, "$relativePath$name/")
+    override fun createDirectory(context: Context, name: String, overwrite: Boolean): WriteStrategy? {
+        val existing = findFile(context, name)
+        if (existing != null) {
+            if (existing.isDirectory) {
+                val writable = doc.findFile(name)
+                if (writable != null && writable.isDirectory) {
+                    return SafTreeStrategy(writable, "$relativePath$name/", treeUri, rootDocId)
+                }
+            } else if (overwrite) {
+                existing.delete()
+            } else {
+                return null
+            }
         }
         val newDir = doc.createDirectory(name) ?: return null
-        return SafStrategy(newDir, underDownloadRoot, "$relativePath$name/")
+        return SafTreeStrategy(newDir, "$relativePath$name/", treeUri, rootDocId)
     }
 
     override fun findFile(context: Context, name: String): WriteStrategy? {
-        val found = doc.findFile(name) ?: return null
-        // 找到的文件/目录不再传递 underDownloadRoot 和 relativePath，
-        // 因为 findFile 通常用于检查存在性或删除，不需要创建文件的回退路径。
-        return SafStrategy(found, underDownloadRoot = false, relativePath = "")
+        val childDocId = "$rootDocId/$relativePath$name"
+        val childUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childDocId)
+        val childDoc = DocumentFile.fromSingleUri(context, childUri) ?: return null
+        if (!childDoc.exists()) return null
+        return SafTreeStrategy(childDoc, "$relativePath$name/", treeUri, rootDocId)
     }
 
-    override fun createFile(context: Context, name: String, mimeType: String): OutputStream? {
-        // 1. 优先尝试 SAF (DocumentFile) 创建文件
+    @Throws(IOException::class)
+    override fun createFile(context: Context, name: String, mimeType: String, overwrite: Boolean): OutputStream? {
+        val childDocId = "$rootDocId/$relativePath$name"
+        val childUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childDocId)
+        val childDoc = DocumentFile.fromSingleUri(context, childUri)
+        if (childDoc != null && childDoc.exists()) {
+            if (!overwrite) throw IOException("File already exists: $name")
+            return try {
+                context.contentResolver.openOutputStream(childUri, "wt")
+            } catch (e: Exception) {
+                NativeLogger.e("FileOperations", "Failed to open existing file for overwrite: '$name' at '$relativePath'", e)
+                throw e
+            }
+        }
         try {
             val newFile = doc.createFile(mimeType, name)
             if (newFile != null) {
@@ -225,14 +219,65 @@ internal class SafStrategy(
         } catch (_: Exception) {
             NativeLogger.w("FileOperations", "SAF createFile failed for '$name' at '$relativePath'")
         }
-
-        // 2. SAF 失败：如果在 Downloads 目录树内，回退到 MediaStore
         if (underDownloadRoot && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             NativeLogger.d("FileOperations", "Falling back to MediaStore for '$name' at '$relativePath'")
             return createFileViaMediaStore(context, name, mimeType, relativePath)
         }
-
         return null
+    }
+
+    override fun delete(): Boolean = doc.delete()
+}
+
+/**
+ * file:// 路径写入策略。
+ *
+ * 直接使用 [File] API，零 ContentResolver 查询。
+ * 不需要 MediaStore 回退——app 已拥有完整文件系统权限。
+ */
+internal class FileStrategy(
+    private val doc: DocumentFile,
+    private val relativePath: String,
+    private val baseDir: File
+) : WriteStrategy {
+
+    override val isDirectory: Boolean get() = doc.isDirectory
+    override val name: String? get() = doc.name
+    override fun exists(): Boolean = doc.exists()
+
+    override fun createDirectory(context: Context, name: String, overwrite: Boolean): WriteStrategy? {
+        val existing = findFile(context, name)
+        if (existing != null) {
+            if (existing.isDirectory) {
+                val file = File(baseDir, "$relativePath$name")
+                if (file.exists() && file.isDirectory) {
+                    return FileStrategy(DocumentFile.fromFile(file), "$relativePath$name/", baseDir)
+                }
+            } else if (overwrite) {
+                existing.delete()
+            } else {
+                return null
+            }
+        }
+        val newDir = doc.createDirectory(name) ?: return null
+        return FileStrategy(newDir, "$relativePath$name/", baseDir)
+    }
+
+    override fun findFile(context: Context, name: String): WriteStrategy? {
+        val file = File(baseDir, "$relativePath$name")
+        if (!file.exists()) return null
+        return FileStrategy(DocumentFile.fromFile(file), "$relativePath$name/", baseDir)
+    }
+
+    @Throws(IOException::class)
+    override fun createFile(context: Context, name: String, mimeType: String, overwrite: Boolean): OutputStream? {
+        val file = File(baseDir, "$relativePath$name")
+        if (file.exists()) {
+            if (!overwrite) throw IOException("File already exists: $name")
+            file.delete()
+        }
+        val newFile = doc.createFile(mimeType, name) ?: return null
+        return context.contentResolver.openOutputStream(newFile.uri)
     }
 
     override fun delete(): Boolean = doc.delete()

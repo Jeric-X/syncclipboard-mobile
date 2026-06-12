@@ -17,6 +17,8 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.IOException
+import java.io.OutputStream
 import androidx.core.content.FileProvider
 import java.net.HttpURLConnection
 import java.net.URL
@@ -427,6 +429,9 @@ class NativeUtilModule : Module() {
                         return@submit
                     }
 
+                    // 已创建目录的缓存，key 为相对于 root 的路径（如 "a/b/c"），避免重复 SAF findFile 调用
+                    val createdDirs = HashMap<String, WritableLocation>()
+
                     java.util.zip.ZipInputStream(FileInputStream(zipFile)).use { zipIn ->
                         var entry: java.util.zip.ZipEntry?
                         while (zipIn.nextEntry.also { entry = it } != null) {
@@ -442,22 +447,32 @@ class NativeUtilModule : Module() {
                                 android.util.Log.d("NativeUnzip", "Processing entry: $entryName, isDir: $isDirectory")
                             }
 
-                            // 解析路径并导航/创建父目录层级
+                            // 解析路径并导航/创建父目录层级（利用缓存避免重复 SAF 调用）
                             val pathParts = entryName.split("/")
                             var current: WritableLocation = root
+                            val dirPath = StringBuilder()
 
                             for (i in 0 until pathParts.size - 1) {
                                 val dirName = pathParts[i]
                                 if (dirName.isEmpty()) continue
 
-                                val subDir = current.createDirectory(dirName)
+                                if (dirPath.isNotEmpty()) dirPath.append("/")
+                                dirPath.append(dirName)
+                                val dirPathStr = dirPath.toString()
+
+                                // 先从缓存获取，命中则直接使用，避免 SAF findFile
+                                var subDir = createdDirs[dirPathStr]
                                 if (subDir == null) {
-                                    if (BuildConfig.DEBUG) {
-                                        android.util.Log.e("NativeUnzip", "Failed to create dir: $dirName")
+                                    subDir = current.createDirectory(dirName, overwrite = true)
+                                    if (subDir == null) {
+                                        if (BuildConfig.DEBUG) {
+                                            android.util.Log.e("NativeUnzip", "Failed to create dir: $dirName")
+                                        }
+                                        cancelFlags.remove(jobId)
+                                        future.complete(ZipErrorException("Failed to create directory: $dirName"))
+                                        return@submit
                                     }
-                                    cancelFlags.remove(jobId)
-                                    future.complete(ZipErrorException("Failed to create directory: $dirName"))
-                                    return@submit
+                                    createdDirs[dirPathStr] = subDir
                                 }
                                 current = subDir
                             }
@@ -466,7 +481,15 @@ class NativeUtilModule : Module() {
                                 // 纯目录条目：确保目录被创建
                                 val dirName = pathParts.last()
                                 if (dirName.isNotEmpty()) {
-                                    current.createDirectory(dirName)
+                                    if (dirPath.isNotEmpty()) dirPath.append("/")
+                                    dirPath.append(dirName)
+                                    val dirPathStr = dirPath.toString()
+                                    if (!createdDirs.containsKey(dirPathStr)) {
+                                        val created = current.createDirectory(dirName, overwrite = true)
+                                        if (created != null) {
+                                            createdDirs[dirPathStr] = created
+                                        }
+                                    }
                                 }
                             } else {
                                 // 文件条目
@@ -475,7 +498,7 @@ class NativeUtilModule : Module() {
                                     android.util.Log.d("NativeUnzip", "Creating file: $fileName")
                                 }
 
-                                // 创建文件并获取输出流（内部自动处理覆盖写入 + SAF → MediaStore 回退）
+                                // createFile 内部已通过 URI 构造 + getType 判断存在性，跳过 findFile 遍历
                                 val output = current.createFile(fileName, "application/octet-stream", overwrite = true)
 
                                 output.use { out ->
@@ -521,6 +544,7 @@ class NativeUtilModule : Module() {
                     ))
                     future.complete("success")
                 } catch (e: Exception) {
+                    NativeLogger.e("NativeUnzip", "Unzip failed", e)
                     cancelFlags.remove(jobId)
                     future.complete(ZipErrorException(e.message ?: "Unknown error", e))
                 }

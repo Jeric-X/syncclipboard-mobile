@@ -13,6 +13,7 @@ import { openFile, shareFile, saveToGallery } from '@/utils/fileActions';
 import { isTextInvalid } from '@/utils/index';
 import { QuickLoadingPage, SuccessButtonConfig } from '@/components/QuickLoadingPage';
 import { saveContentDataToDirectory } from '@/utils/clipboard/clipboardContentUtils';
+import { saveSyncFileToUserPath } from '@/services/sync/SyncFileSaveService';
 import type { ProgressInfo } from 'native-util';
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -35,6 +36,9 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
   const [fileContent, setFileContent] = useState<ClipboardContent | null>(null);
   const [progress, setProgress] = useState<ProgressInfo | null>(null);
   const [previewText, setPreviewText] = useState<string | undefined>(undefined);
+  const [loadingText, setLoadingText] = useState<string>(
+    isUpload ? t('quickTile.uploadingClipboard') : t('quickTile.downloadingClipboard')
+  );
 
   const task = useCallback(
     async (signal: AbortSignal) => {
@@ -58,6 +62,11 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
           setPreviewText(content.text);
         }
         content = await setLocalClipboardFromRemote((info) => setProgress(info), signal, content);
+
+        if (content) {
+          setLoadingText(t('quickTile.savingFile'));
+          await saveSyncFileToUserPath(content, signal, (info) => setProgress(info));
+        }
 
         if (content && content.type !== 'Text' && content.fileUri) {
           setFileContent(content);
@@ -183,9 +192,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
   return (
     <QuickLoadingPage
       task={task}
-      loadingText={
-        isUpload ? t('quickTile.uploadingClipboard') : t('quickTile.downloadingClipboard')
-      }
+      loadingText={loadingText}
       successText={isUpload ? t('quickTile.uploadSuccess') : t('quickTile.syncSuccess')}
       failureText={isUpload ? t('quickTile.uploadFailed') : t('quickTile.syncFailed')}
       onComplete={onLoadingComplete}
