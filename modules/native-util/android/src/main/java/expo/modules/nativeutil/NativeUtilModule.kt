@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import android.webkit.MimeTypeMap
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
@@ -42,6 +43,36 @@ class NativeUtilModule : Module() {
         private const val EVENT_DOWNLOAD_PROGRESS = "onDownloadProgress"
         private const val EVENT_ZIP_PROGRESS = "onZipProgress"
         private const val EVENT_COPY_PROGRESS = "onCopyProgress"
+
+        private fun guessMimeType(fileName: String): String {
+            val extension = fileName.substringAfterLast('.', "").lowercase()
+            return if (extension.isNotEmpty()) {
+                MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+                    ?: "application/octet-stream"
+            } else {
+                "application/octet-stream"
+            }
+        }
+
+        /**
+         * Zip Slip 防护：检查 zip 条目名是否安全。
+         * 拒绝包含 `..` 路径段、反斜杠、或以 `/` 开头的条目名，
+         * 防止恶意 zip 文件通过路径遍历将文件写入目标目录之外。
+         */
+        private fun isSafeZipEntry(entryName: String): Boolean {
+            // 拒绝空名称
+            if (entryName.isEmpty()) return false
+            // 拒绝绝对路径
+            if (entryName.startsWith("/")) return false
+            // 拒绝包含反斜杠的路径（zip 规范使用正斜杠）
+            if (entryName.contains("\\")) return false
+            // 拒绝包含 ".." 路径段的条目，防止路径遍历 (Zip Slip)
+            val parts = entryName.split("/")
+            for (part in parts) {
+                if (part == "..") return false
+            }
+            return true
+        }
     }
 
     private val executor = Executors.newCachedThreadPool()
@@ -241,7 +272,7 @@ class NativeUtilModule : Module() {
 
                     // createFile 内部自动处理 SAF → MediaStore 回退
                     // overwrite=false 且同名文件存在时抛出 IOException
-                    val output = root.createFile(resolvedName, "application/octet-stream", overwrite)
+                    val output = root.createFile(resolvedName, guessMimeType(resolvedName), overwrite)
 
                     output.use { out ->
                         FileInputStream(src).channel.use { srcChannel ->
@@ -494,6 +525,14 @@ class NativeUtilModule : Module() {
                                 android.util.Log.d("NativeUnzip", "Processing entry: $entryName, isDir: $isDirectory")
                             }
 
+                            // Zip Slip 防护：拒绝包含 ..、反斜杠、或以 / 开头的条目名，
+                            // 防止恶意 zip 文件将内容写入目标目录之外的位置。
+                            if (!isSafeZipEntry(entryName)) {
+                                android.util.Log.w("NativeUnzip", "Skipping unsafe zip entry: $entryName")
+                                zipIn.closeEntry()
+                                continue
+                            }
+
                             // 解析路径并导航/创建父目录层级（利用缓存避免重复 SAF 调用）
                             val pathParts = entryName.split("/")
                             var current: WritableLocation = root
@@ -546,7 +585,7 @@ class NativeUtilModule : Module() {
                                 }
 
                                 // createFile 内部已通过 URI 构造 + getType 判断存在性，跳过 findFile 遍历
-                                val output = current.createFile(fileName, "application/octet-stream", overwrite = true)
+                                val output = current.createFile(fileName, guessMimeType(fileName), overwrite = true)
 
                                 output.use { out ->
                                     var read: Int

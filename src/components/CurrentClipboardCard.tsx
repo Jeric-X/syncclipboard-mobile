@@ -271,6 +271,8 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
     saveAbortControllerRef.current?.abort();
   };
 
+  const canCancelSave = !!saveAbortControllerRef.current;
+
   // 保存文件到用户选择的目录（图片类型保存到相册）
   const handleSaveFile = async () => {
     if (!clipboard || !clipboard.fileUri) return;
@@ -495,8 +497,10 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
               styles.actionButton,
               { backgroundColor: theme.colors.primary },
               isSaving && styles.actionButtonLast,
+              isSaving && !canCancelSave && styles.actionButtonDisabled,
             ]}
-            onPress={isSaving ? handleCancelSave : handleSaveFile}
+            onPress={isSaving && canCancelSave ? handleCancelSave : handleSaveFile}
+            disabled={isSaving && !canCancelSave}
           >
             {isSaving && saveProgress && (
               <View
@@ -672,6 +676,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   actionButtonLast: {},
+  actionButtonDisabled: {
+    opacity: 0.7,
+  },
   secondaryButton: {
     borderWidth: 1,
   },

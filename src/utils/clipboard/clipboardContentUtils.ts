@@ -89,27 +89,27 @@ export async function createContentFromMultipleFiles(
 
   const signal = options?.signal;
 
-  // Step 1: 复制每个文件到临时存储并计算 hash
+  // Step 1: 直接从源文件计算 hash（无需复制到临时存储）
+  // 调用方（ShareActivity）已将 content:// URI 复制为 file:// 缓存文件，
+  // 直接使用源文件可避免一次冗余的磁盘复制。
   const groupEntries: GroupEntry[] = [];
-  const tempUris: string[] = [];
+  const sourceUris: string[] = [];
   const fileNames: string[] = [];
 
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
 
-    const tempPath = prepareTempFilePath(entry.fileName);
-    await nativeCopyFile(entry.uri, tempPath);
-    tempUris.push(tempPath);
+    sourceUris.push(entry.uri);
     fileNames.push(entry.fileName);
 
     // 计算文件内容 hash（支持取消）
-    const contentHash = await calculateFileHash(tempPath, signal);
+    const contentHash = await calculateFileHash(entry.uri, signal);
 
     // 上报文件级别进度
     options?.onProgress?.({ current: i + 1, total: entries.length });
 
-    const tempFile = new File(tempPath);
-    const fileInfo = tempFile.info();
+    const sourceFile = new File(entry.uri);
+    const fileInfo = sourceFile.info();
 
     groupEntries.push({
       relativePath: entry.fileName,
@@ -122,13 +122,13 @@ export async function createContentFromMultipleFiles(
   // Step 2: 计算 Group hash
   const groupHash = calculateGroupHash(groupEntries);
 
-  // Step 3: 创建 zip（支持取消）
+  // Step 3: 直接从源文件创建 zip（支持取消）
   const timestamp = Date.now();
   const randomPart = Math.random().toString(36).substring(2, 8);
   const zipFileName = `File_${timestamp}_${randomPart}.zip`;
   const zipPath = prepareTempFilePath(zipFileName);
 
-  await nativeZipFiles(tempUris, zipPath, signal);
+  await nativeZipFiles(sourceUris, zipPath, signal);
 
   // Step 4: 获取 zip 文件信息并返回
   const zipFile = new File(zipPath);

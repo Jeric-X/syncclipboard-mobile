@@ -1,5 +1,6 @@
 package expo.modules.nativeutil
 
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
@@ -221,7 +222,7 @@ internal class SafTreeStrategy(
         }
         if (underDownloadRoot && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             NativeLogger.d("FileOperations", "Falling back to MediaStore for '$name' at '$relativePath'")
-            return createFileViaMediaStore(context, name, mimeType, relativePath)
+            return createFileViaMediaStore(context, name, mimeType, relativePath, overwrite)
         }
         return null
     }
@@ -300,13 +301,19 @@ internal fun createFileViaMediaStore(
     context: Context,
     fileName: String,
     mimeType: String,
-    relativePath: String
+    relativePath: String,
+    overwrite: Boolean
 ): OutputStream? {
     val resolver = context.contentResolver
     val fullPath = "Download/$relativePath"
 
-    // 先删除已存在的同名文件，避免重复条目
-    deleteMediaStoreFileByPath(resolver, fileName, fullPath)
+    // 检查是否已存在同名文件
+    val existingUri = findMediaStoreFileByPath(resolver, fileName, fullPath)
+    if (existingUri != null) {
+        if (!overwrite) throw IOException("File already exists: $fileName")
+        // 删除已存在的同名文件，避免重复条目
+        resolver.delete(existingUri, null, null)
+    }
 
     val values = ContentValues().apply {
         put(MediaStore.Downloads.DISPLAY_NAME, fileName)
@@ -362,13 +369,14 @@ internal fun createFileViaMediaStore(
 }
 
 /**
- * 从 MediaStore.Downloads 中删除指定路径和文件名的文件。
+ * 通过 DISPLAY_NAME + RELATIVE_PATH 查找 MediaStore.Downloads 中已存在的文件，
+ * 返回其 content URI，未找到返回 null。
  */
-private fun deleteMediaStoreFileByPath(
+private fun findMediaStoreFileByPath(
     resolver: android.content.ContentResolver,
     fileName: String,
     relativePath: String
-) {
+): Uri? {
     val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
     val selection = "${MediaStore.Downloads.DISPLAY_NAME} = ? AND ${MediaStore.Downloads.RELATIVE_PATH} = ?"
     val selectionArgs = arrayOf(fileName, relativePath)
@@ -377,7 +385,22 @@ private fun deleteMediaStoreFileByPath(
         ?.use { cursor ->
             if (cursor.moveToFirst()) {
                 val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID))
-                resolver.delete(collection, "${MediaStore.Downloads._ID} = ?", arrayOf(id.toString()))
+                return ContentUris.withAppendedId(collection, id)
             }
         }
+    return null
+}
+
+/**
+ * 通过 DISPLAY_NAME + RELATIVE_PATH 删除 MediaStore.Downloads 中已存在的文件。
+ */
+private fun deleteMediaStoreFileByPath(
+    resolver: android.content.ContentResolver,
+    fileName: String,
+    relativePath: String
+) {
+    val existingUri = findMediaStoreFileByPath(resolver, fileName, relativePath)
+    if (existingUri != null) {
+        resolver.delete(existingUri, null, null)
+    }
 }

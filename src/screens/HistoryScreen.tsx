@@ -299,11 +299,6 @@ export function HistoryScreen() {
       try {
         // 图片类型直接保存到相册
         if (item.type === 'Image') {
-          setActiveSave({
-            profileHash: item.profileHash,
-            progress: { progress: 0, bytesTransferred: 0, totalBytes: 0 },
-            abortController: new AbortController(),
-          });
           await saveToGallery(item.fileUri);
           showMessage(t('clipboard.savedToGallery'), 'success');
           return;

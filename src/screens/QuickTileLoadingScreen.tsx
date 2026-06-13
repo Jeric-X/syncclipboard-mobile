@@ -118,6 +118,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
   const handleCancelSave = useCallback(() => {
     saveAbortControllerRef.current?.abort();
   }, []);
+  const handleSavingPress = useCallback(() => {}, []);
 
   // 统一的保存处理函数（按类型分支）
   const handleSave = useCallback(async () => {
@@ -170,6 +171,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
   // 动态保存按钮配置（根据保存状态切换 label 和行为）
   const saveButtonConfig = useMemo((): SuccessButtonConfig => {
     if (isSaving) {
+      const canCancelSave = !!saveAbortControllerRef.current;
       let label: string;
       if (saveProgress && saveProgress.totalBytes > 0) {
         const pct = (saveProgress.progress * 100).toFixed(0);
@@ -179,14 +181,18 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
       } else {
         label = t('clipboard.saving');
       }
-      return { label, primary: true, onPress: handleCancelSave };
+      return {
+        label,
+        primary: true,
+        onPress: canCancelSave ? handleCancelSave : handleSavingPress,
+      };
     }
     return {
       label: t('clipboard.save'),
       primary: true,
       onPress: handleSave,
     };
-  }, [isSaving, saveProgress, handleCancelSave, handleSave, t]);
+  }, [isSaving, saveProgress, handleCancelSave, handleSavingPress, handleSave, t]);
 
   const successButtons: SuccessButtonConfig[] | undefined = fileContent
     ? fileContent.type === 'Text' && textUrl
