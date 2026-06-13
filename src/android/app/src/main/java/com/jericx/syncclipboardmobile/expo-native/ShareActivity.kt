@@ -127,13 +127,29 @@ class ShareActivity : ReactActivity() {
         NativeLogger.d(TAG, "Multiple files share: ${uris.size} files")
 
         // Copy all files to cache directory and collect per-file metadata
+        // 同名文件去重：跟踪已使用的文件名，冲突时追加 " (1)", " (2)" 等后缀
         val copiedPaths = ArrayList<String>()
         val fileNames = ArrayList<String>()
+        val usedNames = HashMap<String, Int>()
 
         for (uri in uris) {
-            val fileName = getFileName(uri, type)
+            var fileName = getFileName(uri, type)
 
-            val copiedFile = copyUriToCache(uri, type)
+            // 去重：如果文件名已被使用，追加数字后缀
+            val count = usedNames[fileName]
+            if (count != null) {
+                usedNames[fileName] = count + 1
+                val dotIndex = fileName.lastIndexOf('.')
+                if (dotIndex > 0) {
+                    fileName = "${fileName.substring(0, dotIndex)} (${count + 1})${fileName.substring(dotIndex)}"
+                } else {
+                    fileName = "$fileName (${count + 1})"
+                }
+            } else {
+                usedNames[fileName] = 1
+            }
+
+            val copiedFile = copyUriToCache(uri, type, fileName)
             if (copiedFile != null) {
                 copiedPaths.add("file://${copiedFile.absolutePath}")
                 fileNames.add(fileName)
@@ -157,7 +173,7 @@ class ShareActivity : ReactActivity() {
      * Copy content from URI to cache directory.
      * Returns the copied file, or null if failed.
      */
-    private fun copyUriToCache(uri: Uri, mimeType: String?): File? {
+    private fun copyUriToCache(uri: Uri, mimeType: String?, desiredName: String? = null): File? {
         return try {
             // Open input stream from content provider
             val inputStream: InputStream? = contentResolver.openInputStream(uri)
@@ -166,8 +182,8 @@ class ShareActivity : ReactActivity() {
                 return null
             }
             
-            // Get file name from URI or generate one
-            val fileName = getFileName(uri, mimeType)
+            // Get file name from URI or generate one (use desiredName if provided for dedup)
+            val fileName = desiredName ?: getFileName(uri, mimeType)
             
             // Create file in cache directory
             val cacheDir = cacheDir

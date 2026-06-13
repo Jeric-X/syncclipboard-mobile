@@ -294,10 +294,11 @@ export interface GroupEntry {
  * 与桌面端 ByteArrayComparer 行为一致，对于包含非 ASCII 字符（如中文）的文件名
  * 至关重要——localeCompare 会产生不同的排序结果
  */
+const utf8Encoder = new TextEncoder();
+
 function compareUtf8Bytes(a: string, b: string): number {
-  const encoder = new TextEncoder();
-  const bytesA = encoder.encode(a);
-  const bytesB = encoder.encode(b);
+  const bytesA = utf8Encoder.encode(a);
+  const bytesB = utf8Encoder.encode(b);
   const minLen = Math.min(bytesA.length, bytesB.length);
   for (let i = 0; i < minLen; i++) {
     if (bytesA[i] !== bytesB[i]) {
@@ -327,14 +328,13 @@ export function calculateGroupHash(entries: GroupEntry[]): string {
 
   // Step 2-4: 流式生成条目字符串并计算 SHA256
   const hasher = sha256.create();
-  const encoder = new TextEncoder();
 
   for (const entry of sorted) {
     if (entry.isDirectory) {
-      hasher.update(encoder.encode(`D|${entry.relativePath}\0`));
+      hasher.update(utf8Encoder.encode(`D|${entry.relativePath}\0`));
     } else {
       hasher.update(
-        encoder.encode(`F|${entry.relativePath}|${entry.length}|${entry.contentHash}\0`)
+        utf8Encoder.encode(`F|${entry.relativePath}|${entry.length}|${entry.contentHash}\0`)
       );
     }
   }

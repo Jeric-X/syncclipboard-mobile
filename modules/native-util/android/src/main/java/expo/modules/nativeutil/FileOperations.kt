@@ -194,7 +194,8 @@ internal class SafTreeStrategy(
         val childUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childDocId)
         val childDoc = DocumentFile.fromSingleUri(context, childUri) ?: return null
         if (!childDoc.exists()) return null
-        return SafTreeStrategy(childDoc, "$relativePath$name/", treeUri, rootDocId)
+        val childPath = if (childDoc.isDirectory) "$relativePath$name/" else "$relativePath$name"
+        return SafTreeStrategy(childDoc, childPath, treeUri, rootDocId)
     }
 
     @Throws(IOException::class)
@@ -267,7 +268,8 @@ internal class FileStrategy(
     override fun findFile(context: Context, name: String): WriteStrategy? {
         val file = File(baseDir, "$relativePath$name")
         if (!file.exists()) return null
-        return FileStrategy(DocumentFile.fromFile(file), "$relativePath$name/", baseDir)
+        val childPath = if (file.isDirectory) "$relativePath$name/" else "$relativePath$name"
+        return FileStrategy(DocumentFile.fromFile(file), childPath, baseDir)
     }
 
     @Throws(IOException::class)
