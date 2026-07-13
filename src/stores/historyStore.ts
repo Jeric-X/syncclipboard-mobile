@@ -401,8 +401,68 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       return true;
     };
 
+    // 获取排序配置
+    const sortField = get().sort?.field || 'timestamp';
+    const sortOrder = get().sort?.order || 'desc';
+    const isDesc = sortOrder === 'desc';
+
+    /**
+     * 获取排序字段的值
+     */
+    const getSortValue = (item: HistoryItem): number => {
+      switch (sortField) {
+        case 'timestamp':
+          return item.timestamp;
+        case 'lastAccessed':
+          return item.lastAccessed || item.timestamp;
+        case 'useCount':
+          return item.useCount || 0;
+        case 'size':
+          return item.size || 0;
+        default:
+          return item.timestamp;
+      }
+    };
+
+    /**
+     * 二分查找插入位置（参照桌面端 InsertHistoryInOrder）
+     */
+    const findInsertIndex = (arr: HistoryItem[], item: HistoryItem): number => {
+      // 先确定 pinned 区域的边界
+      const isPinned = item.pinned;
+      let searchStart = 0;
+      let searchEnd = arr.length;
+
+      if (isPinned) {
+        // pinned 只在 pinned 区域内查找
+        searchEnd = arr.findIndex((i) => !i.pinned);
+        if (searchEnd === -1) searchEnd = arr.length;
+      } else {
+        // 非 pinned 从第一个非 pinned 开始
+        searchStart = arr.findIndex((i) => !i.pinned);
+        if (searchStart === -1) searchStart = arr.length;
+      }
+
+      const targetVal = getSortValue(item);
+      let low = searchStart;
+      let high = searchEnd;
+
+      while (low < high) {
+        const mid = (low + high) >> 1;
+        const midVal = getSortValue(arr[mid]);
+        const shouldGoLeft = isDesc ? midVal <= targetVal : midVal >= targetVal;
+        if (shouldGoLeft) {
+          high = mid;
+        } else {
+          low = mid + 1;
+        }
+      }
+
+      return low;
+    };
+
     if (action === 'add') {
-      // 新增记录：批量插入到列表开头
+      // 新增记录：按当前排序配置插入到正确位置
       // 过滤掉已存在的记录（避免 refresh 和 notifyChange 竞争导致重复插入）
       const existingHashes = new Set(items.map((i) => i.profileHash.toLowerCase()));
       const filteredItems = changedItems.filter(
@@ -412,73 +472,18 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
           !existingHashes.has(item.profileHash.toLowerCase())
       );
       if (filteredItems.length > 0) {
+        const newItems = [...items];
+        for (const item of filteredItems) {
+          const insertIdx = findInsertIndex(newItems, item);
+          newItems.splice(insertIdx, 0, item);
+        }
         set({
-          items: [...filteredItems, ...items],
+          items: newItems,
           totalCount: get().totalCount + filteredItems.length,
           lastAddedTimestamp: Date.now(),
         });
       }
     } else if (action === 'update') {
-      // 获取排序配置
-      const sortField = get().sort?.field || 'timestamp';
-      const sortOrder = get().sort?.order || 'desc';
-      const isDesc = sortOrder === 'desc';
-
-      /**
-       * 获取排序字段的值
-       */
-      const getSortValue = (item: HistoryItem): number => {
-        switch (sortField) {
-          case 'timestamp':
-            return item.timestamp;
-          case 'lastAccessed':
-            return item.lastAccessed || item.timestamp;
-          case 'useCount':
-            return item.useCount || 0;
-          case 'size':
-            return item.size || 0;
-          default:
-            return item.timestamp;
-        }
-      };
-
-      /**
-       * 二分查找插入位置（参照桌面端 InsertHistoryInOrder）
-       */
-      const findInsertIndex = (arr: HistoryItem[], item: HistoryItem): number => {
-        // 先确定 pinned 区域的边界
-        const isPinned = item.pinned;
-        let searchStart = 0;
-        let searchEnd = arr.length;
-
-        if (isPinned) {
-          // pinned 只在 pinned 区域内查找
-          searchEnd = arr.findIndex((i) => !i.pinned);
-          if (searchEnd === -1) searchEnd = arr.length;
-        } else {
-          // 非 pinned 从第一个非 pinned 开始
-          searchStart = arr.findIndex((i) => !i.pinned);
-          if (searchStart === -1) searchStart = arr.length;
-        }
-
-        const targetVal = getSortValue(item);
-        let low = searchStart;
-        let high = searchEnd;
-
-        while (low < high) {
-          const mid = (low + high) >> 1;
-          const midVal = getSortValue(arr[mid]);
-          const shouldGoLeft = isDesc ? midVal <= targetVal : midVal >= targetVal;
-          if (shouldGoLeft) {
-            high = mid;
-          } else {
-            low = mid + 1;
-          }
-        }
-
-        return low;
-      };
-
       // 检查是否有软删除的项
       const softDeletedHashes = new Set(
         changedItems.filter((item) => item.isDeleted).map((item) => item.profileHash.toLowerCase())

@@ -118,6 +118,22 @@ describe('historyStore handleStorageChange 排序', () => {
     expect(items[2].text).toBe('updated text');
   });
 
+  it('add 事件按当前排序插入，而不是直接放到列表开头', () => {
+    const { handleStorageChange, setSort } = useHistoryStore.getState();
+
+    setSort({ field: 'timestamp', order: 'desc' });
+
+    useHistoryStore.setState({
+      items: [createItem('c', 300), createItem('b', 200), createItem('a', 100)],
+      totalCount: 3,
+    });
+
+    handleStorageChange([createItem('middle', 150)], 'add');
+
+    const items = useHistoryStore.getState().items;
+    expect(hashes(items)).toEqual(['c', 'b', 'middle', 'a']);
+  });
+
   it('searchItems 不传 sort 时不覆盖已有的 sort 配置', async () => {
     const { setSort, searchItems } = useHistoryStore.getState();
 
