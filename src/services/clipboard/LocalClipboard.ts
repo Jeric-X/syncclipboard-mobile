@@ -18,10 +18,10 @@ import i18n from '@/i18n';
  * 剪贴板复制生命周期回调，由外部模块（如 ClipboardMonitor）注册
  */
 export interface CopyLifecycleCallbacks {
-  /** 复制开始前调用（暂停轮询） */
-  onBeforeCopy: () => void;
-  /** 复制结束后调用，无论成功与否（恢复轮询） */
-  onAfterCopy: () => void;
+  /** 复制开始前调用（暂停剪贴板监控） */
+  onBeforeCopy: () => void | Promise<void>;
+  /** 复制结束后调用，无论成功与否（恢复剪贴板监控） */
+  onAfterCopy: () => void | Promise<void>;
 }
 
 /**
@@ -361,7 +361,7 @@ export class LocalClipboard {
    * 写入失败时直接抛出异常，由调用方处理。
    */
   async setClipboardContent(content: ClipboardContent, isFromRemote = false): Promise<void> {
-    this.copyLifecycleCallbacks?.onBeforeCopy();
+    await this.copyLifecycleCallbacks?.onBeforeCopy();
     try {
       switch (content.type) {
         case 'Text':
@@ -383,7 +383,7 @@ export class LocalClipboard {
         this.remoteCopiedCallback?.(content);
       }
     } finally {
-      this.copyLifecycleCallbacks?.onAfterCopy();
+      await this.copyLifecycleCallbacks?.onAfterCopy();
     }
   }
 

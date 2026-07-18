@@ -2,8 +2,9 @@ package expo.modules.shizukuclipboard
 
 import android.content.ClipData
 import android.content.ClipDescription
+import android.os.Binder
 import android.os.IBinder
-import java.lang.reflect.Method
+import android.os.Parcel
 
 
 
@@ -19,6 +20,10 @@ class ClipboardUserService : IClipboardUserService.Stub() {
         private const val TAG = "ShizukuClipboard.UserService"
         // UserService 以 UID 2000 (shell) 运行，需要使用 shell 的包名
         private const val PACKAGE_NAME = "com.android.shell"
+        private const val PRIMARY_CLIP_CHANGED_DESCRIPTOR =
+            "android.content.IOnPrimaryClipChangedListener"
+        private const val TRANSACTION_DISPATCH_PRIMARY_CLIP_CHANGED =
+            IBinder.FIRST_CALL_TRANSACTION
 
         init {
             // 当 Shizuku 以 root 权限运行时，UserService 进程继承 UID 0。
@@ -113,6 +118,32 @@ class ClipboardUserService : IClipboardUserService.Stub() {
         }
     }
 
+    private var clipboardChangedCallback: IClipboardChangedCallback? = null
+    private var systemListener: Any? = null
+    private var isSystemListenerRegistered = false
+
+    /** Handles the hidden IOnPrimaryClipChangedListener Binder callback without linking it. */
+    private val systemListenerBinder = object : Binder() {
+        override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
+            when (code) {
+                INTERFACE_TRANSACTION -> {
+                    reply?.writeString(PRIMARY_CLIP_CHANGED_DESCRIPTOR)
+                    return true
+                }
+                TRANSACTION_DISPATCH_PRIMARY_CLIP_CHANGED -> {
+                    data.enforceInterface(PRIMARY_CLIP_CHANGED_DESCRIPTOR)
+                    try {
+                        clipboardChangedCallback?.onPrimaryClipChanged()
+                    } catch (e: Exception) {
+                        android.util.Log.w(TAG, "Failed to forward clipboard change", e)
+                    }
+                    return true
+                }
+            }
+            return super.onTransact(code, data, reply, flags)
+        }
+    }
+
     override fun getPrimaryClipText(): String {
         return try {
             val clipboard = getClipboardService() ?: return ""
@@ -168,6 +199,90 @@ class ClipboardUserService : IClipboardUserService.Stub() {
         }
     }
 
+    override fun setClipboardChangedCallback(callback: IClipboardChangedCallback): Boolean {
+        clipboardChangedCallback = callback
+        return try {
+            unregisterSystemListener()
+            val clipboard = getClipboardService() ?: return false
+            val listener = getOrCreateSystemListener() ?: return false
+            invokeListenerRegistration(clipboard, "addPrimaryClipChangedListener", listener)
+                .also { isSystemListenerRegistered = it }
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Failed to register primary clip listener", e)
+            false
+        }
+    }
+
+    override fun clearClipboardChangedCallback() {
+        unregisterSystemListener()
+        clipboardChangedCallback = null
+    }
+
+    private fun getOrCreateSystemListener(): Any? {
+        if (systemListener != null) return systemListener
+        return try {
+            val stubClass = Class.forName("android.content.IOnPrimaryClipChangedListener\$Stub")
+            val asInterface = stubClass.getMethod("asInterface", IBinder::class.java)
+            asInterface.invoke(null, systemListenerBinder).also { systemListener = it }
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Failed to create IOnPrimaryClipChangedListener", e)
+            null
+        }
+    }
+
+    private fun unregisterSystemListener() {
+        if (!isSystemListenerRegistered) return
+        try {
+            val clipboard = getClipboardService()
+            val listener = systemListener
+            if (clipboard != null && listener != null) {
+                invokeListenerRegistration(clipboard, "removePrimaryClipChangedListener", listener)
+            }
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "Failed to unregister primary clip listener", e)
+        } finally {
+            isSystemListenerRegistered = false
+        }
+    }
+
+    /** Adapts to IClipboard listener signatures that vary across Android releases. */
+    private fun invokeListenerRegistration(clipboard: Any, methodName: String, listener: Any): Boolean {
+        val methods = clipboard.javaClass.methods
+            .filter { it.name == methodName }
+            .sortedByDescending { it.parameterCount }
+
+        for (method in methods) {
+            val args = buildListenerArgs(method.parameterTypes, listener) ?: continue
+            try {
+                android.util.Log.d(TAG, "Calling $methodName(${method.parameterTypes.joinToString { it.simpleName }})")
+                method.invoke(clipboard, *args)
+                return true
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "Failed to invoke $methodName with ${method.parameterCount} params", e)
+            }
+        }
+        android.util.Log.e(TAG, "No suitable listener method found: $methodName")
+        return false
+    }
+
+    private fun buildListenerArgs(paramTypes: Array<Class<*>>, listener: Any): Array<Any?>? {
+        var listenerAssigned = false
+        var stringIndex = 0
+        return paramTypes.map { type ->
+            when {
+                type.name == PRIMARY_CLIP_CHANGED_DESCRIPTOR && !listenerAssigned -> {
+                    listenerAssigned = true
+                    listener
+                }
+                type == String::class.java -> if (stringIndex++ == 0) PACKAGE_NAME else null
+                type == Int::class.javaPrimitiveType || type == Int::class.java -> 0
+                type == Long::class.javaPrimitiveType || type == Long::class.java -> 0L
+                type == Boolean::class.javaPrimitiveType || type == Boolean::class.java -> false
+                else -> return null
+            }
+        }.let { args -> if (listenerAssigned) args.toTypedArray() else null }
+    }
+
     override fun init(callerToken: IBinder) {
         try {
             callerToken.linkToDeath({
@@ -182,6 +297,7 @@ class ClipboardUserService : IClipboardUserService.Stub() {
 
     override fun destroy() {
         android.util.Log.i(TAG, "UserService destroy called, exiting process")
+        clearClipboardChangedCallback()
         clipboardService = null
         System.exit(0)
     }

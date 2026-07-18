@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { requireNativeModule } from 'expo-modules-core';
+import { requireNativeModule, type EventSubscription } from 'expo-modules-core';
 
 const MODULE_NAME = 'ShizukuClipboardModule';
 
@@ -11,6 +11,12 @@ interface ShizukuClipboardModuleInterface {
   hasStringViaShizuku(): Promise<boolean>;
   hasImageViaShizuku(): Promise<boolean>;
   getImageUriViaShizuku(): Promise<string | null>;
+  startPrimaryClipChangedListener(): Promise<boolean>;
+  stopPrimaryClipChangedListener(): Promise<void>;
+  addListener(
+    eventName: 'onPrimaryClipChanged' | 'onPrimaryClipListenerUnavailable',
+    listener: () => void
+  ): EventSubscription;
 }
 
 const NativeModule: ShizukuClipboardModuleInterface | null =
@@ -84,4 +90,36 @@ export async function getImageUriViaShizuku(): Promise<string | null> {
     return NativeModule.getImageUriViaShizuku();
   }
   return null;
+}
+
+/**
+ * 在 Shizuku 的 shell UserService 中注册系统剪贴板事件；返回 null 表示无法启用。
+ */
+export async function subscribeToPrimaryClipChanges(
+  callback: () => void,
+  onUnavailable?: () => void
+): Promise<(() => Promise<void>) | null> {
+  if (!NativeModule) return null;
+
+  const subscription = NativeModule.addListener('onPrimaryClipChanged', callback);
+  const unavailableSubscription = onUnavailable
+    ? NativeModule.addListener('onPrimaryClipListenerUnavailable', onUnavailable)
+    : null;
+  try {
+    if (!(await NativeModule.startPrimaryClipChangedListener())) {
+      subscription.remove();
+      unavailableSubscription?.remove();
+      return null;
+    }
+  } catch (e) {
+    subscription.remove();
+    unavailableSubscription?.remove();
+    throw e;
+  }
+
+  return async () => {
+    subscription.remove();
+    unavailableSubscription?.remove();
+    await NativeModule.stopPrimaryClipChangedListener();
+  };
 }

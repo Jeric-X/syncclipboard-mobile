@@ -4,7 +4,9 @@ import android.content.ComponentName
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Binder
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.Promise
@@ -29,9 +31,21 @@ class ShizukuClipboardModule : Module() {
     private var clipboardService: IClipboardUserService? = null
     private var serviceConnected = false
     private var isBinding = false
+    private var clipboardListenerRequested = false
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     // 用于 linkToDeath：UserService 进程监听此 token，当主进程死亡时自动退出
     private val callerToken = Binder()
+
+    private val clipboardChangedCallback = object : IClipboardChangedCallback.Stub() {
+        override fun onPrimaryClipChanged() {
+            mainHandler.post {
+                if (clipboardListenerRequested) {
+                    sendEvent("onPrimaryClipChanged", emptyMap<String, Any>())
+                }
+            }
+        }
+    }
 
     private val userServiceArgs by lazy {
         Shizuku.UserServiceArgs(
@@ -43,7 +57,7 @@ class ShizukuClipboardModule : Module() {
             .daemon(false)
             .processNameSuffix("clipboard")
             .debuggable(true)
-            .version(1)
+            .version(2)
     }
 
     private val serviceConnection = object : ServiceConnection {
@@ -60,6 +74,9 @@ class ShizukuClipboardModule : Module() {
                 } catch (e: Exception) {
                     NativeLogger.e(TAG, "Failed to init UserService with caller token", e)
                 }
+                if (clipboardListenerRequested) {
+                    registerClipboardListener()
+                }
             } else {
                 NativeLogger.e(TAG, "UserService binder is null or dead")
             }
@@ -70,6 +87,7 @@ class ShizukuClipboardModule : Module() {
             isBinding = false
             clipboardService = null
             serviceConnected = false
+            if (clipboardListenerRequested) sendClipboardListenerUnavailable()
         }
     }
 
@@ -96,6 +114,7 @@ class ShizukuClipboardModule : Module() {
         permissionGranted = false
         clipboardService = null
         serviceConnected = false
+        if (clipboardListenerRequested) sendClipboardListenerUnavailable()
     }
 
     private fun hasPermission(): Boolean {
@@ -141,6 +160,24 @@ class ShizukuClipboardModule : Module() {
         serviceConnected = false
     }
 
+    private fun registerClipboardListener(): Boolean {
+        val service = clipboardService ?: return false
+        return try {
+            service.setClipboardChangedCallback(clipboardChangedCallback)
+        } catch (e: Exception) {
+            NativeLogger.e(TAG, "Failed to register primary clip listener", e)
+            false
+        }
+    }
+
+    private fun sendClipboardListenerUnavailable() {
+        mainHandler.post {
+            if (clipboardListenerRequested) {
+                sendEvent("onPrimaryClipListenerUnavailable", emptyMap<String, Any>())
+            }
+        }
+    }
+
     private fun ensureServiceConnected(): IClipboardUserService? {
         if (clipboardService != null && serviceConnected) {
             return clipboardService
@@ -158,6 +195,8 @@ class ShizukuClipboardModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("ShizukuClipboardModule")
 
+        Events("onPrimaryClipChanged", "onPrimaryClipListenerUnavailable")
+
         OnCreate {
             try {
                 Shizuku.addRequestPermissionResultListener(permissionResultListener)
@@ -170,6 +209,7 @@ class ShizukuClipboardModule : Module() {
 
         OnDestroy {
             try {
+                clipboardListenerRequested = false
                 unbindUserService()
                 Shizuku.removeRequestPermissionResultListener(permissionResultListener)
                 Shizuku.removeBinderReceivedListener(binderReceivedListener)
@@ -262,6 +302,27 @@ class ShizukuClipboardModule : Module() {
                 NativeLogger.e(TAG, "getImageUriViaShizuku failed", e)
                 promise.resolve(null)
             }
+        }
+
+        AsyncFunction("startPrimaryClipChangedListener") { promise: Promise ->
+            try {
+                clipboardListenerRequested = true
+                val service = ensureServiceConnected()
+                promise.resolve(service != null && registerClipboardListener())
+            } catch (e: Exception) {
+                NativeLogger.e(TAG, "Failed to start primary clip listener", e)
+                promise.resolve(false)
+            }
+        }
+
+        AsyncFunction("stopPrimaryClipChangedListener") { promise: Promise ->
+            clipboardListenerRequested = false
+            try {
+                clipboardService?.clearClipboardChangedCallback()
+            } catch (e: Exception) {
+                NativeLogger.e(TAG, "Failed to stop primary clip listener", e)
+            }
+            promise.resolve(null)
         }
     }
 }

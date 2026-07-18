@@ -60,7 +60,7 @@ Desktop.ini
 *.apk
 *.aab
 android/app/build/
-android/.gradle/
+**/.gradle/
 android/captures/
 android/local.properties
 android/.idea/

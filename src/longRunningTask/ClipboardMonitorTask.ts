@@ -29,11 +29,11 @@ class ClipboardMonitorTask extends LongRunningTask {
 
   override async onConfigChanged(): Promise<void> {
     await this._applyPollingInterval();
+    await clipboardMonitor.refreshListeningMode();
   }
 
   override onBackground(): Promise<void> {
-    clipboardMonitor.handleBackground();
-    return Promise.resolve();
+    return clipboardMonitor.handleBackground();
   }
 
   override onForeground(): Promise<void> {
@@ -51,7 +51,7 @@ class ClipboardMonitorTask extends LongRunningTask {
   }
 
   async stop(): Promise<void> {
-    clipboardMonitor.stop();
+    await clipboardMonitor.stop();
   }
 
   isRunning(): boolean {

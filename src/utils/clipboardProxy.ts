@@ -133,6 +133,11 @@ async function shouldUseShizuku(): Promise<boolean> {
   return true;
 }
 
+/** Shizuku 剪贴板事件模式与读取模式使用相同的启用条件。 */
+export async function isShizukuClipboardEnabled(): Promise<boolean> {
+  return shouldUseShizuku();
+}
+
 /**
  * 获取剪贴板文本
  */
