@@ -10,5 +10,6 @@ interface IClipboardUserService {
     void init(IBinder callerToken) = 5;
     boolean setClipboardChangedCallback(IClipboardChangedCallback callback) = 6;
     void clearClipboardChangedCallback() = 7;
+    boolean isClipboardServiceHealthy() = 8;
     void destroy() = 16777114;
 }

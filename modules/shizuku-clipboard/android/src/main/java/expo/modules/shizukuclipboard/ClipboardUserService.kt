@@ -34,7 +34,9 @@ class ClipboardUserService : IClipboardUserService.Stub() {
             if (android.os.Process.myUid() == 0) {
                 try {
                     // setgid 必须在 setuid 之前调用，因为 setuid 后将失去 root 权限
+                    @Suppress("DEPRECATION")
                     android.system.Os.setgid(2000)
+                    @Suppress("DEPRECATION")
                     android.system.Os.setuid(2000)
                     android.util.Log.i(TAG, "Switched UID/GID from root(0) to shell(2000) for clipboard access")
                 } catch (e: Exception) {
@@ -44,9 +46,19 @@ class ClipboardUserService : IClipboardUserService.Stub() {
         }
 
         private var clipboardService: Any? = null
+        private var clipboardBinder: IBinder? = null
 
+        @Synchronized
         private fun getClipboardService(): Any? {
-            if (clipboardService != null) return clipboardService
+            val cachedBinder = clipboardBinder
+            if (clipboardService != null && cachedBinder != null &&
+                cachedBinder.isBinderAlive && cachedBinder.pingBinder()
+            ) {
+                return clipboardService
+            }
+            // ClipboardService can restart independently. Do not keep its old proxy forever.
+            clipboardService = null
+            clipboardBinder = null
             return try {
                 // 在 Shizuku 进程中，通过 ServiceManager 获取 clipboard service
                 val serviceManager = Class.forName("android.os.ServiceManager")
@@ -58,6 +70,7 @@ class ClipboardUserService : IClipboardUserService.Stub() {
                 }
                 val iClipboardStub = Class.forName("android.content.IClipboard\$Stub")
                 val asInterface = iClipboardStub.getMethod("asInterface", IBinder::class.java)
+                clipboardBinder = binder
                 clipboardService = asInterface.invoke(null, binder)
                 android.util.Log.d(TAG, "Got clipboard service: ${clipboardService?.javaClass?.name}")
                 clipboardService
@@ -295,10 +308,26 @@ class ClipboardUserService : IClipboardUserService.Stub() {
         }
     }
 
+    /**
+     * End-to-end health probe used by the App process before every Shizuku operation.
+     * It detects an alive UserService whose cached system clipboard Binder has died.
+     */
+    override fun isClipboardServiceHealthy(): Boolean {
+        if (getClipboardService() == null) return false
+        val binder = clipboardBinder ?: return false
+        return try {
+            binder.isBinderAlive && binder.pingBinder()
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "Clipboard service health check failed", e)
+            false
+        }
+    }
+
     override fun destroy() {
         android.util.Log.i(TAG, "UserService destroy called, exiting process")
         clearClipboardChangedCallback()
         clipboardService = null
+        clipboardBinder = null
         System.exit(0)
     }
 }

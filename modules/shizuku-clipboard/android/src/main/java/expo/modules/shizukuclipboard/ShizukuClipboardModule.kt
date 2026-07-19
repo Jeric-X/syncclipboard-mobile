@@ -57,7 +57,7 @@ class ShizukuClipboardModule : Module() {
             .daemon(false)
             .processNameSuffix("clipboard")
             .debuggable(true)
-            .version(2)
+            .version(6)
     }
 
     private val serviceConnection = object : ServiceConnection {
@@ -65,14 +65,21 @@ class ShizukuClipboardModule : Module() {
             NativeLogger.i(TAG, "UserService connected: ${name?.className}")
             isBinding = false
             if (service != null && service.pingBinder()) {
-                clipboardService = IClipboardUserService.Stub.asInterface(service)
+                val userService = IClipboardUserService.Stub.asInterface(service)
+                if (userService == null) {
+                    NativeLogger.e(TAG, "Failed to create UserService interface")
+                    return
+                }
+                clipboardService = userService
                 serviceConnected = true
                 NativeLogger.i(TAG, "UserService bound successfully")
                 // 传入本进程 token，使 UserService 在主进程死亡时能自动退出
                 try {
-                    clipboardService?.init(callerToken)
+                    userService.init(callerToken)
                 } catch (e: Exception) {
                     NativeLogger.e(TAG, "Failed to init UserService with caller token", e)
+                    invalidateUserService("init failed")
+                    return
                 }
                 if (clipboardListenerRequested) {
                     registerClipboardListener()
@@ -144,10 +151,48 @@ class ShizukuClipboardModule : Module() {
         }
     }
 
-    private fun unbindUserService() {
-        if (!serviceConnected) return
+    private fun isServiceAlive(service: IClipboardUserService): Boolean {
+        return try {
+            val binder = service.asBinder()
+            binder.isBinderAlive && binder.pingBinder()
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Verifies both the UserService Binder and its connection to Android's clipboard service. */
+    private fun isUserServiceHealthy(service: IClipboardUserService): Boolean {
+        if (!isServiceAlive(service)) return false
+        return try {
+            service.isClipboardServiceHealthy()
+        } catch (e: Exception) {
+            NativeLogger.w(TAG, "UserService health check failed: ${e.message}")
+            false
+        }
+    }
+
+    /** Removes a failed UserService so the next bind starts with a fresh service record. */
+    private fun invalidateUserService(reason: String) {
+        NativeLogger.w(TAG, "Removing unhealthy UserService for recreation: $reason")
+        clipboardService = null
+        serviceConnected = false
+        isBinding = false
         try {
-            clipboardService?.destroy()
+            // Remove the server-side record as well as this process' local connection.
+            Shizuku.unbindUserService(userServiceArgs, serviceConnection, true)
+        } catch (e: Exception) {
+            NativeLogger.w(TAG, "Failed to remove unhealthy UserService: ${e.message}")
+        }
+    }
+
+    private fun unbindUserService() {
+        if (!serviceConnected && !isBinding) return
+        val service = clipboardService
+        clipboardService = null
+        serviceConnected = false
+        isBinding = false
+        try {
+            service?.destroy()
         } catch (e: Exception) {
             NativeLogger.e(TAG, "Failed to call destroy on UserService", e)
         }
@@ -156,18 +201,20 @@ class ShizukuClipboardModule : Module() {
         } catch (e: Exception) {
             NativeLogger.e(TAG, "Failed to unbind UserService", e)
         }
-        clipboardService = null
-        serviceConnected = false
     }
 
     private fun registerClipboardListener(): Boolean {
-        val service = clipboardService ?: return false
-        return try {
-            service.setClipboardChangedCallback(clipboardChangedCallback)
-        } catch (e: Exception) {
-            NativeLogger.e(TAG, "Failed to register primary clip listener", e)
-            false
+        repeat(2) { attempt ->
+            val service = ensureServiceConnected() ?: return false
+            try {
+                if (service.setClipboardChangedCallback(clipboardChangedCallback)) return true
+                NativeLogger.w(TAG, "Primary clip listener registration returned false")
+            } catch (e: Exception) {
+                NativeLogger.w(TAG, "Failed to register primary clip listener: ${e.message}")
+            }
+            if (attempt == 0) invalidateUserService("listener registration failed")
         }
+        return false
     }
 
     private fun sendClipboardListenerUnavailable() {
@@ -179,17 +226,46 @@ class ShizukuClipboardModule : Module() {
     }
 
     private fun ensureServiceConnected(): IClipboardUserService? {
-        if (clipboardService != null && serviceConnected) {
-            return clipboardService
+        val currentService = clipboardService
+        if (currentService != null && serviceConnected) {
+            if (isUserServiceHealthy(currentService)) return currentService
+            invalidateUserService("UserService health check failed")
         }
         // 尝试重新绑定
         bindUserService()
         // 等待短暂时间让连接建立
         val startTime = System.currentTimeMillis()
-        while (clipboardService == null && System.currentTimeMillis() - startTime < 3000) {
+        while (System.currentTimeMillis() - startTime < 3000) {
+            val service = clipboardService
+            if (service != null && serviceConnected) {
+                if (isUserServiceHealthy(service)) return service
+                invalidateUserService("newly connected UserService health check failed")
+                return null
+            }
             Thread.sleep(100)
         }
-        return clipboardService
+        NativeLogger.w(TAG, "Timed out waiting for a live UserService")
+        return null
+    }
+
+    private fun <T> callUserService(
+        operation: String,
+        fallback: T,
+        block: (IClipboardUserService) -> T
+    ): T {
+        repeat(2) { attempt ->
+            val service = ensureServiceConnected() ?: return fallback
+            try {
+                return block(service)
+            } catch (e: Exception) {
+                NativeLogger.w(
+                    TAG,
+                    "$operation failed on UserService (attempt ${attempt + 1}): ${e.message}"
+                )
+                if (attempt == 0) invalidateUserService("$operation remote call failed")
+            }
+        }
+        return fallback
     }
 
     override fun definition() = ModuleDefinition {
@@ -246,13 +322,9 @@ class ShizukuClipboardModule : Module() {
         AsyncFunction("getStringViaShizuku") { promise: Promise ->
             try {
                 NativeLogger.i(TAG, "getStringViaShizuku: called")
-                val service = ensureServiceConnected()
-                if (service == null) {
-                    NativeLogger.e(TAG, "getStringViaShizuku: UserService not connected")
-                    promise.resolve("")
-                    return@AsyncFunction
+                val text = callUserService("getStringViaShizuku", "") {
+                    it.primaryClipText ?: ""
                 }
-                val text = service.primaryClipText ?: ""
                 NativeLogger.i(TAG, "getStringViaShizuku: result length=${text.length}")
                 promise.resolve(text)
             } catch (e: Exception) {
@@ -263,12 +335,9 @@ class ShizukuClipboardModule : Module() {
 
         AsyncFunction("hasStringViaShizuku") { promise: Promise ->
             try {
-                val service = ensureServiceConnected()
-                if (service == null) {
-                    promise.resolve(false)
-                    return@AsyncFunction
-                }
-                promise.resolve(service.hasPrimaryClipText())
+                promise.resolve(callUserService("hasStringViaShizuku", false) {
+                    it.hasPrimaryClipText()
+                })
             } catch (e: Exception) {
                 NativeLogger.e(TAG, "hasStringViaShizuku failed", e)
                 promise.resolve(false)
@@ -277,12 +346,9 @@ class ShizukuClipboardModule : Module() {
 
         AsyncFunction("hasImageViaShizuku") { promise: Promise ->
             try {
-                val service = ensureServiceConnected()
-                if (service == null) {
-                    promise.resolve(false)
-                    return@AsyncFunction
-                }
-                promise.resolve(service.hasPrimaryClipImage())
+                promise.resolve(callUserService("hasImageViaShizuku", false) {
+                    it.hasPrimaryClipImage()
+                })
             } catch (e: Exception) {
                 NativeLogger.e(TAG, "hasImageViaShizuku failed", e)
                 promise.resolve(false)
@@ -291,12 +357,9 @@ class ShizukuClipboardModule : Module() {
 
         AsyncFunction("getImageUriViaShizuku") { promise: Promise ->
             try {
-                val service = ensureServiceConnected()
-                if (service == null) {
-                    promise.resolve(null)
-                    return@AsyncFunction
+                val uri = callUserService("getImageUriViaShizuku", "") {
+                    it.primaryClipImageUri ?: ""
                 }
-                val uri = service.primaryClipImageUri
                 promise.resolve(if (uri.isNullOrEmpty()) null else uri)
             } catch (e: Exception) {
                 NativeLogger.e(TAG, "getImageUriViaShizuku failed", e)
@@ -307,8 +370,7 @@ class ShizukuClipboardModule : Module() {
         AsyncFunction("startPrimaryClipChangedListener") { promise: Promise ->
             try {
                 clipboardListenerRequested = true
-                val service = ensureServiceConnected()
-                promise.resolve(service != null && registerClipboardListener())
+                promise.resolve(registerClipboardListener())
             } catch (e: Exception) {
                 NativeLogger.e(TAG, "Failed to start primary clip listener", e)
                 promise.resolve(false)
