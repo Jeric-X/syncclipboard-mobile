@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 
 export interface SettingItemProps {
@@ -31,6 +31,9 @@ export interface SettingItemProps {
 
   /** 整行可点击时的回调 */
   onPress?: () => void;
+
+  /** 按压反馈方式，highlight 不会降低右侧控件透明度 */
+  pressFeedback?: 'opacity' | 'highlight';
 }
 
 export const SettingItem: React.FC<SettingItemProps> = ({
@@ -41,6 +44,7 @@ export const SettingItem: React.FC<SettingItemProps> = ({
   showBorder = true,
   children,
   onPress,
+  pressFeedback = 'opacity',
 }) => {
   const { theme } = useTheme();
 
@@ -65,7 +69,10 @@ export const SettingItem: React.FC<SettingItemProps> = ({
         {descriptionLink && (
           <Text
             style={[styles.settingDescription, { color: theme.colors.primary }]}
-            onPress={descriptionLink.onPress}
+            onPress={(event) => {
+              event.stopPropagation();
+              descriptionLink.onPress();
+            }}
           >
             {descriptionLink.text}
           </Text>
@@ -82,6 +89,20 @@ export const SettingItem: React.FC<SettingItemProps> = ({
   ];
 
   if (onPress) {
+    if (pressFeedback === 'highlight') {
+      return (
+        <Pressable
+          style={({ pressed }) => [
+            containerStyle,
+            pressed && { backgroundColor: theme.colors.borderLight },
+          ]}
+          onPress={onPress}
+        >
+          {content}
+        </Pressable>
+      );
+    }
+
     return (
       <TouchableOpacity style={containerStyle} onPress={onPress} activeOpacity={0.7}>
         {content}

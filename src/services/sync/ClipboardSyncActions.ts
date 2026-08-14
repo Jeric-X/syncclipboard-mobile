@@ -12,6 +12,7 @@ import { DedupedOperation } from '@/utils/DedupedOperation';
 import { File } from 'expo-file-system';
 import i18n from '@/i18n';
 import { setJustUploadedHash, setJustSetLocalHash } from './JustSetHash';
+import { networkAutoSwitchService } from '../NetworkAutoSwitchService';
 
 /** 比较两个 ClipboardContent 是否代表相同内容（用于去重继承判断） */
 function isSameContent(a: ClipboardContent, b: ClipboardContent): boolean {
@@ -48,6 +49,9 @@ export async function setRemoteClipboard(
   }
 
   return _uploadOp.execute(content, onProgress, signal, async (sig, notify) => {
+    if (sig.aborted) throw new DOMException('Aborted', 'AbortError');
+
+    await networkAutoSwitchService.ensureCurrentServer();
     if (sig.aborted) throw new DOMException('Aborted', 'AbortError');
 
     const server = await configService.getActiveServer();
@@ -103,6 +107,7 @@ export async function downloadRemoteClipboard(
   onProgress?: (info: ProgressDetail) => void,
   signal?: AbortSignal
 ): Promise<ClipboardContent | null> {
+  await networkAutoSwitchService.ensureCurrentServer();
   const actualContent = content ?? clipboardSyncState.getState().remoteContent;
   if (!actualContent) return null;
 
@@ -161,6 +166,7 @@ export async function refreshMonitor(): Promise<void> {
  * @returns 远程剪贴板内容
  */
 export async function fetchRemoteClipboard(signal?: AbortSignal): Promise<ClipboardContent> {
+  await networkAutoSwitchService.ensureCurrentServer();
   return await remoteClipboardMonitor.fetchLatest(signal);
 }
 

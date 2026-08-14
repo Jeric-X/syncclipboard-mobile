@@ -12,6 +12,9 @@ export type { SettingItemProps } from './SettingItem';
 export { SettingSwitch } from './SettingSwitch';
 export type { SettingSwitchProps } from './SettingSwitch';
 
+export { ThemedSwitch } from './ThemedSwitch';
+export type { ThemedSwitchProps } from './ThemedSwitch';
+
 export { SettingInput } from './SettingInput';
 export type { SettingInputProps } from './SettingInput';
 

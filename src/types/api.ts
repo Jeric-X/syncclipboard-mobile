@@ -35,6 +35,13 @@ export interface ProfileDto {
  * 服务器配置
  */
 export interface ServerConfig {
+  /**
+   * 本机服务器配置的稳定 ID。
+   *
+   * 旧版导入数据可能暂时缺失，ConfigStorage 加载时会自动补齐。
+   */
+  id?: string;
+
   /** 服务器类型 */
   type: 'syncclipboard' | 'webdav' | 's3';
 

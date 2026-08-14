@@ -3,8 +3,9 @@
  * 提供主题切换功能、服务器配置、多用户切换
  */
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
+  AppState,
   View,
   Text,
   StyleSheet,
@@ -29,6 +30,7 @@ import {
   SettingsSection,
   SettingItem,
   SettingSwitch,
+  ThemedSwitch,
   SettingInput,
   SettingDropdown,
   SettingAction,
@@ -65,11 +67,21 @@ import { extractVerificationCode } from '@/tasks/SmsUploadTask';
 import { useTranslation } from 'react-i18next';
 import { useI18n } from '@/hooks/useI18n';
 import type { Language } from '@/i18n';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import type { SettingsStackParamList } from '@/navigation/types';
+import { ChevronRight } from 'react-native-feather';
+import { useNetworkAutoSwitch } from '@/hooks/useNetworkAutoSwitch';
+import { networkAutoSwitchService } from '@/services/NetworkAutoSwitchService';
+import { currentNetworkService, type WifiPermissionState } from '@/services/CurrentNetworkService';
+import { getNetworkAutoSwitchDescription } from '@/utils/networkAutoSwitch';
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
   const { t } = useTranslation();
   const { language: currentLanguage, systemLanguage, setLanguage } = useI18n();
+  const navigation = useNavigation<StackNavigationProp<SettingsStackParamList>>();
+  const autoSwitchRuntime = useNetworkAutoSwitch();
   const {
     config,
     isLoaded,
@@ -99,6 +111,7 @@ export const SettingsScreen = () => {
     setTempDisabledBackgroundTasks,
     setAutoSaveSyncFile,
     setSyncFileSavePath,
+    updateNetworkAutoSwitch,
   } = useSettingsStore();
 
   const [showServerModal, setShowServerModal] = useState(false);
@@ -274,18 +287,25 @@ export const SettingsScreen = () => {
   }, []);
 
   // 刷新权限状态
-  const refreshPermissions = async () => {
+  const refreshPermissions = useCallback(async () => {
     if (Platform.OS !== 'android') return;
     setIsRefreshingPermissions(true);
     try {
       const { PermissionsAndroid } = require('react-native');
-      const [notif, sms] = await Promise.all([
+      const [notif, sms, wifiLocation, wifiBackgroundLocation] = await Promise.all([
         PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS),
         PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECEIVE_SMS),
+        currentNetworkService.getFineLocationPermissionState(),
+        currentNetworkService.getBackgroundLocationPermissionState(),
       ]);
       setPermNotification(notif);
       setPermOverlay(hasOverlayPermission());
       setPermSms(sms);
+      setPermWifiLocation(wifiLocation === 'granted');
+      setPermWifiBackgroundLocation(
+        wifiBackgroundLocation === 'granted' || wifiBackgroundLocation === 'unavailable'
+      );
+      setLocationServicesEnabled(currentNetworkService.isLocationServicesEnabled());
       const { isIgnoringBatteryOptimizations } = await import('native-util');
       setPermBattery(isIgnoringBatteryOptimizations());
       const shizukuUp = isShizukuAvailable();
@@ -296,11 +316,15 @@ export const SettingsScreen = () => {
     } finally {
       setIsRefreshingPermissions(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    refreshPermissions();
-  }, []);
+    void refreshPermissions();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refreshPermissions();
+    });
+    return () => subscription.remove();
+  }, [refreshPermissions]);
 
   // 自动检查更新（每天一次）
   useEffect(() => {
@@ -328,7 +352,9 @@ export const SettingsScreen = () => {
   };
   const languageOptions: { label: string; value: Language }[] = [
     {
-      label: `${t('settings.languageAuto')}（${langNativeNames[systemLanguage] ?? systemLanguage}）`,
+      label: `${t('settings.languageAuto')}（${
+        langNativeNames[systemLanguage] ?? systemLanguage
+      }）`,
       value: 'auto',
     },
     { label: langNativeNames['zh'] ?? t('settings.languageZh'), value: 'zh' as Language },
@@ -373,11 +399,31 @@ export const SettingsScreen = () => {
   const [permNotification, setPermNotification] = useState<boolean>(false);
   const [permOverlay, setPermOverlay] = useState<boolean>(false);
   const [permSms, setPermSms] = useState<boolean>(false);
+  const [permWifiLocation, setPermWifiLocation] = useState<boolean>(false);
+  const [permWifiBackgroundLocation, setPermWifiBackgroundLocation] = useState<boolean>(false);
+  const [locationServicesEnabled, setLocationServicesEnabled] = useState<boolean>(false);
   const [permBattery, setPermBattery] = useState<boolean>(false);
   const [permShizuku, setPermShizuku] = useState<boolean>(false);
   const [shizukuAvailable, setShizukuAvailable] = useState<boolean>(false);
   const [isRefreshingPermissions, setIsRefreshingPermissions] = useState<boolean>(false);
   const hasBatteryOptRequested = useRef<boolean>(false);
+
+  const handleNetworkPermissionResult = (
+    result: WifiPermissionState,
+    update: (granted: boolean) => void
+  ) => {
+    update(result === 'granted' || result === 'unavailable');
+    if (result === 'blocked') {
+      Alert.alert(
+        t('settings.permissionWifiBlockedTitle'),
+        t('settings.permissionWifiBlockedMessage'),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('common.goToSettings'), onPress: currentNetworkService.openSystemSettings },
+        ]
+      );
+    }
+  };
 
   // 目录对象
   const cacheDir = CLIPBOARD_TEMP_DIR;
@@ -445,6 +491,10 @@ export const SettingsScreen = () => {
       setServersCollapsed(true);
     }
 
+    if (config?.networkAutoSwitch.enabled) {
+      networkAutoSwitchService.beginManualOverride();
+    }
+
     try {
       const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
       const syncService = getHistorySyncService();
@@ -460,6 +510,16 @@ export const SettingsScreen = () => {
     } catch (error: unknown) {
       showMessage(error instanceof Error ? error.message : t('common.operationFailed'), 'error');
     }
+  };
+
+  const handleNetworkAutoSwitchToggle = (enabled: boolean) => {
+    if (enabled && servers.length === 0) {
+      Alert.alert(t('networkAutoSwitch.title'), t('networkAutoSwitch.needServer'), [
+        { text: t('common.confirm') },
+      ]);
+      return;
+    }
+    void updateNetworkAutoSwitch({ enabled });
   };
 
   // 处理切换自动复制
@@ -1474,20 +1534,65 @@ export const SettingsScreen = () => {
                 onPress={() => {}}
                 onEdit={() => handleEditServer(activeServerIndex)}
                 onDelete={() => handleDeleteServer(activeServerIndex)}
+                affectedRuleCount={
+                  config?.networkAutoSwitch.rules.filter(
+                    (rule) => rule.targetServerId === activeServer.id
+                  ).length
+                }
               />
             )
           ) : (
             servers.map((server, index) => (
               <ServerListItem
-                key={index}
+                key={server.id ?? index}
                 config={server}
                 isActive={index === activeServerIndex}
                 onPress={() => handleSetActiveServer(index)}
                 onEdit={() => handleEditServer(index)}
                 onDelete={() => handleDeleteServer(index)}
+                affectedRuleCount={
+                  config?.networkAutoSwitch.rules.filter(
+                    (rule) => rule.targetServerId === server.id
+                  ).length
+                }
               />
             ))
           )}
+          <View
+            style={[
+              styles.autoSwitchCard,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
+            ]}
+          >
+            <SettingItem
+              label={t('networkAutoSwitch.title')}
+              description={getNetworkAutoSwitchDescription(
+                config?.networkAutoSwitch.enabled ?? false,
+                autoSwitchRuntime,
+                t
+              )}
+              descriptionLink={
+                config?.networkAutoSwitch.enabled && autoSwitchRuntime.manualOverride
+                  ? {
+                      text: t('networkAutoSwitch.restoreAuto'),
+                      onPress: () => void networkAutoSwitchService.clearManualOverride(),
+                    }
+                  : undefined
+              }
+              showBorder={false}
+              pressFeedback="highlight"
+              onPress={() => navigation.navigate('NetworkAutoSwitch')}
+            >
+              <View style={styles.autoSwitchControls}>
+                <ThemedSwitch
+                  testID="settings-network-auto-switch"
+                  value={config?.networkAutoSwitch.enabled ?? false}
+                  onValueChange={handleNetworkAutoSwitchToggle}
+                />
+                <ChevronRight color={theme.colors.textSecondary} width={20} height={20} />
+              </View>
+            </SettingItem>
+          </View>
         </View>
 
         {/* 同步设置部分 */}
@@ -1683,6 +1788,73 @@ export const SettingsScreen = () => {
               label={t('settings.permissionNotification')}
               value={permNotification}
               onChange={() => Linking.openSettings()}
+            />
+
+            <SettingSwitch
+              label={t('settings.permissionWifiLocation')}
+              description={t('settings.permissionWifiLocationDesc')}
+              value={permWifiLocation}
+              onChange={async () => {
+                if (permWifiLocation) {
+                  await currentNetworkService.openSystemSettings();
+                  return;
+                }
+                handleNetworkPermissionResult(
+                  await currentNetworkService.requestFineLocationPermission(),
+                  setPermWifiLocation
+                );
+              }}
+            />
+
+            {Number(Platform.Version) >= 29 && (
+              <SettingSwitch
+                label={t('settings.permissionWifiBackgroundLocation')}
+                description={t('settings.permissionWifiBackgroundLocationDesc')}
+                value={permWifiBackgroundLocation}
+                onChange={async () => {
+                  if (permWifiBackgroundLocation) {
+                    await currentNetworkService.openSystemSettings();
+                    return;
+                  }
+
+                  if (!permWifiLocation) {
+                    const fineResult = await currentNetworkService.requestFineLocationPermission();
+                    handleNetworkPermissionResult(fineResult, setPermWifiLocation);
+                    if (fineResult !== 'granted') return;
+                  }
+
+                  Alert.alert(
+                    t('settings.permissionWifiBackgroundLocationTitle'),
+                    t('settings.permissionWifiBackgroundLocationMessage'),
+                    [
+                      { text: t('common.cancel'), style: 'cancel' },
+                      {
+                        text:
+                          Number(Platform.Version) >= 30
+                            ? t('common.goToSettings')
+                            : t('common.confirm'),
+                        onPress: async () => {
+                          if (Number(Platform.Version) >= 30) {
+                            await currentNetworkService.openSystemSettings();
+                            return;
+                          }
+                          handleNetworkPermissionResult(
+                            await currentNetworkService.requestBackgroundLocationPermission(),
+                            setPermWifiBackgroundLocation
+                          );
+                        },
+                      },
+                    ]
+                  );
+                }}
+              />
+            )}
+
+            <SettingSwitch
+              label={t('settings.locationServices')}
+              description={t('settings.locationServicesDesc')}
+              value={locationServicesEnabled}
+              onChange={currentNetworkService.openLocationSettings}
             />
 
             <SettingSwitch
@@ -2178,5 +2350,17 @@ const styles = StyleSheet.create({
   smsTestModalButtonText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  autoSwitchControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  autoSwitchCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
 });

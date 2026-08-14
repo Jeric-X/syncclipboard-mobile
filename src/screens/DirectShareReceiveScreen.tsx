@@ -5,7 +5,6 @@
 
 import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSettingsStore } from '@/stores/settingsStore';
 import {
   createContentFromFile,
   createContentFromText,
@@ -28,7 +27,6 @@ export const DirectShareReceiveScreen: React.FC<DirectShareReceiveScreenProps> =
   overlayMode = false,
 }) => {
   const { t } = useTranslation();
-  const activeServer = useSettingsStore((s) => s.getActiveServer());
   const [loadingText, setLoadingText] = useState(() => t('shareReceive.processingFile'));
   const [progress, setProgress] = useState<ProgressInfo | null>(null);
   const [previewText, setPreviewText] = useState<string | undefined>(undefined);
@@ -36,8 +34,6 @@ export const DirectShareReceiveScreen: React.FC<DirectShareReceiveScreenProps> =
 
   const task = useCallback(
     async (signal: AbortSignal) => {
-      if (!activeServer) throw new Error(t('common.serverNotConfigured'));
-
       // Handle text share
       if (shareData.type === 'text' && shareData.text) {
         setLoadingText(t('shareReceive.uploadingText'));
@@ -96,7 +92,7 @@ export const DirectShareReceiveScreen: React.FC<DirectShareReceiveScreenProps> =
 
       throw new Error(t('shareReceive.noContent'));
     },
-    [shareData, activeServer, t]
+    [shareData, t]
   );
 
   return (

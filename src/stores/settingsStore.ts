@@ -9,6 +9,10 @@ import { ServerConfig } from '../types/api';
 import { ConflictResolution } from '../types/sync';
 import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
+import type { NetworkAutoSwitchConfig, NetworkAutoSwitchRule } from '../types/networkAutoSwitch';
+import { createStableId } from '../utils/id';
+import { normalizeNetworkRule, validateNetworkRule } from '../utils/networkAutoSwitch';
+import { networkAutoSwitchService } from '../services/NetworkAutoSwitchService';
 
 /**
  * 设置状态接口
@@ -55,6 +59,16 @@ interface SettingsState {
 
   /** 设置激活服务器 */
   setActiveServer: (index: number) => Promise<void>;
+
+  /** 更新网络自动切换全局配置。 */
+  updateNetworkAutoSwitch: (updates: Partial<NetworkAutoSwitchConfig>) => Promise<void>;
+
+  /** 新增或替换规则，返回保存后的规则 ID。 */
+  saveNetworkAutoSwitchRule: (rule: NetworkAutoSwitchRule) => Promise<string>;
+
+  deleteNetworkAutoSwitchRule: (ruleId: string) => Promise<void>;
+
+  moveNetworkAutoSwitchRule: (ruleId: string, direction: -1 | 1) => Promise<void>;
 
   // 主题设置
   /** 获取主题 */
@@ -262,12 +276,63 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ isSaving: true, error: null });
 
     try {
+      if (get().config?.networkAutoSwitch.enabled) {
+        networkAutoSwitchService.beginManualOverride();
+      }
       const config = await configService.setActiveServer(index);
       set({ config, isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to set active server';
       set({ error: errorMessage, isSaving: false });
     }
+  },
+
+  updateNetworkAutoSwitch: async (updates: Partial<NetworkAutoSwitchConfig>) => {
+    const config = get().config;
+    if (!config) throw new Error('Config not loaded');
+    await get().updateConfig({
+      networkAutoSwitch: { ...config.networkAutoSwitch, ...updates },
+    });
+  },
+
+  saveNetworkAutoSwitchRule: async (input: NetworkAutoSwitchRule) => {
+    const config = get().config;
+    if (!config) throw new Error('Config not loaded');
+    const id = input.id?.trim() || createStableId('rule');
+    const normalized = normalizeNetworkRule({ ...input, id });
+    validateNetworkRule(
+      normalized,
+      new Set(
+        config.servers
+          .map((server) => server.id)
+          .filter((serverId): serverId is string => typeof serverId === 'string')
+      )
+    );
+    const index = config.networkAutoSwitch.rules.findIndex((rule) => rule.id === id);
+    const rules = [...config.networkAutoSwitch.rules];
+    if (index >= 0) rules[index] = normalized;
+    else rules.push(normalized);
+    await get().updateNetworkAutoSwitch({ rules });
+    return id;
+  },
+
+  deleteNetworkAutoSwitchRule: async (ruleId: string) => {
+    const config = get().config;
+    if (!config) throw new Error('Config not loaded');
+    await get().updateNetworkAutoSwitch({
+      rules: config.networkAutoSwitch.rules.filter((rule) => rule.id !== ruleId),
+    });
+  },
+
+  moveNetworkAutoSwitchRule: async (ruleId: string, direction: -1 | 1) => {
+    const config = get().config;
+    if (!config) throw new Error('Config not loaded');
+    const rules = [...config.networkAutoSwitch.rules];
+    const index = rules.findIndex((rule) => rule.id === ruleId);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= rules.length) return;
+    [rules[index], rules[target]] = [rules[target], rules[index]];
+    await get().updateNetworkAutoSwitch({ rules });
   },
 
   getTheme: () => {
@@ -428,4 +493,9 @@ backgroundRuntimeState.subscribe(() => {
   useSettingsStore.setState({
     isTempDisabledBackgroundTasks: backgroundRuntimeState.isTempDisabled(),
   });
+});
+
+// 自动切换等 service 层写入也必须及时驱动设置页和首页刷新。
+configService.subscribe((config) => {
+  useSettingsStore.setState({ config, isLoaded: true });
 });

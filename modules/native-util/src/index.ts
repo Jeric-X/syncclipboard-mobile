@@ -41,8 +41,41 @@ export interface ProgressInfo {
   totalBytes: number;
 }
 
+export interface NativeCurrentNetworkInfo {
+  isConnected: boolean;
+  isInternetReachable: boolean | null;
+  type: 'wifi' | 'cellular' | 'ethernet' | 'vpn' | 'other' | 'none' | 'unknown';
+  ssid: string | null;
+  ssidPermissionGranted: boolean;
+  locationServicesEnabled: boolean;
+  ipAddresses: string[];
+}
+
+export interface NativeNetworkChangedEvent {
+  capturedAt: number;
+}
+
+export type NativeNotificationImportance = 'min' | 'low' | 'default' | 'high';
+
+export interface NativeNotificationOptions {
+  id: number;
+  channelId: string;
+  channelName: string;
+  title: string;
+  content: string;
+  importance?: NativeNotificationImportance;
+  timeoutMs?: number;
+  autoCancel?: boolean;
+  openApp?: boolean;
+}
+
 export interface NativeUtilModuleType {
   moveTaskToBack(): boolean;
+  getCurrentNetworkInfo(): NativeCurrentNetworkInfo;
+  isLocationServicesEnabled(): boolean;
+  openLocationSettings(): boolean;
+  showNotification(options: NativeNotificationOptions): boolean;
+  cancelNotification(id: number): boolean;
   resetSharingState(): boolean;
   calculateStringMD5Base64(data: string): string;
   startCalculateFileMD5Base64(fileUri: string): string;
@@ -89,6 +122,42 @@ export const isNativeHashModuleAvailable = Platform.OS === 'android';
 export function moveTaskToBack(): boolean {
   if (Platform.OS !== 'android') return false;
   return NativeUtilModule.moveTaskToBack();
+}
+
+/** 读取 Android 当前默认网络及其 LinkProperties。 */
+export function getCurrentNetworkInfo(): NativeCurrentNetworkInfo | null {
+  if (Platform.OS !== 'android') return null;
+  return NativeUtilModule.getCurrentNetworkInfo();
+}
+
+/** Subscribe to Android default-network invalidation events. */
+export function addNetworkChangeListener(
+  listener: (event: NativeNetworkChangedEvent) => void
+): EventSubscription | null {
+  if (Platform.OS !== 'android') return null;
+  return NativeUtilModule.addListener('onNetworkChanged', listener);
+}
+
+export function isLocationServicesEnabled(): boolean {
+  if (Platform.OS !== 'android') return true;
+  return NativeUtilModule.isLocationServicesEnabled();
+}
+
+export function openLocationSettings(): boolean {
+  if (Platform.OS !== 'android') return false;
+  return NativeUtilModule.openLocationSettings();
+}
+
+/** Show an Android system notification through the shared native-util implementation. */
+export function showNotification(options: NativeNotificationOptions): boolean {
+  if (Platform.OS !== 'android') return false;
+  return NativeUtilModule.showNotification(options);
+}
+
+/** Cancel a system notification previously shown through native-util. */
+export function cancelNotification(id: number): boolean {
+  if (Platform.OS !== 'android') return false;
+  return NativeUtilModule.cancelNotification(id);
 }
 
 /**

@@ -12,6 +12,7 @@ import type { ProfileDto } from '../types/api';
 import { getAPIClient } from '../services/ClientFactory';
 import type { ISyncClipboardAPI } from '../api/clients/APIClient';
 import { sha256 } from 'js-sha256';
+import { networkAutoSwitchService } from '../services/NetworkAutoSwitchService';
 
 // 重试配置
 const MAX_RETRIES = 3;
@@ -156,7 +157,7 @@ export default async function SmsUploadTask(taskData?: SmsTaskData): Promise<voi
   }
 
   // 3. 加载配置
-  const config = await loadConfig();
+  let config = await loadConfig();
   if (!config) {
     console.error('[SmsUploadTask] No config found, cannot upload');
     return;
@@ -164,6 +165,14 @@ export default async function SmsUploadTask(taskData?: SmsTaskData): Promise<voi
 
   if (!config.enableSmsForwarding) {
     console.log('[SmsUploadTask] SMS forwarding disabled in config');
+    return;
+  }
+
+  // Headless 入口可能没有收到主进程的网络事件，访问服务器前重新评估。
+  await networkAutoSwitchService.ensureCurrentServer();
+  config = await loadConfig();
+  if (!config) {
+    console.error('[SmsUploadTask] Config unavailable after network evaluation');
     return;
   }
 

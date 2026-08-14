@@ -53,9 +53,9 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
   const [url, setUrl] = useState(initialConfig?.url || '');
   const [username, setUsername] = useState(initialConfig?.username || '');
   const [password, setPassword] = useState(initialConfig?.password || '');
+  const [serverName, setServerName] = useState(initialConfig?.name || '');
 
   // S3 专有字段
-  const [serverName, setServerName] = useState(initialConfig?.name || '');
   const [region, setRegion] = useState(initialConfig?.region || 'us-east-1');
   const [bucketName, setBucketName] = useState(initialConfig?.bucketName || '');
   const [objectPrefix, setObjectPrefix] = useState(initialConfig?.objectPrefix || '');
@@ -222,11 +222,11 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
 
     const config: ServerConfig = {
       type,
+      name: serverName.trim() || undefined,
       url: url.trim(),
       username: username.trim(),
       password: password.trim(),
       ...(type === 's3' && {
-        name: serverName.trim() || undefined,
         region: region.trim() || 'us-east-1',
         bucketName: bucketName.trim(),
         objectPrefix: objectPrefix.trim(),
@@ -372,33 +372,35 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                   { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
                 ]}
               >
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                    {t('server.name')}
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        color: theme.colors.text,
+                        backgroundColor: theme.colors.background,
+                        borderColor: theme.colors.divider,
+                      },
+                    ]}
+                    placeholder={t('server.namePlaceholder')}
+                    placeholderTextColor={theme.colors.textTertiary}
+                    value={serverName}
+                    onChangeText={setServerName}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="next"
+                    submitBehavior="submit"
+                    onSubmitEditing={() =>
+                      type === 's3' ? bucketNameRef.current?.focus() : urlRef.current?.focus()
+                    }
+                  />
+                </View>
+
                 {type === 's3' ? (
                   <>
-                    <View style={styles.inputGroup}>
-                      <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-                        {t('server.name')}
-                      </Text>
-                      <TextInput
-                        style={[
-                          styles.input,
-                          {
-                            color: theme.colors.text,
-                            backgroundColor: theme.colors.background,
-                            borderColor: theme.colors.divider,
-                          },
-                        ]}
-                        placeholder={t('server.namePlaceholder')}
-                        placeholderTextColor={theme.colors.textTertiary}
-                        value={serverName}
-                        onChangeText={setServerName}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        returnKeyType="next"
-                        submitBehavior="submit"
-                        onSubmitEditing={() => bucketNameRef.current?.focus()}
-                      />
-                    </View>
-
                     <View style={styles.inputGroup}>
                       <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
                         {t('server.bucketName')}

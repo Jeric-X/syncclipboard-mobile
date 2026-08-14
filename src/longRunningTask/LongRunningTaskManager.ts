@@ -19,6 +19,7 @@ import { historyTrackerTask } from './HistoryTrackerTask';
 import { clipboardSyncTask } from './ClipboardSyncTask';
 import { remoteClipboardMonitorTask } from './RemoteClipboardMonitorTask';
 import { heartbeatTask } from './HeartbeatTask';
+import { networkAutoSwitchTask } from './NetworkAutoSwitchTask';
 import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
 import { AppState, type AppStateStatus } from 'react-native';
@@ -234,3 +235,5 @@ longRunningTaskManager.register(foregroundServiceTask);
 longRunningTaskManager.register(historySyncTask, true);
 longRunningTaskManager.register(clipboardSyncTask);
 longRunningTaskManager.register(heartbeatTask);
+// 网络自动切换监听成本低，进程存活时不受后台同步总开关影响。
+longRunningTaskManager.register(networkAutoSwitchTask, true);

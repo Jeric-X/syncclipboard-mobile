@@ -6,6 +6,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppConfig, DEFAULT_APP_CONFIG, STORAGE_KEYS } from '../types/storage';
 import { ServerConfig } from '../types/api';
+import { migrateAppConfig } from '../utils/configMigration';
+import { createStableId } from '../utils/id';
+
+function createDefaultConfig(): AppConfig {
+  return migrateAppConfig(DEFAULT_APP_CONFIG, DEFAULT_APP_CONFIG);
+}
 
 /**
  * 配置存储服务
@@ -41,7 +47,7 @@ export class ConfigStorage {
     } catch (error) {
       console.error('[ConfigStorage] Failed to initialize:', error);
       // 使用默认配置
-      this.config = { ...DEFAULT_APP_CONFIG };
+      this.config = createDefaultConfig();
       this.initialized = true;
     }
   }
@@ -54,9 +60,11 @@ export class ConfigStorage {
 
     if (configJson) {
       const savedConfig = JSON.parse(configJson);
-      this.config = { ...DEFAULT_APP_CONFIG, ...savedConfig };
+      this.config = migrateAppConfig(savedConfig, DEFAULT_APP_CONFIG);
+      // 迁移生成的稳定 ID 需要立即持久化，确保重启后引用不变化。
+      await this.saveConfig();
     } else {
-      this.config = { ...DEFAULT_APP_CONFIG };
+      this.config = createDefaultConfig();
       await this.saveConfig();
     }
   }
@@ -104,7 +112,7 @@ export class ConfigStorage {
    * 重置配置为默认值
    */
   public async resetConfig(): Promise<void> {
-    this.config = { ...DEFAULT_APP_CONFIG };
+    this.config = createDefaultConfig();
     await this.saveConfig();
   }
 
@@ -134,7 +142,10 @@ export class ConfigStorage {
    */
   public async addServer(server: ServerConfig): Promise<number> {
     const config = await this.getConfig();
-    config.servers.push(server);
+    const usedIds = new Set(config.servers.map((item) => item.id));
+    const requestedId = server.id?.trim();
+    const id = requestedId && !usedIds.has(requestedId) ? requestedId : createStableId('server');
+    config.servers.push({ ...server, id });
 
     // 如果是第一个服务器，自动激活
     if (config.servers.length === 1) {
@@ -155,7 +166,9 @@ export class ConfigStorage {
       throw new Error(`Invalid server index: ${index}`);
     }
 
-    config.servers[index] = { ...config.servers[index], ...updates };
+    const current = config.servers[index];
+    // 服务器 ID 是规则关联键，编辑服务器时不可改变。
+    config.servers[index] = { ...current, ...updates, id: current.id };
     await this.updateConfig(config);
   }
 
@@ -169,13 +182,24 @@ export class ConfigStorage {
       throw new Error(`Invalid server index: ${index}`);
     }
 
-    config.servers.splice(index, 1);
+    const [deletedServer] = config.servers.splice(index, 1);
 
     // 调整当前激活索引
     if (config.activeServerIndex === index) {
       config.activeServerIndex = config.servers.length > 0 ? 0 : -1;
     } else if (config.activeServerIndex > index) {
       config.activeServerIndex--;
+    }
+
+    if (deletedServer.id) {
+      const autoSwitch = config.networkAutoSwitch;
+      const wasDefault = autoSwitch.defaultServerId === deletedServer.id;
+      config.networkAutoSwitch = {
+        ...autoSwitch,
+        rules: autoSwitch.rules.filter((rule) => rule.targetServerId !== deletedServer.id),
+        defaultServerId: wasDefault ? undefined : autoSwitch.defaultServerId,
+        noMatchAction: wasDefault ? 'none' : autoSwitch.noMatchAction,
+      };
     }
 
     await this.updateConfig(config);
@@ -192,6 +216,17 @@ export class ConfigStorage {
     }
 
     config.activeServerIndex = index;
+    await this.updateConfig(config);
+  }
+
+  /** 使用稳定 ID 设置当前服务器；null 表示不使用服务器。 */
+  public async setActiveServerById(serverId: string | null): Promise<void> {
+    const config = await this.getConfig();
+    const index =
+      serverId === null ? -1 : config.servers.findIndex((server) => server.id === serverId);
+    if (serverId !== null && index < 0) throw new Error(`Invalid server id: ${serverId}`);
+    config.activeServerIndex = index;
+    config.needsHistoryReorganize = true;
     await this.updateConfig(config);
   }
 
@@ -271,8 +306,29 @@ export class ConfigStorage {
         throw new Error('Invalid config: missing servers array');
       }
 
+      const importedIds = config.servers
+        .map((server) => server.id?.trim())
+        .filter((id): id is string => !!id);
+      if (new Set(importedIds).size !== importedIds.length) {
+        throw new Error('Invalid config: duplicate server ids');
+      }
+
+      const migrated = migrateAppConfig(config, DEFAULT_APP_CONFIG);
+      const validIds = new Set(
+        migrated.servers
+          .map((server) => server.id)
+          .filter((id): id is string => typeof id === 'string')
+      );
+      const autoSwitch = migrated.networkAutoSwitch;
+      if (
+        autoSwitch.rules.some((rule) => !validIds.has(rule.targetServerId)) ||
+        (autoSwitch.defaultServerId !== undefined && !validIds.has(autoSwitch.defaultServerId))
+      ) {
+        throw new Error('Invalid config: network auto-switch references a missing server');
+      }
+
       // 合并默认配置（确保所有字段都存在）
-      this.config = { ...DEFAULT_APP_CONFIG, ...config };
+      this.config = migrated;
       await this.saveConfig();
     } catch (error) {
       console.error('[ConfigStorage] Failed to import config:', error);
@@ -285,7 +341,7 @@ export class ConfigStorage {
    */
   public async clear(): Promise<void> {
     await AsyncStorage.removeItem(STORAGE_KEYS.CONFIG);
-    this.config = { ...DEFAULT_APP_CONFIG };
+    this.config = createDefaultConfig();
     this.initialized = false;
   }
 }

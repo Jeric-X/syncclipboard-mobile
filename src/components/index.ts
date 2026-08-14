@@ -15,12 +15,14 @@ export { TopRightMenu } from './TopRightMenu';
 export type { MenuItemConfig } from './TopRightMenu';
 export { QuickLoadingPage } from './QuickLoadingPage';
 export type { QuickLoadingPageProps } from './QuickLoadingPage';
+export { ServerSelect } from './ServerSelect';
 
 // Settings Components
 export {
   SettingsSection,
   SettingItem,
   SettingSwitch,
+  ThemedSwitch,
   SettingInput,
   SettingDropdown,
   createSettingDropdown,
@@ -30,6 +32,7 @@ export type {
   SettingsSectionProps,
   SettingItemProps,
   SettingSwitchProps,
+  ThemedSwitchProps,
   SettingInputProps,
   SettingDropdownProps,
   SettingActionProps,

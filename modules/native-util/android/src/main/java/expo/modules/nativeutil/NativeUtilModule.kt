@@ -43,6 +43,7 @@ class NativeUtilModule : Module() {
         private const val EVENT_DOWNLOAD_PROGRESS = "onDownloadProgress"
         private const val EVENT_ZIP_PROGRESS = "onZipProgress"
         private const val EVENT_COPY_PROGRESS = "onCopyProgress"
+        private const val EVENT_NETWORK_CHANGED = "onNetworkChanged"
 
         private fun guessMimeType(fileName: String): String {
             val extension = fileName.substringAfterLast('.', "").lowercase()
@@ -78,15 +79,76 @@ class NativeUtilModule : Module() {
     private val executor = Executors.newCachedThreadPool()
     private val cancelFlags = ConcurrentHashMap<String, AtomicBoolean>()
     private val pendingJobs = ConcurrentHashMap<String, CompletableFuture<Any>>()
+    private val currentNetworkObserver = CurrentNetworkObserver {
+        sendEvent(EVENT_NETWORK_CHANGED, mapOf("capturedAt" to System.currentTimeMillis().toDouble()))
+    }
 
     override fun definition() = ModuleDefinition {
         Name("NativeUtilModule")
 
-        Events(EVENT_HASH_PROGRESS, EVENT_UPLOAD_PROGRESS, EVENT_DOWNLOAD_PROGRESS, EVENT_ZIP_PROGRESS, EVENT_COPY_PROGRESS)
+        Events(
+            EVENT_HASH_PROGRESS,
+            EVENT_UPLOAD_PROGRESS,
+            EVENT_DOWNLOAD_PROGRESS,
+            EVENT_ZIP_PROGRESS,
+            EVENT_COPY_PROGRESS,
+            EVENT_NETWORK_CHANGED
+        )
+
+        OnStartObserving(EVENT_NETWORK_CHANGED) {
+            currentNetworkObserver.start(appContext.reactContext)
+        }
+
+        OnStopObserving(EVENT_NETWORK_CHANGED) {
+            currentNetworkObserver.stop()
+        }
+
+        OnDestroy {
+            currentNetworkObserver.stop()
+        }
 
         Function("moveTaskToBack") {
             appContext.currentActivity?.moveTaskToBack(true) ?: false
             true
+        }
+
+        Function("getCurrentNetworkInfo") {
+            CurrentNetworkInfoReader.read(appContext.reactContext)
+        }
+
+        Function("isLocationServicesEnabled") {
+            NetworkSettingsHelper.isLocationServicesEnabled(appContext.reactContext)
+        }
+
+        Function("openLocationSettings") {
+            NetworkSettingsHelper.openLocationSettings(appContext.reactContext)
+        }
+
+        Function("showNotification") { options: Map<String, Any?> ->
+            val id = (options["id"] as? Number)?.toInt() ?: return@Function false
+            val channelId = options["channelId"] as? String ?: return@Function false
+            val channelName = options["channelName"] as? String ?: return@Function false
+            val title = options["title"] as? String ?: return@Function false
+            val content = options["content"] as? String ?: return@Function false
+            NotificationHelper.show(
+                appContext.reactContext,
+                NativeNotificationOptions(
+                    id = id,
+                    channelId = channelId,
+                    channelName = channelName,
+                    title = title,
+                    content = content,
+                    importance = options["importance"] as? String ?: "low",
+                    timeoutMs = ((options["timeoutMs"] as? Number)?.toLong() ?: 0L)
+                        .coerceAtLeast(0L),
+                    autoCancel = options["autoCancel"] as? Boolean ?: true,
+                    openApp = options["openApp"] as? Boolean ?: true
+                )
+            )
+        }
+
+        Function("cancelNotification") { id: Int ->
+            NotificationHelper.cancel(appContext.reactContext, id)
         }
 
         /**

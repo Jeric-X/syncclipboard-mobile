@@ -51,6 +51,8 @@ describe('ConfigStorage', () => {
       await configStorage.initialize();
 
       expect(mockGetItem).toHaveBeenCalledWith(STORAGE_KEYS.CONFIG);
+      const migrated = await configStorage.getConfig();
+      expect(migrated.servers[0].id).toMatch(/^server_/);
     });
 
     it('should use default config if no config storage', async () => {
@@ -177,6 +179,7 @@ describe('ConfigStorage', () => {
         const index = await configStorage.addServer(newServer);
 
         expect(index).toBe(1);
+        expect((await configStorage.getServers())[1].id).toMatch(/^server_/);
       });
 
       it('should auto-activate first server', async () => {
@@ -211,6 +214,12 @@ describe('ConfigStorage', () => {
           'Invalid server index'
         );
       });
+
+      it('should keep immutable server id while editing', async () => {
+        const before = (await configStorage.getServers())[0].id;
+        await configStorage.updateServer(0, { id: 'replaced', name: 'Updated' });
+        expect((await configStorage.getServers())[0].id).toBe(before);
+      });
     });
 
     describe('deleteServer', () => {
@@ -234,6 +243,36 @@ describe('ConfigStorage', () => {
 
       it('should throw error for invalid index', async () => {
         await expect(configStorage.deleteServer(99)).rejects.toThrow('Invalid server index');
+      });
+
+      it('should remove associated rules and repair default action', async () => {
+        const serverId = (await configStorage.getServers())[0].id!;
+        await configStorage.updateConfig({
+          networkAutoSwitch: {
+            enabled: true,
+            notificationMode: 'system',
+            noMatchAction: 'defaultServer',
+            defaultServerId: serverId,
+            rules: [
+              {
+                id: 'rule-1',
+                name: 'Home',
+                enabled: true,
+                targetServerId: serverId,
+                networkTypes: ['wifi'],
+                ssids: [],
+                ipRanges: [],
+                matchMode: 'all',
+              },
+            ],
+          },
+        });
+
+        await configStorage.deleteServer(0);
+        const result = await configStorage.getConfig();
+        expect(result.networkAutoSwitch.rules).toEqual([]);
+        expect(result.networkAutoSwitch.defaultServerId).toBeUndefined();
+        expect(result.networkAutoSwitch.noMatchAction).toBe('none');
       });
     });
 

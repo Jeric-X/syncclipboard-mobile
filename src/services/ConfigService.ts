@@ -93,6 +93,14 @@ class ConfigServiceClass {
     return config;
   }
 
+  /** 使用稳定服务器 ID 切换，null 表示不使用服务器。 */
+  async setActiveServerById(serverId: string | null): Promise<AppConfig> {
+    await configStorage.setActiveServerById(serverId);
+    const config = await configStorage.getConfig();
+    this._emit(config);
+    return config;
+  }
+
   // ─── 导入/导出 ───────────────────────────────────────────────
 
   /** 导出配置为 JSON */
