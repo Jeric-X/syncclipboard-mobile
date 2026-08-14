@@ -62,7 +62,12 @@ export class ConfigStorage {
       const savedConfig = JSON.parse(configJson);
       this.config = migrateAppConfig(savedConfig, DEFAULT_APP_CONFIG);
       // 迁移生成的稳定 ID 需要立即持久化，确保重启后引用不变化。
-      await this.saveConfig();
+      try {
+        await this.saveConfig();
+      } catch (error) {
+        // 已成功读取的配置仍可在本次会话中使用，持久化失败不应回退为默认配置。
+        console.warn('[ConfigStorage] Failed to persist migrated config:', error);
+      }
     } else {
       this.config = createDefaultConfig();
       await this.saveConfig();

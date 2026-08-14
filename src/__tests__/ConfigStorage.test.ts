@@ -55,6 +55,32 @@ describe('ConfigStorage', () => {
       expect(migrated.servers[0].id).toMatch(/^server_/);
     });
 
+    it('should preserve loaded config when migration persistence fails', async () => {
+      const mockConfig: AppConfig = {
+        ...DEFAULT_APP_CONFIG,
+        servers: [{ type: 'syncclipboard', url: 'https://saved.example.com' }],
+        activeServerIndex: 0,
+      };
+      const storageError = new Error('storage unavailable');
+      mockGetItem.mockResolvedValue(JSON.stringify(mockConfig));
+      mockSetItem.mockRejectedValue(storageError);
+      const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await configStorage.initialize();
+
+      const loaded = await configStorage.getConfig();
+      expect(loaded.servers).toHaveLength(1);
+      expect(loaded.servers[0].url).toBe('https://saved.example.com');
+      expect(loaded.servers[0].id).toMatch(/^server_/);
+      expect(consoleWarn).toHaveBeenCalledWith(
+        '[ConfigStorage] Failed to persist migrated config:',
+        storageError
+      );
+      consoleError.mockRestore();
+      consoleWarn.mockRestore();
+    });
+
     it('should use default config if no config storage', async () => {
       mockGetItem.mockResolvedValue(null);
       mockSetItem.mockResolvedValue(undefined);

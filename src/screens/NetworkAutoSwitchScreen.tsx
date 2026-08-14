@@ -22,6 +22,7 @@ import type {
 } from '@/types/networkAutoSwitch';
 import { networkAutoSwitchService } from '@/services/NetworkAutoSwitchService';
 import { useNetworkAutoSwitch } from '@/hooks/useNetworkAutoSwitch';
+import { requestNotificationPermission } from '@/utils/notificationPermission';
 import { ServerSelect } from '@/components';
 import { SettingDropdown, SettingItem, SettingSwitch, ThemedSwitch } from '@/components/settings';
 
@@ -109,6 +110,13 @@ export const NetworkAutoSwitchScreen = ({ navigation }: Props) => {
       return;
     }
     void updateNetworkAutoSwitch({ enabled });
+  };
+
+  const handleNotificationModeChange = async (notificationMode: NetworkSwitchNotificationMode) => {
+    await updateNetworkAutoSwitch({ notificationMode });
+    if (notificationMode === 'system') {
+      await requestNotificationPermission();
+    }
   };
 
   const deleteRule = (rule: NetworkAutoSwitchRule) => {
@@ -254,7 +262,7 @@ export const NetworkAutoSwitchScreen = ({ navigation }: Props) => {
             description={t('networkAutoSwitch.notifyDescription')}
             options={notificationOptions}
             value={autoSwitch.notificationMode}
-            onChange={(notificationMode) => updateNetworkAutoSwitch({ notificationMode })}
+            onChange={handleNotificationModeChange}
           />
           <SettingDropdown
             label={t('networkAutoSwitch.behavior')}

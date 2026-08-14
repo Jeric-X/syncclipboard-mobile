@@ -226,8 +226,8 @@ const zh = {
     disableForegroundNotifMessage:
       '关闭常驻通知会降低后台服务稳定性，系统终止后台任务的可能性增大。',
     confirmClose: '确认关闭',
-    noNotifPermTitle: '缺少通知权限',
-    noNotifPermMessage: '未授予通知权限，常驻通知可能无法显示。建议前往系统设置允许通知权限。',
+    notificationPermissionRequestFailed:
+      '未授予通知权限，相关通知可能无法显示，但功能仍会正常开启。',
     backgroundDownload: '后台下载远程',
     backgroundDownloadEnabled: '已启用后台下载远程',
     backgroundDownloadDisabled: '已禁用后台下载远程',

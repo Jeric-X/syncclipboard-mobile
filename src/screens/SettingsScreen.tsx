@@ -15,6 +15,7 @@ import {
   Alert,
   Linking,
   Platform,
+  PermissionsAndroid,
   Modal,
 } from 'react-native';
 import { APP_VERSION } from '@/constants';
@@ -59,11 +60,18 @@ import { Plus, RefreshCw, ChevronDown, ChevronUp } from 'react-native-feather';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { hasOverlayPermission, requestOverlayPermission } from 'clipboard-overlay';
 import {
+  getSupportedAbis,
+  isIgnoringBatteryOptimizations,
+  requestIgnoreBatteryOptimizations,
+  setExcludeFromRecents,
+} from 'native-util';
+import {
   isShizukuAvailable,
   hasShizukuPermission,
   requestShizukuPermission,
 } from 'shizuku-clipboard';
 import { extractVerificationCode } from '@/tasks/SmsUploadTask';
+import { setStaticReceiverEnabled } from 'sms-forwarder';
 import { useTranslation } from 'react-i18next';
 import { useI18n } from '@/hooks/useI18n';
 import type { Language } from '@/i18n';
@@ -75,6 +83,7 @@ import { useNetworkAutoSwitch } from '@/hooks/useNetworkAutoSwitch';
 import { networkAutoSwitchService } from '@/services/NetworkAutoSwitchService';
 import { currentNetworkService, type WifiPermissionState } from '@/services/CurrentNetworkService';
 import { getNetworkAutoSwitchDescription } from '@/utils/networkAutoSwitch';
+import { requestNotificationPermission } from '@/utils/notificationPermission';
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
@@ -291,7 +300,6 @@ export const SettingsScreen = () => {
     if (Platform.OS !== 'android') return;
     setIsRefreshingPermissions(true);
     try {
-      const { PermissionsAndroid } = require('react-native');
       const [notif, sms, wifiLocation, wifiBackgroundLocation] = await Promise.all([
         PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS),
         PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECEIVE_SMS),
@@ -306,7 +314,6 @@ export const SettingsScreen = () => {
         wifiBackgroundLocation === 'granted' || wifiBackgroundLocation === 'unavailable'
       );
       setLocationServicesEnabled(currentNetworkService.isLocationServicesEnabled());
-      const { isIgnoringBatteryOptimizations } = await import('native-util');
       setPermBattery(isIgnoringBatteryOptimizations());
       const shizukuUp = isShizukuAvailable();
       setShizukuAvailable(shizukuUp);
@@ -757,7 +764,6 @@ export const SettingsScreen = () => {
   // 处理切换自动上传短信验证码
   const handleToggleSmsForwarding = async (enabled: boolean) => {
     if (enabled && Platform.OS === 'android') {
-      const { PermissionsAndroid } = require('react-native');
       const granted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECEIVE_SMS);
       if (!granted) {
         const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECEIVE_SMS);
@@ -776,8 +782,11 @@ export const SettingsScreen = () => {
       await setEnableSmsForwarding(enabled);
       // 同步静态短信接收器状态
       if (Platform.OS === 'android') {
-        const { setStaticReceiverEnabled } = await import('sms-forwarder');
         setStaticReceiverEnabled(enabled);
+      }
+      if (enabled) {
+        const granted = await requestNotificationPermission();
+        if (granted) setPermNotification(true);
       }
       showMessage(
         enabled ? t('settings.smsForwardingEnabled') : t('settings.smsForwardingDisabled'),
@@ -853,19 +862,8 @@ export const SettingsScreen = () => {
     setLocalForegroundNotification(true);
     try {
       await updateConfig({ enableForegroundNotification: true });
-      // 检查通知权限，提示但不阻止
-      if (Platform.OS === 'android') {
-        const { PermissionsAndroid } = require('react-native');
-        const granted = await PermissionsAndroid.check(
-          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-        );
-        if (!granted) {
-          Alert.alert(t('settings.noNotifPermTitle'), t('settings.noNotifPermMessage'), [
-            { text: t('common.later'), style: 'cancel' },
-            { text: t('common.goToSettings'), onPress: () => Linking.openSettings() },
-          ]);
-        }
-      }
+      const granted = await requestNotificationPermission();
+      if (granted) setPermNotification(true);
     } catch (error: unknown) {
       setLocalForegroundNotification(false);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
@@ -1144,7 +1142,6 @@ export const SettingsScreen = () => {
     setLocalHideFromRecents(enabled);
     try {
       if (Platform.OS === 'android') {
-        const { setExcludeFromRecents } = await import('native-util');
         setExcludeFromRecents(enabled);
       }
       await updateConfig({ hideFromRecents: enabled });
@@ -1223,7 +1220,6 @@ export const SettingsScreen = () => {
 
     let preferredAbi: string = 'universal';
     try {
-      const { getSupportedAbis } = await import('native-util');
       const abis = getSupportedAbis();
       preferredAbi = getPreferredAbi(abis);
     } catch (e) {
@@ -1280,7 +1276,6 @@ export const SettingsScreen = () => {
     // 检测设备 ABI
     let preferredAbi: string = 'universal';
     try {
-      const { getSupportedAbis } = await import('native-util');
       const abis = getSupportedAbis();
       preferredAbi = getPreferredAbi(abis);
       console.log(
@@ -1787,7 +1782,17 @@ export const SettingsScreen = () => {
             <SettingSwitch
               label={t('settings.permissionNotification')}
               value={permNotification}
-              onChange={() => Linking.openSettings()}
+              onChange={async () => {
+                if (permNotification) {
+                  await Linking.openSettings();
+                  return;
+                }
+                const granted = await requestNotificationPermission({ showFailureAlert: false });
+                setPermNotification(granted);
+                if (!granted) {
+                  await Linking.openSettings();
+                }
+              }}
             />
 
             <SettingSwitch
@@ -1906,7 +1911,6 @@ export const SettingsScreen = () => {
               description={t('settings.permissionBatteryDesc')}
               value={permBattery}
               onChange={async () => {
-                const { requestIgnoreBatteryOptimizations } = await import('native-util');
                 if (hasBatteryOptRequested.current) {
                   Alert.alert(
                     t('settings.batteryOptDialogTitle'),

@@ -234,9 +234,8 @@ const en: DeepString<typeof zh> = {
     disableForegroundNotifMessage:
       'Disabling the persistent notification may reduce background service stability and increase the likelihood of the system terminating background tasks.',
     confirmClose: 'Confirm Disable',
-    noNotifPermTitle: 'Notification Permission Missing',
-    noNotifPermMessage:
-      'Notification permission not granted. Persistent notification may not show. Please allow notifications in system settings.',
+    notificationPermissionRequestFailed:
+      'Notification permission was not granted. Related notifications may not appear, but the feature will remain enabled.',
     backgroundDownload: 'Background download from remote',
     backgroundDownloadEnabled: 'Background download from remote enabled',
     backgroundDownloadDisabled: 'Background download from remote disabled',
