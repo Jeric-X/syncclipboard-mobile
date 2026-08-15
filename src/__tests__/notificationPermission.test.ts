@@ -1,4 +1,5 @@
 import {
+  hasNotificationPermission,
   requestNotificationPermission,
   type NotificationPermissionDependencies,
 } from '../utils/notificationPermission';
@@ -16,6 +17,15 @@ function createDependencies(
 }
 
 describe('requestNotificationPermission', () => {
+  it('运行时无需申请权限时检查结果为已授权', async () => {
+    const dependencies = createDependencies({
+      isRuntimePermissionRequired: jest.fn(() => false),
+    });
+
+    await expect(hasNotificationPermission(dependencies)).resolves.toBe(true);
+    expect(dependencies.hasPermission).not.toHaveBeenCalled();
+  });
+
   it('运行时无需申请权限时静默成功', async () => {
     const dependencies = createDependencies({
       isRuntimePermissionRequired: jest.fn(() => false),

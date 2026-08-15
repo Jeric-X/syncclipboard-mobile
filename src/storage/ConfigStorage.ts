@@ -329,7 +329,8 @@ export class ConfigStorage {
         autoSwitch.rules.some((rule) => !validIds.has(rule.targetServerId)) ||
         (autoSwitch.defaultServerId !== undefined && !validIds.has(autoSwitch.defaultServerId))
       ) {
-        throw new Error('Invalid config: network auto-switch references a missing server');
+        // 保留失效引用供 UI 提示和修复，但不继承可能错误的当前服务器选择。
+        migrated.activeServerIndex = -1;
       }
 
       // 合并默认配置（确保所有字段都存在）

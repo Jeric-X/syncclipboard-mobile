@@ -147,6 +147,47 @@ describe('ConfigStorage', () => {
     });
   });
 
+  describe('importConfig', () => {
+    beforeEach(async () => {
+      mockGetItem.mockResolvedValue(JSON.stringify(DEFAULT_APP_CONFIG));
+      mockSetItem.mockResolvedValue(undefined);
+      await configStorage.initialize();
+    });
+
+    it('should preserve missing auto-switch references and clear the active server', async () => {
+      const imported: AppConfig = {
+        ...DEFAULT_APP_CONFIG,
+        servers: [{ id: 'home', type: 'syncclipboard', url: 'https://home.example.com' }],
+        activeServerIndex: 0,
+        networkAutoSwitch: {
+          enabled: true,
+          notificationMode: 'none',
+          noMatchAction: 'defaultServer',
+          defaultServerId: 'missing-default',
+          rules: [
+            {
+              id: 'missing-rule',
+              name: 'Missing target',
+              enabled: true,
+              targetServerId: 'missing-target',
+              networkTypes: ['wifi'],
+              ssids: [],
+              ipRanges: [],
+              matchMode: 'all',
+            },
+          ],
+        },
+      };
+
+      await configStorage.importConfig(JSON.stringify(imported));
+
+      const result = await configStorage.getConfig();
+      expect(result.activeServerIndex).toBe(-1);
+      expect(result.networkAutoSwitch.defaultServerId).toBe('missing-default');
+      expect(result.networkAutoSwitch.rules[0].targetServerId).toBe('missing-target');
+    });
+  });
+
   describe('Server Management', () => {
     beforeEach(async () => {
       const mockConfig: AppConfig = {

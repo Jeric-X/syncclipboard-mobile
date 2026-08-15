@@ -212,12 +212,14 @@ export class NetworkAutoSwitchService {
 
   /** 用户手动选择前调用，取消尚未完成的自动评估。 */
   beginManualOverride(): void {
+    const needsFreshSnapshot = this.networkDirty;
     this.generation += 1;
     this.clearDebounce();
     this.networkDirty = false;
-    this.manualOverrideFingerprint = this.state.snapshot
-      ? getNetworkFingerprint(this.state.snapshot)
-      : 'pending';
+    this.manualOverrideFingerprint =
+      !needsFreshSnapshot && this.state.snapshot
+        ? getNetworkFingerprint(this.state.snapshot)
+        : 'pending';
     this.updateState({ phase: 'manual-override', manualOverride: true, error: null });
   }
 

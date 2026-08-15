@@ -246,6 +246,28 @@ describe('NetworkAutoSwitchService', () => {
     expect(h.service.getState().manualOverride).toBe(false);
   });
 
+  it('防抖期网络已变化时，手动选择绑定下次获取的新快照', async () => {
+    jest.useFakeTimers();
+    const h = harness(createConfig(0));
+    await h.service.start();
+
+    h.setSnapshot({ ...wifi, ipAddresses: ['192.168.1.21'], capturedAt: 200 });
+    h.emitNetwork();
+    h.service.beginManualOverride();
+    h.setConfig({ ...h.getConfig(), activeServerIndex: 1 });
+
+    await h.service.refresh();
+    expect(h.switchServer).not.toHaveBeenCalled();
+    expect(h.service.getState()).toMatchObject({
+      phase: 'manual-override',
+      activeServerId: 'public',
+      manualOverride: true,
+    });
+
+    await jest.advanceTimersByTimeAsync(1000);
+    expect(h.switchServer).not.toHaveBeenCalled();
+  });
+
   it('规则配置变化清除手动覆盖并立即重新评估', async () => {
     const h = harness(createConfig(0));
     await h.service.start();

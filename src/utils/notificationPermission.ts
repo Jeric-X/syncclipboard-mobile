@@ -30,6 +30,17 @@ const productionDependencies: NotificationPermissionDependencies = {
   },
 };
 
+/** 检查通知运行时权限；无需运行时授权的平台和系统版本视为已授权。 */
+export async function hasNotificationPermission(
+  dependencies: Pick<
+    NotificationPermissionDependencies,
+    'isRuntimePermissionRequired' | 'hasPermission'
+  > = productionDependencies
+): Promise<boolean> {
+  if (!dependencies.isRuntimePermissionRequired()) return true;
+  return dependencies.hasPermission();
+}
+
 /**
  * 确保应用拥有通知权限。已有权限时不会显示任何界面；申请失败仅提示用户，
  * 由调用方继续启用对应业务功能。
@@ -38,10 +49,8 @@ export async function requestNotificationPermission(
   options: NotificationPermissionOptions = {},
   dependencies: NotificationPermissionDependencies = productionDependencies
 ): Promise<boolean> {
-  if (!dependencies.isRuntimePermissionRequired()) return true;
-
   try {
-    if (await dependencies.hasPermission()) return true;
+    if (await hasNotificationPermission(dependencies)) return true;
     if (await dependencies.requestPermission()) return true;
   } catch (error) {
     console.warn('[NotificationPermission] Failed to request permission:', error);

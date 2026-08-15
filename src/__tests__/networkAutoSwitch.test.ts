@@ -1,8 +1,9 @@
 import type { ServerConfig } from '@/types/api';
-import type {
-  MobileNetworkSnapshot,
-  NetworkAutoSwitchConfig,
-  NetworkAutoSwitchRule,
+import {
+  DEFAULT_NETWORK_AUTO_SWITCH_CONFIG,
+  type MobileNetworkSnapshot,
+  type NetworkAutoSwitchConfig,
+  type NetworkAutoSwitchRule,
 } from '@/types/networkAutoSwitch';
 import {
   evaluateNetworkAutoSwitch,
@@ -54,6 +55,12 @@ function config(overrides: Partial<NetworkAutoSwitchConfig> = {}): NetworkAutoSw
     ...overrides,
   };
 }
+
+describe('默认配置', () => {
+  it('默认不发送切换通知', () => {
+    expect(DEFAULT_NETWORK_AUTO_SWITCH_CONFIG.notificationMode).toBe('none');
+  });
+});
 
 describe('IP/CIDR 规则', () => {
   it('解析 IPv4 与压缩 IPv6', () => {

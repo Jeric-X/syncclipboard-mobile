@@ -68,7 +68,7 @@ export interface NetworkEvaluationResult {
 
 export const DEFAULT_NETWORK_AUTO_SWITCH_CONFIG: NetworkAutoSwitchConfig = {
   enabled: false,
-  notificationMode: 'system',
+  notificationMode: 'none',
   noMatchAction: 'keep',
   rules: [],
 };

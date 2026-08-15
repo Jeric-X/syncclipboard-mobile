@@ -83,7 +83,10 @@ import { useNetworkAutoSwitch } from '@/hooks/useNetworkAutoSwitch';
 import { networkAutoSwitchService } from '@/services/NetworkAutoSwitchService';
 import { currentNetworkService, type WifiPermissionState } from '@/services/CurrentNetworkService';
 import { getNetworkAutoSwitchDescription } from '@/utils/networkAutoSwitch';
-import { requestNotificationPermission } from '@/utils/notificationPermission';
+import {
+  hasNotificationPermission,
+  requestNotificationPermission,
+} from '@/utils/notificationPermission';
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
@@ -301,7 +304,7 @@ export const SettingsScreen = () => {
     setIsRefreshingPermissions(true);
     try {
       const [notif, sms, wifiLocation, wifiBackgroundLocation] = await Promise.all([
-        PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS),
+        hasNotificationPermission(),
         PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECEIVE_SMS),
         currentNetworkService.getFineLocationPermissionState(),
         currentNetworkService.getBackgroundLocationPermissionState(),
