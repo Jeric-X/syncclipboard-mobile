@@ -79,7 +79,10 @@ function snapshotFromNetInfo(state: NetInfoState): MobileNetworkSnapshot {
 
 function requiredWifiPermissions(): Permission[] {
   if (Platform.OS !== 'android') return [];
-  return [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION];
+  return [
+    PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+  ];
 }
 
 export class CurrentNetworkService {
@@ -156,9 +159,7 @@ export class CurrentNetworkService {
 
   async requestFineLocationPermission(): Promise<WifiPermissionState> {
     if (Platform.OS !== 'android') return 'unavailable';
-    return this.mapPermissionResult(
-      await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION)
-    );
+    return this.requestWifiPermission();
   }
 
   async getBackgroundLocationPermissionState(): Promise<WifiPermissionState> {

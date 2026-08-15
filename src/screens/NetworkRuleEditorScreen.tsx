@@ -20,7 +20,7 @@ import type {
   NetworkRuleMatchMode,
 } from '@/types/networkAutoSwitch';
 import { currentNetworkService, type WifiPermissionState } from '@/services/CurrentNetworkService';
-import { normalizeIpRuleLine, normalizeIpRuleLines } from '@/utils/networkAutoSwitch';
+import { IpRuleError, normalizeIpRuleLine, normalizeIpRuleLines } from '@/utils/networkAutoSwitch';
 import { ServerSelect } from '@/components';
 import { ThemedSwitch } from '@/components/settings';
 
@@ -48,6 +48,26 @@ export const NetworkRuleEditorScreen = ({ navigation, route }: Props) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const { config, saveNetworkAutoSwitchRule } = useSettingsStore();
+
+  const ipRuleErrorMessage = (reason: unknown): string => {
+    if (!(reason instanceof IpRuleError)) {
+      return reason instanceof Error ? reason.message : String(reason);
+    }
+    switch (reason.code) {
+      case 'empty-address':
+        return t('networkAutoSwitch.ipErrorEmpty');
+      case 'invalid-cidr':
+        return t('networkAutoSwitch.ipErrorCidr');
+      case 'invalid-address':
+        return t('networkAutoSwitch.ipErrorAddress');
+      case 'unusable-address':
+        return t('networkAutoSwitch.ipErrorUnusable');
+      case 'invalid-prefix':
+        return t('networkAutoSwitch.ipErrorPrefix', { max: reason.maxPrefix });
+      case 'range-too-broad':
+        return t('networkAutoSwitch.ipErrorRange');
+    }
+  };
   const rules = config?.networkAutoSwitch.rules ?? [];
   const sourceId = route.params?.duplicateFromId ?? route.params?.ruleId;
   const source = rules.find((rule) => rule.id === sourceId);
@@ -291,7 +311,7 @@ export const NetworkRuleEditorScreen = ({ navigation, route }: Props) => {
         } catch (reason) {
           nextErrors.ip = t('networkAutoSwitch.invalidIpLine', {
             line: index + 1,
-            message: reason instanceof Error ? reason.message : String(reason),
+            message: ipRuleErrorMessage(reason),
           });
           break;
         }
@@ -476,6 +496,9 @@ export const NetworkRuleEditorScreen = ({ navigation, route }: Props) => {
                     <TouchableOpacity
                       key={type}
                       testID={`network-type-${type}`}
+                      accessibilityRole="checkbox"
+                      accessibilityLabel={typeLabel(type)}
+                      accessibilityState={{ checked: selected }}
                       style={[
                         styles.chip,
                         {
@@ -669,6 +692,11 @@ export const NetworkRuleEditorScreen = ({ navigation, route }: Props) => {
             {(['all', 'any'] as NetworkRuleMatchMode[]).map((mode) => (
               <TouchableOpacity
                 key={mode}
+                accessibilityRole="radio"
+                accessibilityLabel={t(
+                  mode === 'all' ? 'networkAutoSwitch.matchAll' : 'networkAutoSwitch.matchAny'
+                )}
+                accessibilityState={{ checked: matchMode === mode }}
                 style={styles.radioRow}
                 onPress={() => setMatchMode(mode)}
               >

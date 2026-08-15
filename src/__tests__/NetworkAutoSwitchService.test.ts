@@ -141,6 +141,26 @@ describe('NetworkAutoSwitchService', () => {
     expect(h.notify).toHaveBeenCalledTimes(1);
   });
 
+  it('并发启动与同步前检查共享同一次初始化', async () => {
+    const h = harness();
+    let resolveInitialConfig: ((config: AppConfig) => void) | undefined;
+    const initialConfig = new Promise<AppConfig>((resolve) => {
+      resolveInitialConfig = resolve;
+    });
+    const getConfig = h.deps.getConfig as jest.MockedFunction<typeof h.deps.getConfig>;
+    getConfig
+      .mockImplementationOnce(() => initialConfig)
+      .mockImplementation(async () => h.getConfig());
+
+    const startup = h.service.start();
+    const preflight = h.service.ensureCurrentServer();
+    resolveInitialConfig?.(h.getConfig());
+    await Promise.all([startup, preflight]);
+
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(1);
+    expect(h.switchServer).toHaveBeenCalledTimes(1);
+  });
+
   it('按配置选择 Toast 通知方式', async () => {
     const initial = createConfig();
     const h = harness({

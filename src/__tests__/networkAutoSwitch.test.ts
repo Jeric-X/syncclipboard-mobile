@@ -13,6 +13,7 @@ import {
   normalizeNetworkRule,
   parseIpAddress,
   validateNetworkRule,
+  IpRuleError,
 } from '@/utils/networkAutoSwitch';
 
 const servers: ServerConfig[] = [
@@ -83,6 +84,16 @@ describe('IP/CIDR 规则', () => {
       '192.168.1.1/0',
     ]) {
       expect(() => normalizeIpRuleLine(value)).toThrow();
+    }
+  });
+
+  it('校验错误使用稳定错误码而不是界面语言', () => {
+    try {
+      normalizeIpRuleLine('300.1.1.1');
+      throw new Error('Expected normalizeIpRuleLine to throw');
+    } catch (error) {
+      expect(error).toBeInstanceOf(IpRuleError);
+      expect((error as IpRuleError).code).toBe('invalid-address');
     }
   });
 

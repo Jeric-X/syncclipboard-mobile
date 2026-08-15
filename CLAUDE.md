@@ -94,6 +94,7 @@ Key singletons, typically accessed via `getInstance()` or module-level exports:
 | `remoteClipboardMonitorTask` | Yes        | Remote monitor lifecycle (SignalR/polling)      |
 | `historyTrackerTask`         | Yes        | Local history change tracking                   |
 | `historySyncTask`            | Yes        | History record sync with server                 |
+| `networkAutoSwitchTask`      | Yes        | Selects servers from network changes            |
 
 **keepAlive** tasks ignore the "background tasks" master toggle and always run. Non-keepAlive tasks are stopped when the user disables background tasks or when the app is backgrounded with temp-disabled state.
 
@@ -176,7 +177,7 @@ Bottom tab navigator (Home / History / Settings) in `src/navigation/AppNavigator
 
 - **Every native module should have an iOS stub** (even a minimal `expo-module.config.json` + empty Swift/ObjC file) so `pod install` doesn't fail. This keeps the iOS build compiling without implementing the feature.
 - **Module interfaces should be platform-agnostic** — the JS API exported by a module (`index.ts`) should not assume Android. If the module can only work on Android, export a function that gracefully returns `null` or throws a descriptive error on iOS, rather than requiring the caller to `Platform.OS`-guard every import.
-- **Avoid `require()` for platform-specific modules at module scope** — use dynamic `require()` or lazy imports inside functions guarded by `Platform.OS`, so the JS bundle doesn't error on import when running on iOS.
+- **Use static imports for platform-specific modules** — keep imports at module scope and guard Android-only calls with `Platform.OS`. The module's JavaScript entry point must remain safe to import on unsupported platforms and provide a no-op or descriptive fallback.
 
 ### When Adding Android-Specific Features
 

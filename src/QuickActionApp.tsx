@@ -10,7 +10,7 @@
  * 3. Share mode (shareMode): receive shared content from other apps (Android only)
  */
 
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, StatusBar, Platform, BackHandler } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -22,6 +22,7 @@ import { SyncDirection } from './types/sync';
 import { useSettingsStore } from './stores';
 import { initLogger } from './utils/Logger';
 import { longRunningTaskManager } from './longRunningTask/LongRunningTaskManager';
+import { networkAutoSwitchService } from './services/NetworkAutoSwitchService';
 
 export interface ShareData {
   type: 'text' | 'file' | 'multiple';
@@ -51,6 +52,7 @@ export default function QuickActionApp({
 }: QuickActionAppProps) {
   const syncDirection = direction === 'upload' ? SyncDirection.Upload : SyncDirection.Download;
   const { loadConfig, isLoaded } = useSettingsStore();
+  const [isRuntimeReady, setIsRuntimeReady] = useState(Platform.OS !== 'android');
 
   useEffect(() => {
     initLogger();
@@ -62,17 +64,37 @@ export default function QuickActionApp({
     }
   }, [isLoaded, loadConfig]);
 
-  // 启动所有后台服务（冷启动 / 快速操作时保证后台任务正常运行）
+  // 公共入口先完成服务器自动选择，再渲染快捷下载、上传、文本处理或分享页面。
   useEffect(() => {
     if (!isLoaded || Platform.OS !== 'android') return;
-    longRunningTaskManager.startAll().catch(() => {});
+
+    let cancelled = false;
+    const initializeRuntime = async (): Promise<void> => {
+      try {
+        await networkAutoSwitchService.ensureCurrentServer();
+      } catch (error) {
+        console.error('[QuickActionApp] Network auto-switch preflight failed:', error);
+      }
+
+      if (cancelled) return;
+      longRunningTaskManager.startAll().catch(() => {});
+      setIsRuntimeReady(true);
+    };
+
+    initializeRuntime().catch(() => {
+      if (!cancelled) setIsRuntimeReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [isLoaded]);
 
   const handleComplete = useCallback(() => {
     BackHandler.exitApp();
   }, []);
 
-  if (!isLoaded) return null;
+  if (!isLoaded || !isRuntimeReady) return null;
 
   // Share mode: receive shared content from other apps (direct data, not via expo-sharing)
   if (shareMode && shareData) {

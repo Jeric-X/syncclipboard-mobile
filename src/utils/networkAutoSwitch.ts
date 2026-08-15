@@ -39,7 +39,23 @@ export interface NormalizedIpRule {
   comment?: string;
 }
 
-export class IpRuleError extends Error {}
+export type IpRuleErrorCode =
+  | 'empty-address'
+  | 'invalid-cidr'
+  | 'invalid-address'
+  | 'unusable-address'
+  | 'invalid-prefix'
+  | 'range-too-broad';
+
+export class IpRuleError extends Error {
+  constructor(
+    readonly code: IpRuleErrorCode,
+    readonly maxPrefix?: number
+  ) {
+    super(code);
+    this.name = 'IpRuleError';
+  }
+}
 
 function parseIpv4(value: string): ParsedIp | null {
   const parts = value.split('.');
@@ -164,15 +180,15 @@ export function normalizeIpRuleLine(line: string): NormalizedIpRule {
   const hashIndex = line.indexOf('#');
   const rawValue = (hashIndex >= 0 ? line.slice(0, hashIndex) : line).trim();
   const comment = hashIndex >= 0 ? line.slice(hashIndex + 1).trim() : '';
-  if (!rawValue) throw new IpRuleError('IP 地址不能为空');
+  if (!rawValue) throw new IpRuleError('empty-address');
 
   const slashIndex = rawValue.indexOf('/');
-  if (slashIndex !== rawValue.lastIndexOf('/')) throw new IpRuleError('CIDR 格式不正确');
+  if (slashIndex !== rawValue.lastIndexOf('/')) throw new IpRuleError('invalid-cidr');
   const addressValue = slashIndex >= 0 ? rawValue.slice(0, slashIndex).trim() : rawValue;
   const prefixValue = slashIndex >= 0 ? rawValue.slice(slashIndex + 1).trim() : '';
   const parsed = parseIpAddress(addressValue);
-  if (!parsed) throw new IpRuleError('IP 地址格式不正确');
-  if (!isUsableRuleAddress(parsed)) throw new IpRuleError('该地址不能用于网络匹配');
+  if (!parsed) throw new IpRuleError('invalid-address');
+  if (!isUsableRuleAddress(parsed)) throw new IpRuleError('unusable-address');
 
   const maxPrefix = parsed.family === 4 ? 32 : 128;
   const prefixLength = slashIndex < 0 ? maxPrefix : Number(prefixValue);
@@ -181,7 +197,7 @@ export function normalizeIpRuleLine(line: string): NormalizedIpRule {
     prefixLength < 0 ||
     prefixLength > maxPrefix
   ) {
-    throw new IpRuleError(`前缀长度必须在 0-${maxPrefix} 之间`);
+    throw new IpRuleError('invalid-prefix', maxPrefix);
   }
 
   const normalizedIp: ParsedIp = {
@@ -189,7 +205,7 @@ export function normalizeIpRuleLine(line: string): NormalizedIpRule {
     bytes: networkBytes(parsed.bytes, prefixLength),
   };
   if (!isUsableRuleAddress(normalizedIp)) {
-    throw new IpRuleError('该网段范围过大，不能用于网络匹配');
+    throw new IpRuleError('range-too-broad');
   }
   const address = formatIp(normalizedIp);
   const value = slashIndex < 0 ? formatIp(parsed) : `${address}/${prefixLength}`;

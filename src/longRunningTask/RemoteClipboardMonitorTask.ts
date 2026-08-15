@@ -17,7 +17,7 @@ import { remoteClipboardMonitor } from '../services/sync/RemoteClipboardMonitor'
 import { configService } from '../services/ConfigService';
 import { clipboardSyncState } from '../services/sync/SyncState';
 
-class RemoteClipboardMonitorTask extends LongRunningTask {
+export class RemoteClipboardMonitorTask extends LongRunningTask {
   readonly name = 'remoteClipboardMonitor';
 
   private _started = false;
@@ -25,15 +25,19 @@ class RemoteClipboardMonitorTask extends LongRunningTask {
   private _activePollingInterval: number | undefined = undefined;
 
   async start(): Promise<void> {
+    if (this._started) return;
+    // 任务生命周期与当前是否有服务器分离，以便无服务器时仍能接收配置变化。
+    this._started = true;
     const server = await configService.getActiveServer();
     if (!server) {
+      this._activeServer = null;
+      this._activePollingInterval = (await configService.getConfig())?.remotePollingInterval;
       clipboardSyncState.setRemoteContent(null);
       return;
     }
     const config = await configService.getConfig();
     this._activeServer = server;
     this._activePollingInterval = config?.remotePollingInterval;
-    this._started = true;
     await remoteClipboardMonitor.connect();
   }
 
@@ -57,16 +61,20 @@ class RemoteClipboardMonitorTask extends LongRunningTask {
     const pollingIntervalChanged = newPollingInterval !== this._activePollingInterval;
 
     if (!newServer) {
-      await this.stop();
+      this._activeServer = null;
+      this._activePollingInterval = newPollingInterval;
+      await remoteClipboardMonitor.disconnect();
       clipboardSyncState.setRemoteContent(null);
       return;
     }
 
     if (serverChanged || pollingIntervalChanged) {
-      await this.stop();
-      await this.start();
+      await remoteClipboardMonitor.disconnect();
+      this._activeServer = newServer;
+      this._activePollingInterval = newPollingInterval;
+      await remoteClipboardMonitor.connect();
     } else if (!remoteClipboardMonitor.isConnected()) {
-      await this.start();
+      await remoteClipboardMonitor.connect();
     }
   }
 

@@ -194,6 +194,9 @@ export const ServerSelect = ({
                   <TouchableOpacity
                     key={server.id}
                     testID={`${testID}-option-${server.id}`}
+                    accessibilityRole="radio"
+                    accessibilityLabel={serverLabel(server)}
+                    accessibilityState={{ checked: selected }}
                     style={[
                       styles.option,
                       {

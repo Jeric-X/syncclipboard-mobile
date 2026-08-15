@@ -120,6 +120,7 @@ export class NetworkAutoSwitchService {
   private state: NetworkAutoSwitchState = initialState;
   private readonly listeners = new Set<() => void>();
   private running = false;
+  private startupPromise: Promise<void> | null = null;
   private networkUnsubscribe: (() => void) | null = null;
   private debounceTimerTag: string | null = null;
   private networkDirty = true;
@@ -145,12 +146,21 @@ export class NetworkAutoSwitchService {
   }
 
   async start(): Promise<void> {
+    if (this.startupPromise) {
+      await this.startupPromise;
+      return;
+    }
     if (this.running) return;
     this.running = true;
-    const config = await this.deps.getConfig();
-    this.lastConfigSignature = configSignature(config);
-    this.syncNetworkSubscription(config.networkAutoSwitch.enabled);
-    await this.evaluateNow('startup');
+    const startup = this.initialize();
+    this.startupPromise = startup;
+    try {
+      await startup;
+    } finally {
+      if (this.startupPromise === startup) {
+        this.startupPromise = null;
+      }
+    }
   }
 
   async stop(): Promise<void> {
@@ -228,6 +238,10 @@ export class NetworkAutoSwitchService {
 
   /** 快捷操作和后台同步访问服务器前调用。 */
   async ensureCurrentServer(): Promise<void> {
+    if (this.startupPromise) {
+      await this.startupPromise;
+      return;
+    }
     if (!this.running) {
       await this.start();
       return;
@@ -243,6 +257,20 @@ export class NetworkAutoSwitchService {
       return;
     }
     await this.evaluateNow('sync-preflight');
+  }
+
+  private async initialize(): Promise<void> {
+    try {
+      const config = await this.deps.getConfig();
+      this.lastConfigSignature = configSignature(config);
+      this.syncNetworkSubscription(config.networkAutoSwitch.enabled);
+      await this.evaluateNow('startup');
+    } catch (error) {
+      this.running = false;
+      this.networkUnsubscribe?.();
+      this.networkUnsubscribe = null;
+      throw error;
+    }
   }
 
   private syncNetworkSubscription(enabled: boolean): void {

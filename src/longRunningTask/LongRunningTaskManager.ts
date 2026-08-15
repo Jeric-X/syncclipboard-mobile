@@ -88,14 +88,17 @@ class LongRunningTaskManager {
 
   // ─── 批量控制 ────────────────────────────────────────────
 
-  /** 启动所有已注册的任务（并行执行，单个失败不影响其他任务）。 */
+  /** 启动所有已注册的任务。自动选择服务器完成后，再并行启动其余任务。 */
   async startAll(): Promise<void> {
+    const networkPreflight = this.tasks.get(networkAutoSwitchTask.name);
+    if (networkPreflight) {
+      await this._startTaskSafely(networkPreflight);
+    }
+
     await Promise.allSettled(
-      Array.from(this.tasks.values()).map((task) =>
-        task.start().catch((e) => {
-          console.error(`[LongRunningTaskManager] Failed to start task "${task.name}":`, e);
-        })
-      )
+      Array.from(this.tasks.values())
+        .filter((task) => task !== networkPreflight)
+        .map((task) => this._startTaskSafely(task))
     );
   }
 
@@ -220,6 +223,14 @@ class LongRunningTaskManager {
       throw new Error(`[LongRunningTaskManager] Task "${name}" is not registered.`);
     }
     return task;
+  }
+
+  private async _startTaskSafely(task: ILongRunningTask): Promise<void> {
+    try {
+      await task.start();
+    } catch (error) {
+      console.error(`[LongRunningTaskManager] Failed to start task "${task.name}":`, error);
+    }
   }
 }
 
