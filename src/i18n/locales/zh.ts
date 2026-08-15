@@ -418,7 +418,7 @@ const zh = {
     notificationNone: '不通知',
     notificationToast: 'Toast 通知',
     notificationSystem: '系统通知',
-    rules: '规则（按优先级）',
+    rules: '规则（按优先级排序）',
     noRules: '尚未添加规则',
     noRulesHint: '先添加家庭、公司或移动网络规则',
     addRule: '添加规则',
