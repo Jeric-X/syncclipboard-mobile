@@ -67,6 +67,16 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 jest.mock('native-util', () => ({
+  getCurrentNetworkInfo: jest.fn(() => null),
+  addNetworkChangeListener: jest.fn(() => ({ remove: jest.fn() })),
+  isLocationServicesEnabled: jest.fn(() => true),
+  openLocationSettings: jest.fn(() => true),
+  showNotification: jest.fn(() => true),
+  cancelNotification: jest.fn(() => true),
+  isIgnoringBatteryOptimizations: jest.fn(() => true),
+  requestIgnoreBatteryOptimizations: jest.fn(() => true),
+  setExcludeFromRecents: jest.fn(() => true),
+  getSupportedAbis: jest.fn(() => []),
   isNativeHashModuleAvailable: jest.fn().mockReturnValue(false),
   nativeCalculateFileHash: jest.fn(),
   nativeCopyFile: jest.fn().mockResolvedValue(undefined),

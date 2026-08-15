@@ -13,6 +13,7 @@ import { initLogger } from './src/utils/Logger';
 import { useTheme } from './src/hooks/useTheme';
 import { setDynamicShortcuts } from 'shortcut';
 import { moveTaskToBack, setExcludeFromRecents } from 'native-util';
+import { networkAutoSwitchService } from './src/services/NetworkAutoSwitchService';
 
 const QUICK_UPLOAD_URL = 'syncclipboard://quick-upload';
 const QUICK_DOWNLOAD_URL = 'syncclipboard://quick-download';
@@ -38,6 +39,14 @@ function isShareIntentUrl(url: string | null): boolean {
     return new URL(url).hostname === 'expo-sharing';
   } catch {
     return false;
+  }
+}
+
+async function runOverlayNetworkPreflight(): Promise<void> {
+  try {
+    await networkAutoSwitchService.ensureCurrentServer();
+  } catch (error) {
+    console.error('[App] Overlay network auto-switch preflight failed:', error);
   }
 }
 
@@ -86,12 +95,13 @@ export default function App() {
       return url;
     };
 
-    getInitialUrlWithRetry().then((url) => {
+    getInitialUrlWithRetry().then(async (url) => {
       if (config?.debugUrlScheme) {
         ToastAndroid.show(`getInitialURL: ${url ?? 'null'}`, ToastAndroid.LONG);
       }
       if (isShareIntentUrl(url)) {
         setAppMode('home');
+        await runOverlayNetworkPreflight();
         setShareReceiveOverlay(true);
         return;
       }
@@ -99,6 +109,7 @@ export default function App() {
       // 始终进入 home 模式（挂载 AppNavigator/HomeScreen 以启动后台任务）
       setAppMode('home');
       if (isQuickTile) {
+        await runOverlayNetworkPreflight();
         // fg=1 完成后留在 app，fg=0/无fg 完成后退出
         setQuickActionOverlay({ direction, exitAfterSync: !fromForeground });
       }
@@ -110,13 +121,15 @@ export default function App() {
         ToastAndroid.show(`addEventListener url: ${url ?? 'null'}`, ToastAndroid.LONG);
       }
       if (isShareIntentUrl(url)) {
-        setShareReceiveOverlay(true);
+        runOverlayNetworkPreflight().then(() => setShareReceiveOverlay(true));
         return;
       }
       const { isQuickTile, fromForeground, direction } = parseQuickTileUrl(url);
       if (isQuickTile) {
-        // fg=1 完成后留在 app，fg=0/无fg 完成后退出
-        setQuickActionOverlay({ direction, exitAfterSync: !fromForeground });
+        runOverlayNetworkPreflight().then(() => {
+          // fg=1 完成后留在 app，fg=0/无fg 完成后退出
+          setQuickActionOverlay({ direction, exitAfterSync: !fromForeground });
+        });
       }
     });
 

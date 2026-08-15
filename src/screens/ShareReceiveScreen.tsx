@@ -9,7 +9,6 @@ import { View, ActivityIndicator, Text, StyleSheet, BackHandler } from 'react-na
 import { useTranslation } from 'react-i18next';
 import { useIncomingShare, clearSharedPayloads, getSharedPayloads } from 'expo-sharing';
 import { useTheme } from '@/hooks/useTheme';
-import { useSettingsStore } from '@/stores/settingsStore';
 import {
   createContentFromFile,
   createContentFromText,
@@ -57,7 +56,6 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({
     log('Initial getSharedPayloads():', payloads);
     return payloads.length > 0;
   });
-  const activeServer = useSettingsStore((s) => s.getActiveServer());
   const [loadingText, setLoadingText] = useState(() => t('shareReceive.processingFile'));
   const [progress, setProgress] = useState<ProgressInfo | null>(null);
   const [previewText, setPreviewText] = useState<string | undefined>(undefined);
@@ -84,7 +82,6 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({
     async (signal: AbortSignal) => {
       if (resolveError)
         throw new Error(t('shareReceive.resolveError', { error: resolveError.message }));
-      if (!activeServer) throw new Error(t('common.serverNotConfigured'));
 
       const payload = resolvedSharedPayloads[0];
       if (!payload) throw new Error(t('shareReceive.noContent'));
@@ -129,7 +126,7 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({
       });
       clearSharedPayloads();
     },
-    [resolvedSharedPayloads, activeServer, resolveError, t]
+    [resolvedSharedPayloads, resolveError, t]
   );
 
   if (!hasShareContent) return null;

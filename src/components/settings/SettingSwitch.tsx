@@ -4,9 +4,8 @@
  */
 
 import React from 'react';
-import { Switch } from 'react-native';
-import { useTheme } from '@/hooks/useTheme';
 import { SettingItem, SettingItemProps } from './SettingItem';
+import { ThemedSwitch } from './ThemedSwitch';
 
 export interface SettingSwitchProps extends Omit<SettingItemProps, 'children'> {
   /** 开关当前值 */
@@ -22,17 +21,9 @@ export const SettingSwitch: React.FC<SettingSwitchProps> = ({
   disabled = false,
   ...rest
 }) => {
-  const { theme } = useTheme();
-
   return (
     <SettingItem disabled={disabled} {...rest}>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-        thumbColor={value ? theme.colors.surface : theme.colors.textTertiary}
-        disabled={disabled}
-      />
+      <ThemedSwitch value={value} onValueChange={onChange} disabled={disabled} />
     </SettingItem>
   );
 };

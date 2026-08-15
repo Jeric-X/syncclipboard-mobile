@@ -6,7 +6,6 @@
 import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
-import { useSettingsStore } from '@/stores/settingsStore';
 import { createContentFromText } from '@/utils/clipboard/clipboardContentUtils';
 import { setRemoteClipboard } from '@/services/sync/ClipboardSyncActions';
 
@@ -22,15 +21,13 @@ export const ProcessTextScreen: React.FC<ProcessTextScreenProps> = ({
   overlayMode = false,
 }) => {
   const { t } = useTranslation();
-  const activeServer = useSettingsStore((s) => s.getActiveServer());
 
   const task = useCallback(
     async (signal: AbortSignal) => {
-      if (!activeServer) throw new Error(t('common.serverNotConfigured'));
       const content = await createContentFromText(text, { signal });
       await setRemoteClipboard(content, signal);
     },
-    [text, activeServer, t]
+    [text, t]
   );
 
   return (

@@ -51,6 +51,34 @@ describe('ConfigStorage', () => {
       await configStorage.initialize();
 
       expect(mockGetItem).toHaveBeenCalledWith(STORAGE_KEYS.CONFIG);
+      const migrated = await configStorage.getConfig();
+      expect(migrated.servers[0].id).toMatch(/^server_/);
+    });
+
+    it('should preserve loaded config when migration persistence fails', async () => {
+      const mockConfig: AppConfig = {
+        ...DEFAULT_APP_CONFIG,
+        servers: [{ type: 'syncclipboard', url: 'https://saved.example.com' }],
+        activeServerIndex: 0,
+      };
+      const storageError = new Error('storage unavailable');
+      mockGetItem.mockResolvedValue(JSON.stringify(mockConfig));
+      mockSetItem.mockRejectedValue(storageError);
+      const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await configStorage.initialize();
+
+      const loaded = await configStorage.getConfig();
+      expect(loaded.servers).toHaveLength(1);
+      expect(loaded.servers[0].url).toBe('https://saved.example.com');
+      expect(loaded.servers[0].id).toMatch(/^server_/);
+      expect(consoleWarn).toHaveBeenCalledWith(
+        '[ConfigStorage] Failed to persist migrated config:',
+        storageError
+      );
+      consoleError.mockRestore();
+      consoleWarn.mockRestore();
     });
 
     it('should use default config if no config storage', async () => {
@@ -119,6 +147,47 @@ describe('ConfigStorage', () => {
     });
   });
 
+  describe('importConfig', () => {
+    beforeEach(async () => {
+      mockGetItem.mockResolvedValue(JSON.stringify(DEFAULT_APP_CONFIG));
+      mockSetItem.mockResolvedValue(undefined);
+      await configStorage.initialize();
+    });
+
+    it('should preserve missing auto-switch references and clear the active server', async () => {
+      const imported: AppConfig = {
+        ...DEFAULT_APP_CONFIG,
+        servers: [{ id: 'home', type: 'syncclipboard', url: 'https://home.example.com' }],
+        activeServerIndex: 0,
+        networkAutoSwitch: {
+          enabled: true,
+          notificationMode: 'none',
+          noMatchAction: 'defaultServer',
+          defaultServerId: 'missing-default',
+          rules: [
+            {
+              id: 'missing-rule',
+              name: 'Missing target',
+              enabled: true,
+              targetServerId: 'missing-target',
+              networkTypes: ['wifi'],
+              ssids: [],
+              ipRanges: [],
+              matchMode: 'all',
+            },
+          ],
+        },
+      };
+
+      await configStorage.importConfig(JSON.stringify(imported));
+
+      const result = await configStorage.getConfig();
+      expect(result.activeServerIndex).toBe(-1);
+      expect(result.networkAutoSwitch.defaultServerId).toBe('missing-default');
+      expect(result.networkAutoSwitch.rules[0].targetServerId).toBe('missing-target');
+    });
+  });
+
   describe('Server Management', () => {
     beforeEach(async () => {
       const mockConfig: AppConfig = {
@@ -177,6 +246,7 @@ describe('ConfigStorage', () => {
         const index = await configStorage.addServer(newServer);
 
         expect(index).toBe(1);
+        expect((await configStorage.getServers())[1].id).toMatch(/^server_/);
       });
 
       it('should auto-activate first server', async () => {
@@ -211,6 +281,12 @@ describe('ConfigStorage', () => {
           'Invalid server index'
         );
       });
+
+      it('should keep immutable server id while editing', async () => {
+        const before = (await configStorage.getServers())[0].id;
+        await configStorage.updateServer(0, { id: 'replaced', name: 'Updated' });
+        expect((await configStorage.getServers())[0].id).toBe(before);
+      });
     });
 
     describe('deleteServer', () => {
@@ -234,6 +310,36 @@ describe('ConfigStorage', () => {
 
       it('should throw error for invalid index', async () => {
         await expect(configStorage.deleteServer(99)).rejects.toThrow('Invalid server index');
+      });
+
+      it('should remove associated rules and repair default action', async () => {
+        const serverId = (await configStorage.getServers())[0].id!;
+        await configStorage.updateConfig({
+          networkAutoSwitch: {
+            enabled: true,
+            notificationMode: 'system',
+            noMatchAction: 'defaultServer',
+            defaultServerId: serverId,
+            rules: [
+              {
+                id: 'rule-1',
+                name: 'Home',
+                enabled: true,
+                targetServerId: serverId,
+                networkTypes: ['wifi'],
+                ssids: [],
+                ipRanges: [],
+                matchMode: 'all',
+              },
+            ],
+          },
+        });
+
+        await configStorage.deleteServer(0);
+        const result = await configStorage.getConfig();
+        expect(result.networkAutoSwitch.rules).toEqual([]);
+        expect(result.networkAutoSwitch.defaultServerId).toBeUndefined();
+        expect(result.networkAutoSwitch.noMatchAction).toBe('none');
       });
     });
 

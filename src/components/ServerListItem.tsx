@@ -15,6 +15,7 @@ interface ServerListItemProps {
   onPress: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  affectedRuleCount?: number;
 }
 
 export const ServerListItem: React.FC<ServerListItemProps> = ({
@@ -23,6 +24,7 @@ export const ServerListItem: React.FC<ServerListItemProps> = ({
   onPress,
   onEdit,
   onDelete,
+  affectedRuleCount = 0,
 }) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
@@ -30,7 +32,11 @@ export const ServerListItem: React.FC<ServerListItemProps> = ({
   const handleDelete = () => {
     Alert.alert(
       t('server.confirmDeleteTitle'),
-      t('server.confirmDeleteMessage', { name: getServerDisplayName(config) }),
+      `${t('server.confirmDeleteMessage', { name: getServerDisplayName(config) })}${
+        affectedRuleCount > 0
+          ? `\n\n${t('networkAutoSwitch.affectedRules', { count: affectedRuleCount })}`
+          : ''
+      }`,
       [
         { text: t('common.cancel'), style: 'cancel' },
         { text: t('common.delete'), style: 'destructive', onPress: onDelete },

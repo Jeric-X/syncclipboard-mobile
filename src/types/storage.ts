@@ -6,6 +6,7 @@
 import { ServerConfig } from './api';
 import { ConflictResolution } from './sync';
 import { HistorySyncStatus } from './clipboard';
+import { DEFAULT_NETWORK_AUTO_SWITCH_CONFIG, NetworkAutoSwitchConfig } from './networkAutoSwitch';
 
 /**
  * 应用配置
@@ -16,6 +17,9 @@ export interface AppConfig {
 
   /** 当前激活的服务器索引 */
   activeServerIndex: number;
+
+  /** 根据当前默认网络自动选择服务器。 */
+  networkAutoSwitch: NetworkAutoSwitchConfig;
 
   /** 同步间隔（毫秒） */
   syncInterval: number;
@@ -300,6 +304,7 @@ export const STORAGE_KEYS = {
 export const DEFAULT_APP_CONFIG: AppConfig = {
   servers: [],
   activeServerIndex: -1,
+  networkAutoSwitch: DEFAULT_NETWORK_AUTO_SWITCH_CONFIG,
   syncInterval: 5000,
   conflictResolution: 'newest' as ConflictResolution,
   syncLargeFiles: true,
