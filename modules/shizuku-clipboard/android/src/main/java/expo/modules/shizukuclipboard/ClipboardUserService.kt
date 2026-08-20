@@ -297,15 +297,9 @@ class ClipboardUserService : IClipboardUserService.Stub() {
     }
 
     override fun init(callerToken: IBinder) {
-        try {
-            callerToken.linkToDeath({
-                android.util.Log.i(TAG, "Caller process died, exiting UserService")
-                System.exit(0)
-            }, 0)
-            android.util.Log.i(TAG, "Linked to caller token for death detection")
-        } catch (e: Exception) {
-            android.util.Log.e(TAG, "Failed to link to caller token death", e)
-        }
+        // 保留 AIDL 方法以维持接口兼容，但 daemon UserService 不再跟随单个 App
+        // 进程退出。新 App 进程会重新 bind 并替换剪贴板回调。
+        android.util.Log.d(TAG, "Caller token ignored in daemon mode")
     }
 
     /**
