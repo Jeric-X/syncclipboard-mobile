@@ -3,6 +3,7 @@ package expo.modules.shizukuclipboard
 import android.content.ComponentName
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.os.Binder
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -43,6 +44,9 @@ class ShizukuClipboardModule : Module() {
     @Volatile
     private var connectionLatch = CountDownLatch(0)
 
+    // UserService 使用此 token 监听 App 进程死亡，只清理该客户端的回调资源。
+    private val callerToken = Binder()
+
     private val clipboardChangedCallback = object : IClipboardChangedCallback.Stub() {
         override fun onPrimaryClipChanged() {
             mainHandler.post {
@@ -65,7 +69,7 @@ class ShizukuClipboardModule : Module() {
             .daemon(true)
             .processNameSuffix("clipboard")
             .debuggable(true)
-            .version(7)
+            .version(8)
     }
 
     private val serviceConnection = object : ServiceConnection {
@@ -76,6 +80,16 @@ class ShizukuClipboardModule : Module() {
                 if (userService == null) {
                     NativeLogger.e(TAG, "Failed to create UserService interface")
                     markConnectionFailed()
+                    return
+                }
+                try {
+                    // 先建立客户端死亡监听，再公布连接，避免剪贴板回调
+                    // 注册在 init 之前抢先执行。
+                    userService.init(callerToken)
+                } catch (e: Exception) {
+                    NativeLogger.e(TAG, "Failed to initialize UserService client lifecycle", e)
+                    resetUserServiceConnection("client lifecycle init failed")
+                    if (clipboardListenerRequested) sendClipboardListenerUnavailable()
                     return
                 }
                 synchronized(connectionStateLock) {
