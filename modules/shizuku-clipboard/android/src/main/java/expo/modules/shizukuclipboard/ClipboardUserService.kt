@@ -134,6 +134,7 @@ class ClipboardUserService : IClipboardUserService.Stub() {
     private var clipboardChangedCallback: IClipboardChangedCallback? = null
     private var systemListener: Any? = null
     private var isSystemListenerRegistered = false
+    private var registeredClipboardBinder: IBinder? = null
     private val clientLifecycleLock = Any()
     private var activeCallerToken: IBinder? = null
     private var activeCallerDeathRecipient: IBinder.DeathRecipient? = null
@@ -218,24 +219,57 @@ class ClipboardUserService : IClipboardUserService.Stub() {
         }
     }
 
-    override fun setClipboardChangedCallback(callback: IClipboardChangedCallback): Boolean {
+    override fun setClipboardChangedCallback(
+        callerToken: IBinder,
+        callback: IClipboardChangedCallback
+    ): Boolean {
         synchronized(clientLifecycleLock) {
-            clipboardChangedCallback = callback
+            if (activeCallerToken !== callerToken) {
+                android.util.Log.w(TAG, "Ignoring listener registration from superseded client")
+                return false
+            }
             return try {
+                val clipboard = getClipboardService()
+                val currentClipboardBinder = clipboardBinder
+                if (
+                    clipboard != null &&
+                    currentClipboardBinder != null &&
+                    isSystemListenerRegistered &&
+                    registeredClipboardBinder === currentClipboardBinder &&
+                    clipboardChangedCallback?.asBinder() === callback.asBinder()
+                ) {
+                    return true
+                }
+
                 unregisterSystemListener()
-                val clipboard = getClipboardService() ?: return false
-                val listener = getOrCreateSystemListener() ?: return false
+                clipboardChangedCallback = callback
+                val listener = getOrCreateSystemListener()
+                if (clipboard == null || listener == null) {
+                    clipboardChangedCallback = null
+                    return false
+                }
                 invokeListenerRegistration(clipboard, "addPrimaryClipChangedListener", listener)
-                    .also { isSystemListenerRegistered = it }
+                    .also { registered ->
+                        isSystemListenerRegistered = registered
+                        registeredClipboardBinder = if (registered) currentClipboardBinder else null
+                        if (!registered) {
+                            clipboardChangedCallback = null
+                        }
+                    }
             } catch (e: Exception) {
+                clipboardChangedCallback = null
                 android.util.Log.e(TAG, "Failed to register primary clip listener", e)
                 false
             }
         }
     }
 
-    override fun clearClipboardChangedCallback() {
+    override fun clearClipboardChangedCallback(callerToken: IBinder) {
         synchronized(clientLifecycleLock) {
+            if (activeCallerToken !== callerToken) {
+                android.util.Log.i(TAG, "Ignoring listener cleanup from superseded client")
+                return
+            }
             clearClipboardChangedCallbackLocked()
         }
     }
@@ -270,6 +304,7 @@ class ClipboardUserService : IClipboardUserService.Stub() {
             android.util.Log.w(TAG, "Failed to unregister primary clip listener", e)
         } finally {
             isSystemListenerRegistered = false
+            registeredClipboardBinder = null
         }
     }
 

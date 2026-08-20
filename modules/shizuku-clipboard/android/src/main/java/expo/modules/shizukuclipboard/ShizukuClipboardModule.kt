@@ -41,6 +41,7 @@ class ShizukuClipboardModule : Module() {
     private var clipboardListenerRequested = false
     private val mainHandler = Handler(Looper.getMainLooper())
     private val connectionStateLock = Any()
+    private val listenerRegistrationLock = Any()
     @Volatile
     private var connectionLatch = CountDownLatch(0)
 
@@ -100,11 +101,7 @@ class ShizukuClipboardModule : Module() {
                 }
                 NativeLogger.i(TAG, "UserService bound successfully")
                 if (clipboardListenerRequested) {
-                    // ServiceConnection 回调在主线程执行，这里只尝试一次 Binder 调用，
-                    // 不能在回调里等待下一次 onServiceConnected。
-                    if (!tryRegisterClipboardListener(userService)) {
-                        sendClipboardListenerUnavailable()
-                    }
+                    restoreClipboardListenerAfterConnection(userService)
                 }
             } else {
                 NativeLogger.e(TAG, "UserService binder is null or dead")
@@ -239,7 +236,7 @@ class ShizukuClipboardModule : Module() {
             isBinding = false
             connectionLatch.countDown()
             try {
-                service?.clearClipboardChangedCallback()
+                service?.clearClipboardChangedCallback(callerToken)
             } catch (e: Exception) {
                 NativeLogger.w(
                     TAG,
@@ -255,25 +252,56 @@ class ShizukuClipboardModule : Module() {
     }
 
     private fun tryRegisterClipboardListener(service: IClipboardUserService): Boolean {
-        return try {
-            service.setClipboardChangedCallback(clipboardChangedCallback)
+        val serviceBinder = service.asBinder()
+        val registered = try {
+            service.setClipboardChangedCallback(callerToken, clipboardChangedCallback)
         } catch (e: Exception) {
             NativeLogger.w(TAG, "Failed to register primary clip listener: ${e.message}")
             false
         }
+        if (!registered) return false
+
+        synchronized(connectionStateLock) {
+            if (
+                !clipboardListenerRequested ||
+                !serviceConnected ||
+                clipboardService?.asBinder() !== serviceBinder
+            ) {
+                try {
+                    service.clearClipboardChangedCallback(callerToken)
+                } catch (e: Exception) {
+                    NativeLogger.w(TAG, "Failed to clear stale listener registration: ${e.message}")
+                }
+                return false
+            }
+        }
+        return true
     }
 
     private fun registerClipboardListener(): Boolean {
-        for (attempt in 0 until 2) {
-            val service = ensureServiceConnected()
-            if (service == null) {
-                if (attempt == 0) continue
-                return false
+        synchronized(listenerRegistrationLock) {
+            clipboardListenerRequested = true
+            for (attempt in 0 until 2) {
+                val service = ensureServiceConnected()
+                if (service == null) {
+                    if (attempt == 0) continue
+                    return false
+                }
+                if (tryRegisterClipboardListener(service)) return true
+                if (attempt == 0) resetUserServiceConnection("listener registration failed")
             }
-            if (tryRegisterClipboardListener(service)) return true
-            if (attempt == 0) resetUserServiceConnection("listener registration failed")
+            return false
         }
-        return false
+    }
+
+    /** Restores an existing subscription after a reconnect without racing an explicit start. */
+    private fun restoreClipboardListenerAfterConnection(service: IClipboardUserService) {
+        synchronized(listenerRegistrationLock) {
+            if (!clipboardListenerRequested) return
+            if (!tryRegisterClipboardListener(service)) {
+                sendClipboardListenerUnavailable()
+            }
+        }
     }
 
     private fun sendClipboardListenerUnavailable() {
@@ -433,7 +461,6 @@ class ShizukuClipboardModule : Module() {
 
         AsyncFunction("startPrimaryClipChangedListener") { promise: Promise ->
             try {
-                clipboardListenerRequested = true
                 promise.resolve(registerClipboardListener())
             } catch (e: Exception) {
                 NativeLogger.e(TAG, "Failed to start primary clip listener", e)
@@ -442,11 +469,13 @@ class ShizukuClipboardModule : Module() {
         }
 
         AsyncFunction("stopPrimaryClipChangedListener") { promise: Promise ->
-            clipboardListenerRequested = false
-            try {
-                clipboardService?.clearClipboardChangedCallback()
-            } catch (e: Exception) {
-                NativeLogger.e(TAG, "Failed to stop primary clip listener", e)
+            synchronized(listenerRegistrationLock) {
+                clipboardListenerRequested = false
+                try {
+                    clipboardService?.clearClipboardChangedCallback(callerToken)
+                } catch (e: Exception) {
+                    NativeLogger.e(TAG, "Failed to stop primary clip listener", e)
+                }
             }
             promise.resolve(null)
         }
