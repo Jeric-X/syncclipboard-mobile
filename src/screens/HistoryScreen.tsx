@@ -55,6 +55,7 @@ import type { ProgressInfo } from 'native-util';
 import { calculateTextHash } from '@/utils/hash';
 import { createContentFromFile } from '@/utils/clipboard/clipboardContentUtils';
 import { isHistorySyncEnabled } from '@/utils/config';
+import { updateScopedSelection } from '@/utils/historySelection';
 import { getHistorySyncService } from '@/services/history/HistorySyncService';
 
 export function HistoryScreen() {
@@ -944,10 +945,11 @@ export function HistoryScreen() {
     if (!currentTabKey) return;
 
     const currentTabItems = filteredItemsByTab[currentTabKey] || [];
-    const newSelectedIds = new Set(currentTabItems.map((item) => item.profileHash));
+    const currentTabIds = currentTabItems.map((item) => item.profileHash);
 
-    // 直接设置 selectedIds
-    useHistoryStore.setState({ selectedIds: newSelectedIds });
+    useHistoryStore.setState((state) => ({
+      selectedIds: updateScopedSelection(state.selectedIds, currentTabIds, true),
+    }));
   }, [tabRoutes, tabIndex, filteredItemsByTab]);
 
   // 取消全选当前分类的项目（保留其他分类的选中状态）
@@ -956,15 +958,12 @@ export function HistoryScreen() {
     if (!currentTabKey) return;
 
     const currentTabItems = filteredItemsByTab[currentTabKey] || [];
-    const currentTabIds = new Set(currentTabItems.map((item) => item.profileHash));
+    const currentTabIds = currentTabItems.map((item) => item.profileHash);
 
-    // 从 selectedIds 中移除当前分类的项目
-    const newSelectedIds = new Set(selectedIds);
-    currentTabIds.forEach((id) => newSelectedIds.delete(id));
-
-    // 更新 selectedIds
-    useHistoryStore.setState({ selectedIds: newSelectedIds });
-  }, [tabRoutes, tabIndex, filteredItemsByTab, selectedIds]);
+    useHistoryStore.setState((state) => ({
+      selectedIds: updateScopedSelection(state.selectedIds, currentTabIds, false),
+    }));
+  }, [tabRoutes, tabIndex, filteredItemsByTab]);
 
   // 渲染每个 Tab 的内容
   const renderScene = useCallback(
