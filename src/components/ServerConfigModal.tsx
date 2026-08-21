@@ -22,6 +22,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from 'react-i18next';
 import { ServerConfig } from '@/types/api';
 import { createClientFromConfig } from '@/services';
+import { validateServerCredentials } from '@/utils/serverCredentialsValidation';
 
 interface ServerConfigModalProps {
   visible: boolean;
@@ -145,13 +146,9 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
       return false;
     }
 
-    if (!username.trim()) {
-      Alert.alert(t('server.errorTitle'), t('server.usernameRequired'));
-      return false;
-    }
-
-    if (!password.trim()) {
-      Alert.alert(t('server.errorTitle'), t('server.passwordRequired'));
+    const credentialsError = validateServerCredentials(type, username, password);
+    if (credentialsError) {
+      Alert.alert(t('server.errorTitle'), t(`server.${credentialsError}`));
       return false;
     }
 
@@ -171,7 +168,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
         Alert.alert(t('server.tipTitle'), t('server.s3FieldsRequired'));
         return;
       }
-    } else if (!url.trim() || !username.trim() || !password.trim()) {
+    } else if (!url.trim() || validateServerCredentials(type, username, password)) {
       Alert.alert(t('server.tipTitle'), t('server.fieldsRequired'));
       return;
     }

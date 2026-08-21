@@ -15,8 +15,8 @@ import { AuthService } from '../AuthService';
  */
 export interface WebDAVConfig {
   baseURL: string;
-  username: string;
-  password: string;
+  username?: string;
+  password?: string;
   timeout?: number;
 }
 
@@ -29,8 +29,10 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
 
   constructor(config: WebDAVConfig) {
     const { baseURL, username, password, timeout } = config;
-
-    const authService = new AuthService(username, password);
+    const normalizedUsername = username?.trim() ?? '';
+    const normalizedPassword = password?.trim() ?? '';
+    const authService = normalizedUsername || normalizedPassword ? new AuthService() : undefined;
+    authService?.setCredentials(normalizedUsername, normalizedPassword);
 
     super({
       baseURL,
