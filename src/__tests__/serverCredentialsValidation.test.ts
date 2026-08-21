@@ -1,4 +1,7 @@
-import { validateServerCredentials } from '@/utils/serverCredentialsValidation';
+import {
+  validateServerConnectionTestFields,
+  validateServerCredentials,
+} from '@/utils/serverCredentialsValidation';
 
 describe('validateServerCredentials', () => {
   describe('WebDAV 匿名访问', () => {
@@ -23,5 +26,40 @@ describe('validateServerCredentials', () => {
       expect(validateServerCredentials('syncclipboard', 'user', '')).toBe('passwordRequired');
       expect(validateServerCredentials('syncclipboard', 'user', 'password')).toBeNull();
     });
+  });
+});
+
+describe('validateServerConnectionTestFields', () => {
+  const validFields = {
+    type: 'webdav' as const,
+    url: 'https://dav.example.com',
+    username: '',
+    password: '',
+    bucketName: '',
+  };
+
+  it('匿名 WebDAV 缺少 URL 时应提示 URL 必填', () => {
+    expect(validateServerConnectionTestFields({ ...validFields, url: '' })).toBe('urlRequired');
+  });
+
+  it('匿名 WebDAV URL 完整时应通过', () => {
+    expect(validateServerConnectionTestFields(validFields)).toBeNull();
+  });
+
+  it('应保留 SyncClipboard 和 S3 的原有必填提示', () => {
+    expect(
+      validateServerConnectionTestFields({
+        ...validFields,
+        type: 'syncclipboard',
+        username: '',
+        password: '',
+      })
+    ).toBe('fieldsRequired');
+    expect(
+      validateServerConnectionTestFields({
+        ...validFields,
+        type: 's3',
+      })
+    ).toBe('s3FieldsRequired');
   });
 });

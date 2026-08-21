@@ -29,10 +29,11 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
 
   constructor(config: WebDAVConfig) {
     const { baseURL, username, password, timeout } = config;
-    const normalizedUsername = username?.trim() ?? '';
-    const normalizedPassword = password?.trim() ?? '';
-    const authService = normalizedUsername || normalizedPassword ? new AuthService() : undefined;
-    authService?.setCredentials(normalizedUsername, normalizedPassword);
+    const rawUsername = username ?? '';
+    const rawPassword = password ?? '';
+    const hasCredentials = Boolean(rawUsername.trim() || rawPassword.trim());
+    const authService = hasCredentials ? new AuthService() : undefined;
+    authService?.setCredentials(rawUsername, rawPassword);
 
     super({
       baseURL,
