@@ -54,9 +54,6 @@ export function createClientFromConfig(config: ServerConfig): ISyncClipboardAPI 
   if (!url) {
     throw new ConfigurationError('Server URL is required');
   }
-  if (!username || !password) {
-    throw new ConfigurationError('Username and password are required for WebDAV');
-  }
   return new WebDAVClient({ baseURL: url, username, password });
 }
 

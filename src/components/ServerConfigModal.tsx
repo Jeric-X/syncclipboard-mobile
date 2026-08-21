@@ -22,6 +22,10 @@ import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from 'react-i18next';
 import { ServerConfig } from '@/types/api';
 import { createClientFromConfig } from '@/services';
+import {
+  validateServerConnectionTestFields,
+  validateServerCredentials,
+} from '@/utils/serverCredentialsValidation';
 
 interface ServerConfigModalProps {
   visible: boolean;
@@ -145,13 +149,9 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
       return false;
     }
 
-    if (!username.trim()) {
-      Alert.alert(t('server.errorTitle'), t('server.usernameRequired'));
-      return false;
-    }
-
-    if (!password.trim()) {
-      Alert.alert(t('server.errorTitle'), t('server.passwordRequired'));
+    const credentialsError = validateServerCredentials(type, username, password);
+    if (credentialsError) {
+      Alert.alert(t('server.errorTitle'), t(`server.${credentialsError}`));
       return false;
     }
 
@@ -166,13 +166,15 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
       return;
     }
 
-    if (type === 's3') {
-      if (!bucketName.trim() || !username.trim() || !password.trim()) {
-        Alert.alert(t('server.tipTitle'), t('server.s3FieldsRequired'));
-        return;
-      }
-    } else if (!url.trim() || !username.trim() || !password.trim()) {
-      Alert.alert(t('server.tipTitle'), t('server.fieldsRequired'));
+    const connectionFieldsError = validateServerConnectionTestFields({
+      type,
+      url,
+      username,
+      password,
+      bucketName,
+    });
+    if (connectionFieldsError) {
+      Alert.alert(t('server.tipTitle'), t(`server.${connectionFieldsError}`));
       return;
     }
 
