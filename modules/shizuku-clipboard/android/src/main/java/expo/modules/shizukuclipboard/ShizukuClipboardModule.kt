@@ -12,6 +12,8 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.Promise
 import expo.modules.nativeutil.NativeLogger
 import rikka.shizuku.Shizuku
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * ShizukuClipboardModule
@@ -25,16 +27,26 @@ class ShizukuClipboardModule : Module() {
     companion object {
         private const val TAG = "ShizukuClipboard"
         private const val REQUEST_CODE_PERMISSION = 10086
+        private const val CONNECTION_TIMEOUT_SECONDS = 3L
     }
 
-    private var permissionGranted = false
+    @Volatile
     private var clipboardService: IClipboardUserService? = null
+    @Volatile
     private var serviceConnected = false
+    @Volatile
     private var isBinding = false
+    @Volatile
     private var clipboardListenerRequested = false
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val connectionStateLock = Any()
+    private val connectionOperationLock = Any()
+    private val listenerRegistrationLock = Any()
+    @Volatile
+    private var connectionLatch = CountDownLatch(0)
+    private var activeServiceConnection: ServiceConnection? = null
 
-    // 用于 linkToDeath：UserService 进程监听此 token，当主进程死亡时自动退出
+    // UserService 使用此 token 监听 App 进程死亡，只清理该客户端的回调资源。
     private val callerToken = Binder()
 
     private val clipboardChangedCallback = object : IClipboardChangedCallback.Stub() {
@@ -54,55 +66,105 @@ class ShizukuClipboardModule : Module() {
                 ClipboardUserService::class.java.name
             )
         )
-            .daemon(false)
+            // App 进程退出后保留 UserService，下次启动直接复用，
+            // 避免快速重启时的“销毁旧进程—创建新进程”竞态。
+            .daemon(true)
             .processNameSuffix("clipboard")
             .debuggable(true)
-            .version(6)
+            .version(8)
     }
 
-    private val serviceConnection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+    /** Creates a callback object tied to exactly one bind attempt. */
+    private fun createServiceConnection(): ServiceConnection {
+        return object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                handleServiceConnected(this, name, service)
+            }
+
+            override fun onServiceDisconnected(name: ComponentName?) {
+                NativeLogger.w(TAG, "UserService disconnected")
+                if (markConnectionFailed(this) && clipboardListenerRequested) {
+                    sendClipboardListenerUnavailable()
+                }
+            }
+        }
+    }
+
+    /** Publishes a connection only if its bind attempt is still current. */
+    private fun handleServiceConnected(
+        connection: ServiceConnection,
+        name: ComponentName?,
+        service: IBinder?
+    ) {
+        var connectedService: IClipboardUserService? = null
+        var notifyUnavailable = false
+
+        synchronized(connectionOperationLock) {
+            val isCurrentBind = synchronized(connectionStateLock) {
+                activeServiceConnection === connection &&
+                    isBinding
+            }
+            if (!isCurrentBind) {
+                NativeLogger.i(TAG, "Ignoring stale UserService connection")
+                return@synchronized
+            }
+
             NativeLogger.i(TAG, "UserService connected: ${name?.className}")
-            isBinding = false
-            if (service != null && service.pingBinder()) {
-                val userService = IClipboardUserService.Stub.asInterface(service)
-                if (userService == null) {
-                    NativeLogger.e(TAG, "Failed to create UserService interface")
-                    return
-                }
-                clipboardService = userService
-                serviceConnected = true
-                NativeLogger.i(TAG, "UserService bound successfully")
-                // 传入本进程 token，使 UserService 在主进程死亡时能自动退出
-                try {
-                    userService.init(callerToken)
-                } catch (e: Exception) {
-                    NativeLogger.e(TAG, "Failed to init UserService with caller token", e)
-                    invalidateUserService("init failed")
-                    return
-                }
-                if (clipboardListenerRequested) {
-                    registerClipboardListener()
-                }
-            } else {
+            if (service == null || !service.pingBinder()) {
                 NativeLogger.e(TAG, "UserService binder is null or dead")
+                notifyUnavailable = resetUserServiceConnection(
+                    "connected UserService binder is null or dead",
+                    connection
+                )
+                return@synchronized
+            }
+
+            val userService = IClipboardUserService.Stub.asInterface(service)
+            if (userService == null) {
+                NativeLogger.e(TAG, "Failed to create UserService interface")
+                notifyUnavailable = resetUserServiceConnection(
+                    "failed to create UserService interface",
+                    connection
+                )
+                return@synchronized
+            }
+
+            val published = synchronized(connectionStateLock) {
+                if (
+                    activeServiceConnection !== connection ||
+                    !isBinding
+                ) {
+                    false
+                } else {
+                    clipboardService = userService
+                    serviceConnected = true
+                    isBinding = false
+                    connectionLatch.countDown()
+                    true
+                }
+            }
+            if (published) {
+                connectedService = userService
+            } else {
+                NativeLogger.i(TAG, "Discarding stale initialized connection")
             }
         }
 
-        override fun onServiceDisconnected(name: ComponentName?) {
-            NativeLogger.w(TAG, "UserService disconnected")
-            isBinding = false
-            clipboardService = null
-            serviceConnected = false
-            if (clipboardListenerRequested) sendClipboardListenerUnavailable()
+        val publishedService = connectedService
+        if (publishedService != null) {
+            NativeLogger.i(TAG, "UserService bound successfully")
+            if (clipboardListenerRequested) {
+                restoreClipboardListenerAfterConnection(publishedService)
+            }
+        } else if (notifyUnavailable && clipboardListenerRequested) {
+            sendClipboardListenerUnavailable()
         }
     }
 
     private val permissionResultListener =
         Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
             if (requestCode == REQUEST_CODE_PERMISSION) {
-                permissionGranted = grantResult == PackageManager.PERMISSION_GRANTED
-                if (permissionGranted) {
+                if (grantResult == PackageManager.PERMISSION_GRANTED) {
                     bindUserService()
                 }
             }
@@ -110,7 +172,7 @@ class ShizukuClipboardModule : Module() {
 
     private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
         NativeLogger.i(TAG, "Shizuku binder received")
-        // 当 Shizuku 连接时，如果已有权限，自动绑定 UserService
+        // 当 Shizuku 连接时，如果已有权限，绑定或复用 daemon UserService。
         if (hasPermission()) {
             bindUserService()
         }
@@ -118,10 +180,33 @@ class ShizukuClipboardModule : Module() {
 
     private val binderDeadListener = Shizuku.OnBinderDeadListener {
         NativeLogger.w(TAG, "Shizuku binder dead")
-        permissionGranted = false
+        markConnectionFailed()
+        if (clipboardListenerRequested) sendClipboardListenerUnavailable()
+    }
+
+    /** Publishes a disconnected state and wakes any waiting async operation. */
+    private fun markConnectionFailed(
+        expectedConnection: ServiceConnection? = null
+    ): Boolean {
+        synchronized(connectionStateLock) {
+            if (
+                expectedConnection != null &&
+                activeServiceConnection !== expectedConnection
+            ) {
+                return false
+            }
+            invalidateConnectionStateLocked()
+            return true
+        }
+    }
+
+    /** Invalidates callbacks from the current bind attempt. Must hold connectionStateLock. */
+    private fun invalidateConnectionStateLocked() {
         clipboardService = null
         serviceConnected = false
-        if (clipboardListenerRequested) sendClipboardListenerUnavailable()
+        isBinding = false
+        activeServiceConnection = null
+        connectionLatch.countDown()
     }
 
     private fun hasPermission(): Boolean {
@@ -139,15 +224,27 @@ class ShizukuClipboardModule : Module() {
         }
     }
 
-    private fun bindUserService() {
-        if (serviceConnected || isBinding) return
-        isBinding = true
-        try {
-            NativeLogger.i(TAG, "Binding UserService...")
-            Shizuku.bindUserService(userServiceArgs, serviceConnection)
-        } catch (e: Exception) {
-            isBinding = false
-            NativeLogger.e(TAG, "Failed to bind UserService", e)
+    /** Starts one bind attempt and returns the latch shared by concurrent callers. */
+    private fun bindUserService(): CountDownLatch? {
+        synchronized(connectionOperationLock) {
+            lateinit var connection: ServiceConnection
+            val latch = synchronized(connectionStateLock) {
+                if (serviceConnected) return null
+                if (isBinding) return connectionLatch
+
+                connection = createServiceConnection()
+                activeServiceConnection = connection
+                isBinding = true
+                CountDownLatch(1).also { connectionLatch = it }
+            }
+            try {
+                NativeLogger.i(TAG, "Binding UserService...")
+                Shizuku.bindUserService(userServiceArgs, connection)
+            } catch (e: Exception) {
+                markConnectionFailed(connection)
+                NativeLogger.e(TAG, "Failed to bind UserService", e)
+            }
+            return latch
         }
     }
 
@@ -171,50 +268,122 @@ class ShizukuClipboardModule : Module() {
         }
     }
 
-    /** Removes a failed UserService so the next bind starts with a fresh service record. */
-    private fun invalidateUserService(reason: String) {
-        NativeLogger.w(TAG, "Removing unhealthy UserService for recreation: $reason")
-        clipboardService = null
-        serviceConnected = false
-        isBinding = false
-        try {
-            // Remove the server-side record as well as this process' local connection.
-            Shizuku.unbindUserService(userServiceArgs, serviceConnection, true)
-        } catch (e: Exception) {
-            NativeLogger.w(TAG, "Failed to remove unhealthy UserService: ${e.message}")
+    /**
+     * Drops only this App process' client connection. The daemon UserService is retained and can
+     * be rebound without racing a remote process teardown.
+     */
+    private fun resetUserServiceConnection(
+        reason: String,
+        expectedConnection: ServiceConnection? = null
+    ): Boolean {
+        NativeLogger.w(TAG, "Resetting UserService client connection: $reason")
+        synchronized(connectionOperationLock) {
+            val resetResult = synchronized(connectionStateLock) {
+                if (
+                    expectedConnection != null &&
+                    activeServiceConnection !== expectedConnection
+                ) {
+                    false to null
+                } else {
+                    val connection = activeServiceConnection
+                    invalidateConnectionStateLocked()
+                    true to connection
+                }
+            }
+            if (!resetResult.first) return false
+
+            val connection = resetResult.second
+            try {
+                if (connection != null) {
+                    Shizuku.unbindUserService(userServiceArgs, connection, false)
+                }
+            } catch (e: Exception) {
+                NativeLogger.w(TAG, "Failed to reset UserService connection: ${e.message}")
+            }
+            return true
         }
     }
 
-    private fun unbindUserService() {
-        if (!serviceConnected && !isBinding) return
-        val service = clipboardService
-        clipboardService = null
-        serviceConnected = false
-        isBinding = false
-        try {
-            service?.destroy()
-        } catch (e: Exception) {
-            NativeLogger.e(TAG, "Failed to call destroy on UserService", e)
+    /** Detaches this module while allowing the daemon UserService to survive App shutdown. */
+    private fun disconnectUserService() {
+        synchronized(connectionOperationLock) {
+            val disconnectedState = synchronized(connectionStateLock) {
+                if (!serviceConnected && !isBinding) return
+                val connectedService = clipboardService
+                val connection = activeServiceConnection
+                invalidateConnectionStateLocked()
+                connectedService to connection
+            }
+            val service = disconnectedState.first
+            val connection = disconnectedState.second
+            try {
+                service?.clearClipboardChangedCallback(callerToken)
+            } catch (e: Exception) {
+                NativeLogger.w(
+                    TAG,
+                    "Failed to clear UserService listener while disconnecting: ${e.message}"
+                )
+            }
+            try {
+                if (connection != null) {
+                    Shizuku.unbindUserService(userServiceArgs, connection, false)
+                }
+            } catch (e: Exception) {
+                NativeLogger.e(TAG, "Failed to unbind UserService", e)
+            }
         }
-        try {
-            Shizuku.unbindUserService(userServiceArgs, serviceConnection, true)
+    }
+
+    private fun tryRegisterClipboardListener(service: IClipboardUserService): Boolean {
+        val serviceBinder = service.asBinder()
+        val registered = try {
+            service.setClipboardChangedCallback(callerToken, clipboardChangedCallback)
         } catch (e: Exception) {
-            NativeLogger.e(TAG, "Failed to unbind UserService", e)
+            NativeLogger.w(TAG, "Failed to register primary clip listener: ${e.message}")
+            false
         }
+        if (!registered) return false
+
+        val isCurrentRegistration = synchronized(connectionStateLock) {
+            clipboardListenerRequested &&
+                serviceConnected &&
+                clipboardService?.asBinder() === serviceBinder
+        }
+        if (!isCurrentRegistration) {
+            try {
+                service.clearClipboardChangedCallback(callerToken)
+            } catch (e: Exception) {
+                NativeLogger.w(TAG, "Failed to clear stale listener registration: ${e.message}")
+            }
+            return false
+        }
+        return true
     }
 
     private fun registerClipboardListener(): Boolean {
-        repeat(2) { attempt ->
-            val service = ensureServiceConnected() ?: return false
-            try {
-                if (service.setClipboardChangedCallback(clipboardChangedCallback)) return true
-                NativeLogger.w(TAG, "Primary clip listener registration returned false")
-            } catch (e: Exception) {
-                NativeLogger.w(TAG, "Failed to register primary clip listener: ${e.message}")
+        synchronized(listenerRegistrationLock) {
+            clipboardListenerRequested = true
+            for (attempt in 0 until 2) {
+                val service = ensureServiceConnected()
+                if (service == null) {
+                    if (attempt == 0) continue
+                    return false
+                }
+                if (tryRegisterClipboardListener(service)) return true
+                if (attempt == 0) resetUserServiceConnection("listener registration failed")
             }
-            if (attempt == 0) invalidateUserService("listener registration failed")
+            return false
         }
-        return false
+    }
+
+    /** Restores an existing subscription after a reconnect without racing an explicit start. */
+    private fun restoreClipboardListenerAfterConnection(service: IClipboardUserService) {
+        synchronized(listenerRegistrationLock) {
+            if (!clipboardListenerRequested) return
+            if (!tryRegisterClipboardListener(service)) {
+                sendClipboardListenerUnavailable()
+            }
+        }
     }
 
     private fun sendClipboardListenerUnavailable() {
@@ -229,22 +398,29 @@ class ShizukuClipboardModule : Module() {
         val currentService = clipboardService
         if (currentService != null && serviceConnected) {
             if (isUserServiceHealthy(currentService)) return currentService
-            invalidateUserService("UserService health check failed")
+            resetUserServiceConnection("UserService health check failed")
         }
-        // 尝试重新绑定
-        bindUserService()
-        // 等待短暂时间让连接建立
-        val startTime = System.currentTimeMillis()
-        while (System.currentTimeMillis() - startTime < 3000) {
-            val service = clipboardService
-            if (service != null && serviceConnected) {
-                if (isUserServiceHealthy(service)) return service
-                invalidateUserService("newly connected UserService health check failed")
-                return null
-            }
-            Thread.sleep(100)
+
+        val latch = bindUserService()
+        val connectionCompleted = try {
+            latch == null || latch.await(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            NativeLogger.w(TAG, "Interrupted while waiting for UserService connection")
+            resetUserServiceConnection("connection wait interrupted")
+            return null
         }
-        NativeLogger.w(TAG, "Timed out waiting for a live UserService")
+        if (!connectionCompleted) {
+            NativeLogger.w(TAG, "Timed out waiting for UserService connection callback")
+            resetUserServiceConnection("connection callback timeout")
+            return null
+        }
+
+        val connectedService = clipboardService
+        if (connectedService != null && serviceConnected) {
+            if (isUserServiceHealthy(connectedService)) return connectedService
+            resetUserServiceConnection("newly connected UserService health check failed")
+        }
         return null
     }
 
@@ -253,8 +429,12 @@ class ShizukuClipboardModule : Module() {
         fallback: T,
         block: (IClipboardUserService) -> T
     ): T {
-        repeat(2) { attempt ->
-            val service = ensureServiceConnected() ?: return fallback
+        for (attempt in 0 until 2) {
+            val service = ensureServiceConnected()
+            if (service == null) {
+                if (attempt == 0) continue
+                break
+            }
             try {
                 return block(service)
             } catch (e: Exception) {
@@ -262,7 +442,9 @@ class ShizukuClipboardModule : Module() {
                     TAG,
                     "$operation failed on UserService (attempt ${attempt + 1}): ${e.message}"
                 )
-                if (attempt == 0) invalidateUserService("$operation remote call failed")
+                if (attempt == 0) {
+                    resetUserServiceConnection("$operation remote call failed")
+                }
             }
         }
         return fallback
@@ -286,7 +468,7 @@ class ShizukuClipboardModule : Module() {
         OnDestroy {
             try {
                 clipboardListenerRequested = false
-                unbindUserService()
+                disconnectUserService()
                 Shizuku.removeRequestPermissionResultListener(permissionResultListener)
                 Shizuku.removeBinderReceivedListener(binderReceivedListener)
                 Shizuku.removeBinderDeadListener(binderDeadListener)
@@ -369,7 +551,6 @@ class ShizukuClipboardModule : Module() {
 
         AsyncFunction("startPrimaryClipChangedListener") { promise: Promise ->
             try {
-                clipboardListenerRequested = true
                 promise.resolve(registerClipboardListener())
             } catch (e: Exception) {
                 NativeLogger.e(TAG, "Failed to start primary clip listener", e)
@@ -378,11 +559,13 @@ class ShizukuClipboardModule : Module() {
         }
 
         AsyncFunction("stopPrimaryClipChangedListener") { promise: Promise ->
-            clipboardListenerRequested = false
-            try {
-                clipboardService?.clearClipboardChangedCallback()
-            } catch (e: Exception) {
-                NativeLogger.e(TAG, "Failed to stop primary clip listener", e)
+            synchronized(listenerRegistrationLock) {
+                clipboardListenerRequested = false
+                try {
+                    clipboardService?.clearClipboardChangedCallback(callerToken)
+                } catch (e: Exception) {
+                    NativeLogger.e(TAG, "Failed to stop primary clip listener", e)
+                }
             }
             promise.resolve(null)
         }
