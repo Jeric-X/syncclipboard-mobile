@@ -30,7 +30,6 @@ class ShizukuClipboardModule : Module() {
         private const val CONNECTION_TIMEOUT_SECONDS = 3L
     }
 
-    private var permissionGranted = false
     @Volatile
     private var clipboardService: IClipboardUserService? = null
     @Volatile
@@ -45,7 +44,6 @@ class ShizukuClipboardModule : Module() {
     private val listenerRegistrationLock = Any()
     @Volatile
     private var connectionLatch = CountDownLatch(0)
-    private var connectionGeneration = 0L
     private var activeServiceConnection: ServiceConnection? = null
 
     // UserService 使用此 token 监听 App 进程死亡，只清理该客户端的回调资源。
@@ -76,25 +74,24 @@ class ShizukuClipboardModule : Module() {
             .version(8)
     }
 
-    /** Creates a callback object tied to exactly one bind generation. */
-    private fun createServiceConnection(generation: Long): ServiceConnection {
+    /** Creates a callback object tied to exactly one bind attempt. */
+    private fun createServiceConnection(): ServiceConnection {
         return object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-                handleServiceConnected(generation, this, name, service)
+                handleServiceConnected(this, name, service)
             }
 
             override fun onServiceDisconnected(name: ComponentName?) {
-                NativeLogger.w(TAG, "UserService disconnected: generation=$generation")
-                if (markConnectionFailed(generation, this) && clipboardListenerRequested) {
+                NativeLogger.w(TAG, "UserService disconnected")
+                if (markConnectionFailed(this) && clipboardListenerRequested) {
                     sendClipboardListenerUnavailable()
                 }
             }
         }
     }
 
-    /** Publishes a connection only if its bind generation is still current. */
+    /** Publishes a connection only if its bind attempt is still current. */
     private fun handleServiceConnected(
-        generation: Long,
         connection: ServiceConnection,
         name: ComponentName?,
         service: IBinder?
@@ -104,12 +101,11 @@ class ShizukuClipboardModule : Module() {
 
         synchronized(connectionOperationLock) {
             val isCurrentBind = synchronized(connectionStateLock) {
-                connectionGeneration == generation &&
-                    activeServiceConnection === connection &&
+                activeServiceConnection === connection &&
                     isBinding
             }
             if (!isCurrentBind) {
-                NativeLogger.i(TAG, "Ignoring stale UserService connection: generation=$generation")
+                NativeLogger.i(TAG, "Ignoring stale UserService connection")
                 return@synchronized
             }
 
@@ -118,7 +114,6 @@ class ShizukuClipboardModule : Module() {
                 NativeLogger.e(TAG, "UserService binder is null or dead")
                 notifyUnavailable = resetUserServiceConnection(
                     "connected UserService binder is null or dead",
-                    generation,
                     connection
                 )
                 return@synchronized
@@ -129,21 +124,6 @@ class ShizukuClipboardModule : Module() {
                 NativeLogger.e(TAG, "Failed to create UserService interface")
                 notifyUnavailable = resetUserServiceConnection(
                     "failed to create UserService interface",
-                    generation,
-                    connection
-                )
-                return@synchronized
-            }
-
-            try {
-                // 先建立客户端死亡监听，再公布连接，避免剪贴板回调
-                // 注册在 init 之前抢先执行。
-                userService.init(callerToken)
-            } catch (e: Exception) {
-                NativeLogger.e(TAG, "Failed to initialize UserService client lifecycle", e)
-                notifyUnavailable = resetUserServiceConnection(
-                    "client lifecycle init failed",
-                    generation,
                     connection
                 )
                 return@synchronized
@@ -151,7 +131,6 @@ class ShizukuClipboardModule : Module() {
 
             val published = synchronized(connectionStateLock) {
                 if (
-                    connectionGeneration != generation ||
                     activeServiceConnection !== connection ||
                     !isBinding
                 ) {
@@ -167,13 +146,13 @@ class ShizukuClipboardModule : Module() {
             if (published) {
                 connectedService = userService
             } else {
-                NativeLogger.i(TAG, "Discarding stale initialized connection: generation=$generation")
+                NativeLogger.i(TAG, "Discarding stale initialized connection")
             }
         }
 
         val publishedService = connectedService
         if (publishedService != null) {
-            NativeLogger.i(TAG, "UserService bound successfully: generation=$generation")
+            NativeLogger.i(TAG, "UserService bound successfully")
             if (clipboardListenerRequested) {
                 restoreClipboardListenerAfterConnection(publishedService)
             }
@@ -185,8 +164,7 @@ class ShizukuClipboardModule : Module() {
     private val permissionResultListener =
         Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
             if (requestCode == REQUEST_CODE_PERMISSION) {
-                permissionGranted = grantResult == PackageManager.PERMISSION_GRANTED
-                if (permissionGranted) {
+                if (grantResult == PackageManager.PERMISSION_GRANTED) {
                     bindUserService()
                 }
             }
@@ -202,21 +180,18 @@ class ShizukuClipboardModule : Module() {
 
     private val binderDeadListener = Shizuku.OnBinderDeadListener {
         NativeLogger.w(TAG, "Shizuku binder dead")
-        permissionGranted = false
         markConnectionFailed()
         if (clipboardListenerRequested) sendClipboardListenerUnavailable()
     }
 
     /** Publishes a disconnected state and wakes any waiting async operation. */
     private fun markConnectionFailed(
-        expectedGeneration: Long? = null,
         expectedConnection: ServiceConnection? = null
     ): Boolean {
         synchronized(connectionStateLock) {
             if (
-                expectedGeneration != null &&
-                (connectionGeneration != expectedGeneration ||
-                    activeServiceConnection !== expectedConnection)
+                expectedConnection != null &&
+                activeServiceConnection !== expectedConnection
             ) {
                 return false
             }
@@ -225,13 +200,12 @@ class ShizukuClipboardModule : Module() {
         }
     }
 
-    /** Invalidates callbacks from the current generation. Must hold connectionStateLock. */
+    /** Invalidates callbacks from the current bind attempt. Must hold connectionStateLock. */
     private fun invalidateConnectionStateLocked() {
         clipboardService = null
         serviceConnected = false
         isBinding = false
         activeServiceConnection = null
-        connectionGeneration += 1
         connectionLatch.countDown()
     }
 
@@ -253,24 +227,21 @@ class ShizukuClipboardModule : Module() {
     /** Starts one bind attempt and returns the latch shared by concurrent callers. */
     private fun bindUserService(): CountDownLatch? {
         synchronized(connectionOperationLock) {
-            var generation = 0L
             lateinit var connection: ServiceConnection
             val latch = synchronized(connectionStateLock) {
                 if (serviceConnected) return null
                 if (isBinding) return connectionLatch
 
-                connectionGeneration += 1
-                generation = connectionGeneration
-                connection = createServiceConnection(generation)
+                connection = createServiceConnection()
                 activeServiceConnection = connection
                 isBinding = true
                 CountDownLatch(1).also { connectionLatch = it }
             }
             try {
-                NativeLogger.i(TAG, "Binding UserService: generation=$generation")
+                NativeLogger.i(TAG, "Binding UserService...")
                 Shizuku.bindUserService(userServiceArgs, connection)
             } catch (e: Exception) {
-                markConnectionFailed(generation, connection)
+                markConnectionFailed(connection)
                 NativeLogger.e(TAG, "Failed to bind UserService", e)
             }
             return latch
@@ -303,16 +274,14 @@ class ShizukuClipboardModule : Module() {
      */
     private fun resetUserServiceConnection(
         reason: String,
-        expectedGeneration: Long? = null,
         expectedConnection: ServiceConnection? = null
     ): Boolean {
         NativeLogger.w(TAG, "Resetting UserService client connection: $reason")
         synchronized(connectionOperationLock) {
             val resetResult = synchronized(connectionStateLock) {
                 if (
-                    expectedGeneration != null &&
-                    (connectionGeneration != expectedGeneration ||
-                        activeServiceConnection !== expectedConnection)
+                    expectedConnection != null &&
+                    activeServiceConnection !== expectedConnection
                 ) {
                     false to null
                 } else {

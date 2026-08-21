@@ -5,8 +5,7 @@ import android.content.ClipDescription
 import android.os.Binder
 import android.os.IBinder
 import android.os.Parcel
-
-
+import java.util.IdentityHashMap
 
 /**
  * ClipboardUserService — 运行在 Shizuku 进程（UID 2000/shell）中
@@ -131,13 +130,16 @@ class ClipboardUserService : IClipboardUserService.Stub() {
         }
     }
 
-    private var clipboardChangedCallback: IClipboardChangedCallback? = null
+    private data class ClientRecord(
+        val token: IBinder,
+        val deathRecipient: IBinder.DeathRecipient,
+        var callback: IClipboardChangedCallback
+    )
+
+    private val clients = IdentityHashMap<IBinder, ClientRecord>()
     private var systemListener: Any? = null
-    private var isSystemListenerRegistered = false
     private var registeredClipboardBinder: IBinder? = null
     private val clientLifecycleLock = Any()
-    private var activeCallerToken: IBinder? = null
-    private var activeCallerDeathRecipient: IBinder.DeathRecipient? = null
 
     /** Handles the hidden IOnPrimaryClipChangedListener Binder callback without linking it. */
     private val systemListenerBinder = object : Binder() {
@@ -149,13 +151,16 @@ class ClipboardUserService : IClipboardUserService.Stub() {
                 }
                 TRANSACTION_DISPATCH_PRIMARY_CLIP_CHANGED -> {
                     data.enforceInterface(PRIMARY_CLIP_CHANGED_DESCRIPTOR)
-                    val callback = synchronized(clientLifecycleLock) {
-                        clipboardChangedCallback
+                    val callbacks = synchronized(clientLifecycleLock) {
+                        clients.values.map { record -> record.token to record.callback }
                     }
-                    try {
-                        callback?.onPrimaryClipChanged()
-                    } catch (e: Exception) {
-                        android.util.Log.w(TAG, "Failed to forward clipboard change", e)
+                    callbacks.forEach { (token, callback) ->
+                        try {
+                            callback.onPrimaryClipChanged()
+                        } catch (e: Exception) {
+                            android.util.Log.w(TAG, "Failed to forward clipboard change", e)
+                            removeFailedClient(token, callback)
+                        }
                     }
                     return true
                 }
@@ -219,45 +224,65 @@ class ClipboardUserService : IClipboardUserService.Stub() {
         }
     }
 
+    /** Adds or updates one subscribed client without replacing other module instances. */
+    private fun registerClientLocked(
+        callerToken: IBinder,
+        callback: IClipboardChangedCallback
+    ): ClientRecord? {
+        clients[callerToken]?.let { client ->
+            client.callback = callback
+            return client
+        }
+
+        val deathRecipient = object : IBinder.DeathRecipient {
+            override fun binderDied() {
+                handleCallerDeath(callerToken, this)
+            }
+        }
+        return try {
+            callerToken.linkToDeath(deathRecipient, 0)
+            ClientRecord(callerToken, deathRecipient, callback).also { record ->
+                clients[callerToken] = record
+                android.util.Log.i(TAG, "Registered clipboard client; clients=${clients.size}")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Failed to link to caller token death", e)
+            null
+        }
+    }
+
     override fun setClipboardChangedCallback(
         callerToken: IBinder,
         callback: IClipboardChangedCallback
     ): Boolean {
         synchronized(clientLifecycleLock) {
-            if (activeCallerToken !== callerToken) {
-                android.util.Log.w(TAG, "Ignoring listener registration from superseded client")
-                return false
-            }
+            val client = registerClientLocked(callerToken, callback) ?: return false
             return try {
                 val clipboard = getClipboardService()
                 val currentClipboardBinder = clipboardBinder
-                if (
+                val listenerAlreadyRegistered =
                     clipboard != null &&
-                    currentClipboardBinder != null &&
-                    isSystemListenerRegistered &&
-                    registeredClipboardBinder === currentClipboardBinder &&
-                    clipboardChangedCallback?.asBinder() === callback.asBinder()
-                ) {
-                    return true
-                }
+                        currentClipboardBinder != null &&
+                        registeredClipboardBinder === currentClipboardBinder
 
+                if (listenerAlreadyRegistered) return true
+
+                // ClipboardService 可能已重启；旧 Binder 上的注册状态不能复用。
                 unregisterSystemListener()
-                clipboardChangedCallback = callback
                 val listener = getOrCreateSystemListener()
                 if (clipboard == null || listener == null) {
-                    clipboardChangedCallback = null
+                    removeClientLocked(client, unlinkDeathRecipient = true)
                     return false
                 }
                 invokeListenerRegistration(clipboard, "addPrimaryClipChangedListener", listener)
                     .also { registered ->
-                        isSystemListenerRegistered = registered
                         registeredClipboardBinder = if (registered) currentClipboardBinder else null
                         if (!registered) {
-                            clipboardChangedCallback = null
+                            removeClientLocked(client, unlinkDeathRecipient = true)
                         }
                     }
             } catch (e: Exception) {
-                clipboardChangedCallback = null
+                removeClientLocked(client, unlinkDeathRecipient = true)
                 android.util.Log.e(TAG, "Failed to register primary clip listener", e)
                 false
             }
@@ -266,18 +291,45 @@ class ClipboardUserService : IClipboardUserService.Stub() {
 
     override fun clearClipboardChangedCallback(callerToken: IBinder) {
         synchronized(clientLifecycleLock) {
-            if (activeCallerToken !== callerToken) {
-                android.util.Log.i(TAG, "Ignoring listener cleanup from superseded client")
-                return
-            }
-            clearClipboardChangedCallbackLocked()
+            val client = clients[callerToken] ?: return
+            removeClientLocked(client, unlinkDeathRecipient = true)
+            android.util.Log.i(TAG, "Removed clipboard client; clients=${clients.size}")
+        }
+    }
+
+    /** Removes one client and unregisters the system listener after the last callback leaves. */
+    private fun removeClientLocked(
+        client: ClientRecord,
+        unlinkDeathRecipient: Boolean
+    ) {
+        if (clients[client.token] !== client) return
+        clients.remove(client.token)
+        if (unlinkDeathRecipient) unlinkClientDeathRecipientLocked(client)
+        if (clients.isEmpty()) {
+            unregisterSystemListener()
+        }
+    }
+
+    private fun removeFailedClient(
+        callerToken: IBinder,
+        failedCallback: IClipboardChangedCallback
+    ) {
+        synchronized(clientLifecycleLock) {
+            val client = clients[callerToken] ?: return
+            if (client.callback.asBinder() !== failedCallback.asBinder()) return
+            removeClientLocked(client, unlinkDeathRecipient = true)
+            android.util.Log.i(TAG, "Removed unreachable clipboard client")
         }
     }
 
     /** 调用时必须持有 clientLifecycleLock。 */
-    private fun clearClipboardChangedCallbackLocked() {
-        unregisterSystemListener()
-        clipboardChangedCallback = null
+    private fun unlinkClientDeathRecipientLocked(client: ClientRecord) {
+        try {
+            client.token.unlinkToDeath(client.deathRecipient, 0)
+        } catch (e: Exception) {
+            // token 可能已死且 death recipient 已被 Binder 移除。
+            android.util.Log.d(TAG, "Client death recipient was already unlinked: ${e.message}")
+        }
     }
 
     private fun getOrCreateSystemListener(): Any? {
@@ -293,7 +345,7 @@ class ClipboardUserService : IClipboardUserService.Stub() {
     }
 
     private fun unregisterSystemListener() {
-        if (!isSystemListenerRegistered) return
+        if (registeredClipboardBinder == null) return
         try {
             val clipboard = getClipboardService()
             val listener = systemListener
@@ -303,7 +355,6 @@ class ClipboardUserService : IClipboardUserService.Stub() {
         } catch (e: Exception) {
             android.util.Log.w(TAG, "Failed to unregister primary clip listener", e)
         } finally {
-            isSystemListenerRegistered = false
             registeredClipboardBinder = null
         }
     }
@@ -346,68 +397,16 @@ class ClipboardUserService : IClipboardUserService.Stub() {
         }.let { args -> if (listenerAssigned) args.toTypedArray() else null }
     }
 
-    override fun init(callerToken: IBinder) {
-        synchronized(clientLifecycleLock) {
-            // daemon 可能比 App 活得更久。新客户端接管时先解除旧 token，
-            // 并清理旧回调，避免旧死亡通知误删新客户端的监听。
-            unlinkActiveCallerDeathRecipientLocked()
-            clearClipboardChangedCallbackLocked()
-
-            val deathRecipient = object : IBinder.DeathRecipient {
-                override fun binderDied() {
-                    handleCallerDeath(callerToken, this)
-                }
-            }
-            activeCallerToken = callerToken
-            activeCallerDeathRecipient = deathRecipient
-            try {
-                callerToken.linkToDeath(deathRecipient, 0)
-                android.util.Log.i(TAG, "Linked to caller token for callback cleanup")
-            } catch (e: Exception) {
-                if (
-                    activeCallerToken === callerToken &&
-                    activeCallerDeathRecipient === deathRecipient
-                ) {
-                    activeCallerToken = null
-                    activeCallerDeathRecipient = null
-                }
-                clearClipboardChangedCallbackLocked()
-                android.util.Log.e(TAG, "Failed to link to caller token death", e)
-            }
-        }
-    }
-
-    /** 客户端死亡时只清理它的剪贴板监听，保留 daemon UserService。 */
+    /** 客户端进程死亡时只清理对应记录，保留其他客户端和 daemon UserService。 */
     private fun handleCallerDeath(
         callerToken: IBinder,
         deathRecipient: IBinder.DeathRecipient
     ) {
         synchronized(clientLifecycleLock) {
-            if (
-                activeCallerToken !== callerToken ||
-                activeCallerDeathRecipient !== deathRecipient
-            ) {
-                return
-            }
-            activeCallerToken = null
-            activeCallerDeathRecipient = null
-            clearClipboardChangedCallbackLocked()
-            android.util.Log.i(TAG, "Caller process died; cleared clipboard callback")
-        }
-    }
-
-    /** 调用时必须持有 clientLifecycleLock。 */
-    private fun unlinkActiveCallerDeathRecipientLocked() {
-        val token = activeCallerToken
-        val deathRecipient = activeCallerDeathRecipient
-        activeCallerToken = null
-        activeCallerDeathRecipient = null
-        if (token == null || deathRecipient == null) return
-        try {
-            token.unlinkToDeath(deathRecipient, 0)
-        } catch (e: Exception) {
-            // token 可能已死且 death recipient 已被 Binder 移除。
-            android.util.Log.d(TAG, "Caller death recipient was already unlinked: ${e.message}")
+            val client = clients[callerToken] ?: return
+            if (client.deathRecipient !== deathRecipient) return
+            removeClientLocked(client, unlinkDeathRecipient = false)
+            android.util.Log.i(TAG, "Caller process died; remaining clients=${clients.size}")
         }
     }
 
@@ -429,8 +428,11 @@ class ClipboardUserService : IClipboardUserService.Stub() {
     override fun destroy() {
         android.util.Log.i(TAG, "UserService destroy called, exiting process")
         synchronized(clientLifecycleLock) {
-            unlinkActiveCallerDeathRecipientLocked()
-            clearClipboardChangedCallbackLocked()
+            clients.values.toList().forEach { client ->
+                unlinkClientDeathRecipientLocked(client)
+            }
+            clients.clear()
+            unregisterSystemListener()
         }
         clipboardService = null
         clipboardBinder = null
