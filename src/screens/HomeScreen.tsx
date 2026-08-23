@@ -34,6 +34,8 @@ import {
 } from '@/services/sync/ClipboardSyncActions';
 import type { ProgressInfo } from '@/types/progress';
 import { longRunningTaskManager } from '@/longRunningTask/LongRunningTaskManager';
+import { updateService } from '@/services/update';
+import { useUpdateDialog } from '@/hooks/useUpdateDialog';
 
 export function HomeScreen() {
   const { theme } = useTheme();
@@ -61,7 +63,25 @@ export function HomeScreen() {
   const syncError = useClipboardSyncServiceStore((s) => s.syncError);
 
   const { currentContent } = useLocalClipboardStore();
-  const { getActiveServer } = useSettingsStore();
+  const { isLoaded, getActiveServer } = useSettingsStore();
+  const { showUpdateDialog } = useUpdateDialog(showMessage);
+
+  // 首页首次挂载后自动检查更新（默认每天一次）。
+  useEffect(() => {
+    if (!isLoaded) return;
+    updateService
+      .checkAutomatically()
+      .then((result) => {
+        if (result?.hasUpdate) {
+          showUpdateDialog(result.latestVersion, result.assets, result.releaseNotes);
+        }
+      })
+      .catch((error) => {
+        if (!(error instanceof Error && error.name === 'AbortError')) {
+          console.warn('[HomeScreen] Auto update check failed:', error);
+        }
+      });
+  }, [isLoaded, showUpdateDialog]);
 
   // 启动所有后台任务（先加载字体，再启动后台任务，避免后台繁重任务导致导航栏图标加载缓慢）
   useEffect(() => {
