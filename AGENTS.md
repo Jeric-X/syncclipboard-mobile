@@ -27,6 +27,24 @@ npm run test:coverage              # Jest with coverage
 npx jest <file> --no-coverage      # Run a single test file (e.g., src/__tests__/xxx.test.ts)
 ```
 
+## Required Validation
+
+Before considering a task complete, run every validation command that applies to the files
+changed in the task:
+
+- After modifying TypeScript or JavaScript files (`.ts`, `.tsx`, `.js`, or `.jsx`), run
+  `npm run lint:fix` and then `npm run type-check`. Run the type check after lint fixes so it
+  validates the final code.
+- After modifying Expo config plugin implementation files under `plugins/`, or their TypeScript
+  build configuration, run `npm run plugin:build` after linting.
+- After modifying application/runtime behavior or tests, run `npm run test`. This includes changes
+  to screens, hooks, services, stores, tasks, utilities, native-module JavaScript/TypeScript APIs,
+  and test files. Documentation-only, comment-only, and formatting-only changes do not require the
+  test suite.
+- After modifying Markdown or JSON files, run `npm run format-docs`.
+- If multiple rules apply, run all applicable commands. After any auto-fix, build, or formatting
+  command, inspect the diff and do not include unrelated generated or formatting changes.
+
 ## Architecture Overview
 
 This is a React Native clipboard synchronization app built with **Expo SDK 55**, using React Native 0.83 and React 19. It syncs clipboard content (text, images, files) between devices via SyncClipboard Server, WebDAV, or S3 backends.

@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { APP_VERSION } from '@/constants';
 import { updateService } from '@/services/update';
@@ -35,6 +35,15 @@ export function useUpdateDialog(showMessage: ShowMessage): {
 
   const showUpdateDialog = useCallback(
     (version: string, assets: ReleaseAssetInfo[], releaseNotes?: string) => {
+      if (Platform.OS !== 'android') {
+        Alert.alert(
+          t('settings.updateNotSupportedTitle'),
+          t('settings.updateNotSupportedMessage'),
+          [{ text: t('common.confirm') }]
+        );
+        return;
+      }
+
       const channelName = channel === 'github' ? 'GitHub' : 'Gitee';
       const body = releaseNotes
         ? t('settings.newVersionMessageWithChannel', {

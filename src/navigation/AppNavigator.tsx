@@ -78,7 +78,11 @@ const SettingsStackNavigator = () => {
   );
 };
 
-export const AppNavigator = () => {
+interface AppNavigatorProps {
+  autoUpdateCheckEnabled: boolean;
+}
+
+export const AppNavigator = ({ autoUpdateCheckEnabled }: AppNavigatorProps) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
 
@@ -147,7 +151,9 @@ export const AppNavigator = () => {
           },
         })}
       >
-        <Tab.Screen name="Home" component={HomeScreen} options={{ title: t('nav.home') }} />
+        <Tab.Screen name="Home" options={{ title: t('nav.home') }}>
+          {() => <HomeScreen autoUpdateCheckEnabled={autoUpdateCheckEnabled} />}
+        </Tab.Screen>
         <Tab.Screen
           name="History"
           component={HistoryScreen}

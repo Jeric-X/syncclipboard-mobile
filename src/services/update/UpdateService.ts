@@ -17,6 +17,7 @@ import {
 import { checkForUpdate, type ReleaseAssetInfo, type UpdateCheckResult } from '@/utils/update';
 import i18n from '@/i18n';
 import { getSupportedAbis } from 'native-util';
+import { Platform } from 'react-native';
 import type { AppConfig } from '@/types/storage';
 
 export interface UpdateServiceState {
@@ -41,6 +42,7 @@ export interface UpdateServiceDependencies {
   download: typeof downloadApk;
   install: typeof installApk;
   getToday: () => string;
+  isAndroid: () => boolean;
 }
 
 const initialState: UpdateServiceState = {
@@ -65,6 +67,7 @@ const defaultDependencies: UpdateServiceDependencies = {
   download: downloadApk,
   install: installApk,
   getToday: () => new Date().toISOString().slice(0, 10),
+  isAndroid: () => Platform.OS === 'android',
 };
 
 export class UpdateService {
@@ -94,6 +97,7 @@ export class UpdateService {
   async checkAutomatically(): Promise<UpdateCheckResult | null> {
     if (this.autoCheckStarted) return null;
     this.autoCheckStarted = true;
+    if (!this.dependencies.isAndroid()) return null;
 
     const config = await this.dependencies.getConfig();
     if (!config.autoCheckUpdate) return null;
@@ -146,6 +150,8 @@ export class UpdateService {
 
   /** 若目标版本已有有效缓存则直接安装，返回是否命中缓存。 */
   async installCachedUpdate(version: string, assets: ReleaseAssetInfo[]): Promise<boolean> {
+    if (!this.dependencies.isAndroid()) return false;
+
     const asset = this.selectAsset(assets);
     if (!asset) return false;
 
@@ -162,7 +168,10 @@ export class UpdateService {
     version: string,
     assets: ReleaseAssetInfo[]
   ): Promise<void> {
-    if (this.state.isDownloading) return;
+    if (!this.dependencies.isAndroid()) {
+      throw new Error(i18n.t('settings.updateNotSupportedMessage'));
+    }
+    if (this.downloadAbortController) return;
 
     const asset = this.selectAsset(assets);
     if (!asset) throw new Error(i18n.t('settings.noSuitableApk'));
@@ -189,13 +198,13 @@ export class UpdateService {
         }));
       this.throwIfCancelled(abortController, this.downloadAbortController);
 
+      await this.dependencies.install(fileUri);
       this.setState({
         updateAvailable: false,
         latestVersion: null,
         assets: [],
         releaseNotes: undefined,
       });
-      await this.dependencies.install(fileUri);
     } finally {
       if (this.downloadAbortController === abortController) {
         this.downloadAbortController = null;
@@ -206,15 +215,18 @@ export class UpdateService {
 
   cancelDownload(): void {
     this.downloadAbortController?.abort();
-    this.downloadAbortController = null;
-    this.setState({ isDownloading: false, downloadProgress: 0 });
   }
 
   /** 更新通道切换时取消旧任务并清空旧通道的检查结果。 */
   reset(): void {
     this.cancelCheck();
     this.cancelDownload();
-    this.setState({ ...initialState });
+    const isDownloading = this.downloadAbortController !== null;
+    this.setState({
+      ...initialState,
+      isDownloading,
+      downloadProgress: isDownloading ? this.state.downloadProgress : 0,
+    });
   }
 
   private selectAsset(assets: ReleaseAssetInfo[]): ReleaseAssetInfo | undefined {

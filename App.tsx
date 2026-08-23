@@ -14,33 +14,11 @@ import { useTheme } from './src/hooks/useTheme';
 import { setDynamicShortcuts } from 'shortcut';
 import { moveTaskToBack, setExcludeFromRecents } from 'native-util';
 import { networkAutoSwitchService } from './src/services/NetworkAutoSwitchService';
-
-const QUICK_UPLOAD_URL = 'syncclipboard://quick-upload';
-const QUICK_DOWNLOAD_URL = 'syncclipboard://quick-download';
-
-function parseQuickTileUrl(url: string | null): {
-  isQuickTile: boolean;
-  fromForeground: boolean;
-  direction: SyncDirection;
-} {
-  if (!url) return { isQuickTile: false, fromForeground: false, direction: SyncDirection.Download };
-  const fromForeground = url.includes('fg=1');
-  // Check upload first — its URL is a superset of the download prefix
-  if (url.startsWith(QUICK_UPLOAD_URL))
-    return { isQuickTile: true, fromForeground, direction: SyncDirection.Upload };
-  if (url.startsWith(QUICK_DOWNLOAD_URL))
-    return { isQuickTile: true, fromForeground, direction: SyncDirection.Download };
-  return { isQuickTile: false, fromForeground: false, direction: SyncDirection.Download };
-}
-
-function isShareIntentUrl(url: string | null): boolean {
-  if (!url) return false;
-  try {
-    return new URL(url).hostname === 'expo-sharing';
-  } catch {
-    return false;
-  }
-}
+import {
+  isShareIntentUrl,
+  parseQuickTileUrl,
+  shouldEnableAutoUpdateCheck,
+} from './src/utils/appLaunch';
 
 async function runOverlayNetworkPreflight(): Promise<void> {
   try {
@@ -54,6 +32,7 @@ type AppMode = 'checking' | 'home';
 
 export default function App() {
   const [appMode, setAppMode] = useState<AppMode>('checking');
+  const [autoUpdateCheckEnabled, setAutoUpdateCheckEnabled] = useState(false);
   // 快速操作覆盖层：始终以 overlay 形式显示，不卸载 AppNavigator/HomeScreen
   const [shareReceiveOverlay, setShareReceiveOverlay] = useState(false);
   const [quickActionOverlay, setQuickActionOverlay] = useState<{
@@ -112,6 +91,9 @@ export default function App() {
         await runOverlayNetworkPreflight();
         // fg=1 完成后留在 app，fg=0/无fg 完成后退出
         setQuickActionOverlay({ direction, exitAfterSync: !fromForeground });
+      } else if (shouldEnableAutoUpdateCheck(url)) {
+        // URL 解析完成且不是 overlay 冷启动，才允许首页自动检查更新。
+        setAutoUpdateCheckEnabled(true);
       }
     });
 
@@ -141,7 +123,9 @@ export default function App() {
       <ThemeProvider>
         <I18nProvider>
           <ThemedStatusBar />
-          {appMode === 'checking' ? null : <AppNavigator />}
+          {appMode === 'checking' ? null : (
+            <AppNavigator autoUpdateCheckEnabled={autoUpdateCheckEnabled} />
+          )}
           {shareReceiveOverlay && (
             <View style={StyleSheet.absoluteFill}>
               <ShareReceiveScreen

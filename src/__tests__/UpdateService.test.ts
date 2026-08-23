@@ -33,6 +33,7 @@ function createDependencies(
     download: jest.fn(async () => 'file:///update.apk'),
     install: jest.fn(async () => {}),
     getToday: jest.fn(() => '2026-08-23'),
+    isAndroid: jest.fn(() => true),
     ...overrides,
   };
 }
@@ -66,6 +67,19 @@ describe('UpdateService', () => {
     });
   });
 
+  it('iOS 自动检查静默跳过且不会进入 APK 下载流程', async () => {
+    const dependencies = createDependencies({ isAndroid: jest.fn(() => false) });
+    const service = new UpdateService(dependencies);
+
+    await expect(service.checkAutomatically()).resolves.toBeNull();
+    expect(dependencies.check).not.toHaveBeenCalled();
+    await expect(
+      service.downloadAndInstall('github', updateResult.latestVersion, updateResult.assets)
+    ).rejects.toThrow();
+    expect(dependencies.download).not.toHaveBeenCalled();
+    expect(dependencies.install).not.toHaveBeenCalled();
+  });
+
   it('下载时持续发布进度并在完成后调用安装器', async () => {
     const dependencies = createDependencies({
       download: jest.fn(async (options) => {
@@ -82,5 +96,58 @@ describe('UpdateService', () => {
     expect(progressValues).toContain(0.42);
     expect(dependencies.install).toHaveBeenCalledWith('file:///update.apk');
     expect(service.getState()).toMatchObject({ isDownloading: false, downloadProgress: 0 });
+  });
+
+  it('取消尚未退出的下载时保持互斥，阻止立即重试覆盖同一缓存文件', async () => {
+    const dependencies = createDependencies({
+      download: jest.fn(
+        (options) =>
+          new Promise<string>((_resolve, reject) => {
+            options.signal?.addEventListener('abort', () => {
+              reject(new DOMException('Aborted', 'AbortError'));
+            });
+          })
+      ),
+    });
+    const service = new UpdateService(dependencies);
+    const firstDownload = service.downloadAndInstall(
+      'github',
+      updateResult.latestVersion,
+      updateResult.assets
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    service.cancelDownload();
+    const retry = service.downloadAndInstall(
+      'github',
+      updateResult.latestVersion,
+      updateResult.assets
+    );
+
+    expect(service.getState().isDownloading).toBe(true);
+    expect(dependencies.download).toHaveBeenCalledTimes(1);
+    await expect(retry).resolves.toBeUndefined();
+    await expect(firstDownload).rejects.toMatchObject({ name: 'AbortError' });
+    expect(service.getState().isDownloading).toBe(false);
+  });
+
+  it('安装器启动失败时保留可重试的更新状态', async () => {
+    const dependencies = createDependencies({
+      install: jest.fn(async () => {
+        throw new Error('installer unavailable');
+      }),
+    });
+    const service = new UpdateService(dependencies);
+    await service.checkForUpdates();
+
+    await expect(
+      service.downloadAndInstall('github', updateResult.latestVersion, updateResult.assets)
+    ).rejects.toThrow('installer unavailable');
+    expect(service.getState()).toMatchObject({
+      updateAvailable: true,
+      latestVersion: updateResult.latestVersion,
+      assets: updateResult.assets,
+    });
   });
 });
