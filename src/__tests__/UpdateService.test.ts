@@ -150,4 +150,43 @@ describe('UpdateService', () => {
       assets: updateResult.assets,
     });
   });
+
+  it('命中缓存并启动安装器后清空可更新状态', async () => {
+    const dependencies = createDependencies({
+      checkCache: jest.fn(async () => 'file:///cached-update.apk'),
+    });
+    const service = new UpdateService(dependencies);
+    await service.checkForUpdates();
+
+    await expect(
+      service.installCachedUpdate(updateResult.latestVersion, updateResult.assets)
+    ).resolves.toBe(true);
+    expect(dependencies.install).toHaveBeenCalledWith('file:///cached-update.apk');
+    expect(service.getState()).toMatchObject({
+      updateAvailable: false,
+      latestVersion: null,
+      assets: [],
+      releaseNotes: undefined,
+    });
+  });
+
+  it('缓存安装器启动失败时保留可重试的更新状态', async () => {
+    const dependencies = createDependencies({
+      checkCache: jest.fn(async () => 'file:///cached-update.apk'),
+      install: jest.fn(async () => {
+        throw new Error('installer unavailable');
+      }),
+    });
+    const service = new UpdateService(dependencies);
+    await service.checkForUpdates();
+
+    await expect(
+      service.installCachedUpdate(updateResult.latestVersion, updateResult.assets)
+    ).rejects.toThrow('installer unavailable');
+    expect(service.getState()).toMatchObject({
+      updateAvailable: true,
+      latestVersion: updateResult.latestVersion,
+      assets: updateResult.assets,
+    });
+  });
 });

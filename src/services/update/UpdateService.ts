@@ -159,6 +159,7 @@ export class UpdateService {
     if (!cached) return false;
 
     await this.dependencies.install(cached);
+    this.clearAvailableUpdate();
     return true;
   }
 
@@ -199,12 +200,7 @@ export class UpdateService {
       this.throwIfCancelled(abortController, this.downloadAbortController);
 
       await this.dependencies.install(fileUri);
-      this.setState({
-        updateAvailable: false,
-        latestVersion: null,
-        assets: [],
-        releaseNotes: undefined,
-      });
+      this.clearAvailableUpdate();
     } finally {
       if (this.downloadAbortController === abortController) {
         this.downloadAbortController = null;
@@ -237,6 +233,15 @@ export class UpdateService {
       console.warn('[UpdateService] getSupportedAbis failed:', error);
     }
     return findAssetForAbi(assets, preferredAbi);
+  }
+
+  private clearAvailableUpdate(): void {
+    this.setState({
+      updateAvailable: false,
+      latestVersion: null,
+      assets: [],
+      releaseNotes: undefined,
+    });
   }
 
   private throwIfCancelled(

@@ -37,11 +37,7 @@ import { longRunningTaskManager } from '@/longRunningTask/LongRunningTaskManager
 import { updateService } from '@/services/update';
 import { useUpdateDialog } from '@/hooks/useUpdateDialog';
 
-interface HomeScreenProps {
-  autoUpdateCheckEnabled: boolean;
-}
-
-export function HomeScreen({ autoUpdateCheckEnabled }: HomeScreenProps) {
+export function HomeScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const navigation = useNavigation();
@@ -72,7 +68,7 @@ export function HomeScreen({ autoUpdateCheckEnabled }: HomeScreenProps) {
 
   // 首页首次挂载后自动检查更新（默认每天一次）。
   useEffect(() => {
-    if (!isLoaded || !autoUpdateCheckEnabled) return;
+    if (!isLoaded) return;
     updateService
       .checkAutomatically()
       .then((result) => {
@@ -85,7 +81,7 @@ export function HomeScreen({ autoUpdateCheckEnabled }: HomeScreenProps) {
           console.warn('[HomeScreen] Auto update check failed:', error);
         }
       });
-  }, [autoUpdateCheckEnabled, isLoaded, showUpdateDialog]);
+  }, [isLoaded, showUpdateDialog]);
 
   // 启动所有后台任务（先加载字体，再启动后台任务，避免后台繁重任务导致导航栏图标加载缓慢）
   useEffect(() => {
