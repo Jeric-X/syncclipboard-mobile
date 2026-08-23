@@ -40,27 +40,18 @@ import { ServerConfig } from '@/types/api';
 import { useMessageToast } from '@/hooks/useMessageToast';
 import {
   shortcut,
-  checkForUpdate,
   calculateLogSize,
   clearLogs,
   saveLogsToFile,
   setLogLevel as setLoggerLogLevel,
   type LogLevel,
-  getPreferredAbi,
-  findAssetForAbi,
-  checkApkCache,
-  downloadApk,
-  installApk,
-  cleanOldApkCache,
-  type ReleaseAssetInfo,
-  type ApkSource,
   formatFileSize,
 } from '@/utils';
+import type { ReleaseAssetInfo } from '@/utils/update';
 import { Plus, RefreshCw, ChevronDown, ChevronUp } from 'react-native-feather';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { hasOverlayPermission, requestOverlayPermission } from 'clipboard-overlay';
 import {
-  getSupportedAbis,
   isIgnoringBatteryOptimizations,
   requestIgnoreBatteryOptimizations,
   setExcludeFromRecents,
@@ -87,6 +78,9 @@ import {
   hasNotificationPermission,
   requestNotificationPermission,
 } from '@/utils/notificationPermission';
+import { updateService } from '@/services/update';
+import { useUpdateServiceStore } from '@/serviceState/UpdateState';
+import { useUpdateDialog } from '@/hooks/useUpdateDialog';
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
@@ -106,7 +100,6 @@ export const SettingsScreen = () => {
     setAutoDownloadMaxSize,
     updateConfig,
     setAutoCheckUpdate,
-    setLastUpdateCheckDate,
     setUpdateToBeta,
     setUpdateChannel,
     setEnableHistorySync,
@@ -130,6 +123,7 @@ export const SettingsScreen = () => {
   const [editingServerIndex, setEditingServerIndex] = useState<number | null>(null);
   const [serversCollapsed, setServersCollapsed] = useState(true);
   const { message, showMessage, handleMessageShown } = useMessageToast();
+  const { showUpdateDialog } = useUpdateDialog(showMessage);
 
   // 本地状态用于跟踪Switch的当前值，避免闪烁
   const [localAutoSyncEnabled, setLocalAutoSyncEnabled] = useState(config?.autoSync ?? false);
@@ -194,18 +188,15 @@ export const SettingsScreen = () => {
   );
   const [statsText, setStatsText] = useState('');
 
-  // 更新检查状态
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [latestVersion, setLatestVersion] = useState<string | null>(null);
-  // APK 下载状态
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const downloadAbortRef = useRef<AbortController | null>(null);
-  const updateCheckAbortRef = useRef<AbortController | null>(null);
-  const latestAssetsRef = useRef<ReleaseAssetInfo[]>([]);
-  const latestTagRef = useRef<string>('');
-  const releaseNotesRef = useRef<string | undefined>(undefined);
+  const {
+    isChecking: isCheckingUpdate,
+    updateAvailable,
+    latestVersion,
+    assets: latestAssets,
+    releaseNotes,
+    isDownloading,
+    downloadProgress,
+  } = useUpdateServiceStore();
 
   const appVersion = APP_VERSION;
 
@@ -335,19 +326,6 @@ export const SettingsScreen = () => {
     });
     return () => subscription.remove();
   }, [refreshPermissions]);
-
-  // 自动检查更新（每天一次）
-  useEffect(() => {
-    if (!isLoaded) return;
-    if (!(config?.autoCheckUpdate ?? true)) return;
-    const today = new Date().toISOString().slice(0, 10);
-    if (
-      !(config?.debugUpdateCheckNoLimit ?? false) &&
-      (config?.lastUpdateCheckDate ?? '') === today
-    )
-      return;
-    runUpdateCheck(false, config?.updateToBeta ?? false);
-  }, [isLoaded]);
 
   const themeOptions: { label: string; value: ThemeMode }[] = [
     { label: t('settings.themeAuto'), value: 'auto' },
@@ -1063,21 +1041,7 @@ export const SettingsScreen = () => {
   };
 
   const handleToggleUpdateChannel = async (channel: 'github' | 'gitee') => {
-    // 静默取消正在进行的检查更新
-    if (updateCheckAbortRef.current) {
-      updateCheckAbortRef.current.abort();
-      updateCheckAbortRef.current = null;
-    }
-    // 静默取消正在进行的下载
-    if (downloadAbortRef.current) {
-      downloadAbortRef.current.abort();
-      downloadAbortRef.current = null;
-    }
-    // 重置状态
-    setIsCheckingUpdate(false);
-    setIsDownloading(false);
-    setUpdateAvailable(false);
-    setLatestVersion(null);
+    updateService.reset();
 
     setLocalUpdateChannel(channel);
     try {
@@ -1156,61 +1120,25 @@ export const SettingsScreen = () => {
 
   // 执行更新检查逻辑
   const runUpdateCheck = async (showNoUpdateToast: boolean, includeBeta?: boolean) => {
-    // 取消之前的检查
-    if (updateCheckAbortRef.current) {
-      updateCheckAbortRef.current.abort();
-    }
-    updateCheckAbortRef.current = new AbortController();
-
-    setIsCheckingUpdate(true);
     try {
-      const today = new Date().toISOString().slice(0, 10);
-      await setLastUpdateCheckDate(today);
-      const useBeta = includeBeta ?? config?.updateToBeta ?? false;
-      const channel = config?.updateChannel ?? 'github';
-      const result = await checkForUpdate(
-        appVersion,
-        useBeta,
-        channel,
-        updateCheckAbortRef.current.signal
-      );
+      const result = await updateService.checkForUpdates(includeBeta);
       if (result.hasUpdate) {
-        setUpdateAvailable(true);
-        setLatestVersion(result.latestVersion);
-        latestAssetsRef.current = result.assets;
-        latestTagRef.current = result.tagName;
-        releaseNotesRef.current = result.releaseNotes;
         showUpdateDialog(result.latestVersion, result.assets, result.releaseNotes);
-      } else {
-        setUpdateAvailable(false);
-        setLatestVersion(null);
-        if (showNoUpdateToast) {
-          showMessage(t('settings.alreadyLatest'), 'success');
-        }
+      } else if (showNoUpdateToast) {
+        showMessage(t('settings.alreadyLatest'), 'success');
       }
-      cleanOldApkCache(appVersion);
     } catch (e) {
-      // 如果是用户取消，不显示错误
-      if (e instanceof Error && e.name === 'AbortError') {
-        return;
-      }
+      if (e instanceof Error && e.name === 'AbortError') return;
       if (showNoUpdateToast) {
         showMessage(t('settings.checkUpdateFailed'), 'error');
       }
-    } finally {
-      setIsCheckingUpdate(false);
-      updateCheckAbortRef.current = null;
     }
   };
 
   // 取消更新检查
   const handleCancelUpdateCheck = () => {
-    if (updateCheckAbortRef.current) {
-      updateCheckAbortRef.current.abort();
-      setIsCheckingUpdate(false);
-      updateCheckAbortRef.current = null;
-      showMessage(t('settings.updateCheckCancelled'), 'info');
-    }
+    updateService.cancelCheck();
+    showMessage(t('settings.updateCheckCancelled'), 'info');
   };
 
   // 点击"更新"按钮：先检查缓存，有则直接安装，否则弹渠道选择
@@ -1221,124 +1149,12 @@ export const SettingsScreen = () => {
   ) => {
     if (isDownloading) return;
 
-    let preferredAbi: string = 'universal';
     try {
-      const abis = getSupportedAbis();
-      preferredAbi = getPreferredAbi(abis);
-    } catch (e) {
-      console.warn('[UpdateDownload] getSupportedAbis failed:', e);
-    }
-
-    const asset = findAssetForAbi(assets, preferredAbi as Parameters<typeof findAssetForAbi>[1]);
-    if (!asset) {
+      const installed = await updateService.installCachedUpdate(version, assets);
+      if (installed) return;
       showUpdateDialog(version, assets, releaseNotes);
-      return;
-    }
-
-    const cached = await checkApkCache(version, asset);
-    console.log(`[UpdateDownload] pre-check cache=${cached ?? 'miss'}`);
-    if (cached) {
-      await installApk(cached);
-    } else {
-      showUpdateDialog(version, assets, releaseNotes);
-    }
-  };
-
-  const showUpdateDialog = (version: string, assets: ReleaseAssetInfo[], releaseNotes?: string) => {
-    const channel = config?.updateChannel ?? 'github';
-    const channelName = channel === 'github' ? 'GitHub' : 'Gitee';
-    const body = releaseNotes
-      ? t('settings.newVersionMessageWithChannel', {
-          newVersion: version,
-          currentVersion: appVersion,
-          channel: channelName,
-          notes: releaseNotes,
-        })
-      : t('settings.newVersionMessageNoNotesWithChannel', {
-          newVersion: version,
-          currentVersion: appVersion,
-          channel: channelName,
-        });
-    Alert.alert(t('settings.newVersionTitle'), body, [
-      { text: t('common.later'), style: 'cancel' },
-      {
-        text: t('settings.updateNow'),
-        onPress: () => handleDownloadApk(channel, version, assets),
-      },
-    ]);
-  };
-
-  // 下载 APK
-  const handleDownloadApk = async (
-    source: ApkSource,
-    version: string,
-    assets: ReleaseAssetInfo[]
-  ) => {
-    if (isDownloading) return;
-
-    // 检测设备 ABI
-    let preferredAbi: string = 'universal';
-    try {
-      const abis = getSupportedAbis();
-      preferredAbi = getPreferredAbi(abis);
-      console.log(
-        `[UpdateDownload] supportedAbis=${JSON.stringify(abis)} preferred=${preferredAbi}`
-      );
-    } catch (e) {
-      console.warn('[UpdateDownload] getSupportedAbis failed:', e);
-    }
-
-    const asset = findAssetForAbi(assets, preferredAbi as Parameters<typeof findAssetForAbi>[1]);
-    console.log(
-      `[UpdateDownload] source=${source} version=${version} assets=${assets
-        .map((a) => a.name)
-        .join(',')} selectedAsset=${asset?.name ?? 'none'}`
-    );
-    if (!asset) {
-      showMessage(t('settings.noSuitableApk'), 'error');
-      return;
-    }
-
-    setIsDownloading(true);
-    setDownloadProgress(0);
-
-    const abortController = new AbortController();
-    downloadAbortRef.current = abortController;
-
-    try {
-      // 检查是否已有缓存
-      const cached = await checkApkCache(version, asset);
-      console.log(`[UpdateDownload] cache check result=${cached ?? 'miss'}`);
-      if (cached) {
-        await installApk(cached);
-        return;
-      }
-
-      const fileUri = await downloadApk({
-        asset,
-        source,
-        version,
-        signal: abortController.signal,
-        onProgress: (info) => {
-          setDownloadProgress(info.progress);
-        },
-      });
-
-      console.log(`[UpdateDownload] download finished fileUri=${fileUri}`);
-      setUpdateAvailable(false);
-      setLatestVersion(null);
-      await installApk(fileUri);
-    } catch (err) {
-      console.error('[UpdateDownload] error:', err);
-      if (err instanceof Error && err.name === 'AbortError') {
-        showMessage(t('settings.downloadCanceled'), 'info');
-      } else {
-        showMessage(err instanceof Error ? err.message : t('common.operationFailed'), 'error');
-      }
-    } finally {
-      setIsDownloading(false);
-      setDownloadProgress(0);
-      downloadAbortRef.current = null;
+    } catch (error) {
+      showMessage(error instanceof Error ? error.message : t('common.operationFailed'), 'error');
     }
   };
 
@@ -1349,7 +1165,10 @@ export const SettingsScreen = () => {
       {
         text: t('settings.cancelDownloadTitle'),
         style: 'destructive',
-        onPress: () => downloadAbortRef.current?.abort(),
+        onPress: () => {
+          updateService.cancelDownload();
+          showMessage(t('settings.downloadCanceled'), 'info');
+        },
       },
     ]);
   };
@@ -2053,11 +1872,7 @@ export const SettingsScreen = () => {
               } else if (isDownloading) {
                 handleCancelDownload();
               } else if (updateAvailable) {
-                handleUpdateButtonPress(
-                  latestVersion ?? '',
-                  latestAssetsRef.current,
-                  releaseNotesRef.current
-                );
+                handleUpdateButtonPress(latestVersion ?? '', latestAssets, releaseNotes);
               } else {
                 runUpdateCheck(true, localUpdateToBetaEnabled);
               }

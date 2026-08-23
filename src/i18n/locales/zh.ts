@@ -351,6 +351,8 @@ const zh = {
     downloadGitee: 'Gitee 下载',
     downloadGitHub: 'GitHub 下载',
     updateNow: '立即更新',
+    updateNotSupportedTitle: '暂不支持应用内更新',
+    updateNotSupportedMessage: '当前平台暂不支持应用内下载和安装更新。',
     noSuitableApk: '找不到适合当前设备的 APK',
     downloadCanceled: '已取消下载',
     autoCheckUpdate: '自动检查更新',

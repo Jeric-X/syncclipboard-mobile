@@ -362,6 +362,9 @@ const en: DeepString<typeof zh> = {
     downloadGitee: 'Download from Gitee',
     downloadGitHub: 'Download from GitHub',
     updateNow: 'Update Now',
+    updateNotSupportedTitle: 'In-app updates unavailable',
+    updateNotSupportedMessage:
+      'Downloading and installing updates in the app is not supported on this platform.',
     noSuitableApk: 'No suitable APK found for this device',
     downloadCanceled: 'Download canceled',
     autoCheckUpdate: 'Auto-check for updates',

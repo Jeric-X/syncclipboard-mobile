@@ -25,11 +25,12 @@ function parseQuickTileUrl(url: string | null): {
 } {
   if (!url) return { isQuickTile: false, fromForeground: false, direction: SyncDirection.Download };
   const fromForeground = url.includes('fg=1');
-  // Check upload first — its URL is a superset of the download prefix
-  if (url.startsWith(QUICK_UPLOAD_URL))
+  if (url.startsWith(QUICK_UPLOAD_URL)) {
     return { isQuickTile: true, fromForeground, direction: SyncDirection.Upload };
-  if (url.startsWith(QUICK_DOWNLOAD_URL))
+  }
+  if (url.startsWith(QUICK_DOWNLOAD_URL)) {
     return { isQuickTile: true, fromForeground, direction: SyncDirection.Download };
+  }
   return { isQuickTile: false, fromForeground: false, direction: SyncDirection.Download };
 }
 
