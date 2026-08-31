@@ -5,193 +5,83 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Clipboard from 'expo-clipboard';
 import { Platform } from 'react-native';
+import { sha256 } from 'js-sha256';
+import {
+  extractVerificationCode as nativeExtractVerificationCode,
+  startSmsUploadCountdown,
+  updateSmsUploadNotification,
+} from 'sms-forwarder';
+import { getAPIClient } from '../services/ClientFactory';
+import { networkAutoSwitchService } from '../services/NetworkAutoSwitchService';
+import {
+  SmsCodeUploader,
+  type SmsCodeUploadRequest,
+  type SmsCodeUploaderDependencies,
+} from '../services/sms/SmsCodeUploader';
 import { STORAGE_KEYS } from '../types/storage';
 import type { AppConfig } from '../types/storage';
-import type { ProfileDto } from '../types/api';
-import { getAPIClient } from '../services/ClientFactory';
-import type { ISyncClipboardAPI } from '../api/clients/APIClient';
-import { sha256 } from 'js-sha256';
-import { networkAutoSwitchService } from '../services/NetworkAutoSwitchService';
+import { initLogger } from '../utils/Logger';
 
-// 重试配置
-const MAX_RETRIES = 3;
-const RETRY_DELAYS = [3_000, 10_000, 30_000];
-
-interface SmsTaskData {
-  from: string;
-  body: string;
-}
-
-/**
- * 从短信正文中提取验证码（调用 Native 正则）
- */
+/** 从短信正文中提取验证码（调用 Native 正则）。 */
 export function extractVerificationCode(body: string): string | null {
   try {
-    const { extractVerificationCode: nativeExtract } = require('sms-forwarder');
-    return nativeExtract(body);
-  } catch (e) {
-    console.error('[SmsUploadTask] extractVerificationCode native call failed:', e);
+    return nativeExtractVerificationCode(body);
+  } catch (error) {
+    console.error('[SmsUploadTask] Native verification code extraction failed:', error);
     return null;
   }
 }
 
-/**
- * 从 AsyncStorage 加载应用配置
- */
 async function loadConfig(): Promise<AppConfig | null> {
-  try {
-    const json = await AsyncStorage.getItem(STORAGE_KEYS.CONFIG);
-    if (!json) return null;
-    return JSON.parse(json) as AppConfig;
-  } catch (e) {
-    console.error('[SmsUploadTask] Failed to load config:', e);
-    return null;
-  }
+  const json = await AsyncStorage.getItem(STORAGE_KEYS.CONFIG);
+  return json ? (JSON.parse(json) as AppConfig) : null;
 }
 
-/**
- * 计算文本 SHA256（大写十六进制，与主应用一致）
- */
 function calculateHash(text: string): string {
   const hasher = sha256.create();
   hasher.update(text);
   return hasher.hex().toUpperCase();
 }
 
-/**
- * 更新 Headless 服务专属的短信验证码上传通知
- */
-async function updateNotification(text: string): Promise<void> {
-  try {
-    const { updateSmsUploadNotification } = require('sms-forwarder');
-    updateSmsUploadNotification(text);
-  } catch {
-    // sms-forwarder 模块不可用，忽略
-  }
-}
-
-/**
- * 上传成功后启动原生侧 60 秒倒计时通知
- */
-function startCountdown(code: string): void {
-  try {
-    const { startSmsUploadCountdown } = require('sms-forwarder');
-    startSmsUploadCountdown(code);
-  } catch {
-    // sms-forwarder 模块不可用，忽略
-  }
-}
-
-/**
- * 带重试的上传
- */
-async function uploadWithRetry(
-  client: ISyncClipboardAPI,
-  code: string,
-  profileHash: string
-): Promise<boolean> {
-  const profile: ProfileDto = {
-    type: 'Text',
-    text: code,
-    hash: profileHash,
-    hasData: false,
-  };
-
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      await client.putClipboard(profile);
-      console.log(`[SmsUploadTask] Verification code uploaded: ${code}`);
-      startCountdown(code);
-      return true;
-    } catch (error) {
-      if (attempt < MAX_RETRIES) {
-        const delay = RETRY_DELAYS[attempt] ?? RETRY_DELAYS[RETRY_DELAYS.length - 1];
-        console.warn(
-          `[SmsUploadTask] Upload failed (attempt ${attempt + 1}/${
-            MAX_RETRIES + 1
-          }): ${error}, retrying in ${delay}ms`
-        );
-        await updateNotification(
-          `验证码上传重试中: ${code}\n第${attempt + 1}次失败，${Math.round(delay / 1000)}秒后重试…`
-        );
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      } else {
-        console.error(`[SmsUploadTask] Upload failed after ${MAX_RETRIES + 1} attempts:`, error);
-        await updateNotification(`验证码上传失败: ${code}\n已重试${MAX_RETRIES}次`);
-        return false;
-      }
+const dependencies: SmsCodeUploaderDependencies = {
+  now: () => Date.now(),
+  sleep: (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
+  log: (level, message) => {
+    if (level === 'error') {
+      console.error(message);
+    } else if (level === 'warn') {
+      console.warn(message);
+    } else {
+      console.info(message);
     }
-  }
-  return false;
-}
-
-/**
- * Headless JS 任务入口
- */
-export default async function SmsUploadTask(taskData?: SmsTaskData): Promise<void> {
-  if (Platform.OS !== 'android') return;
-  if (!taskData?.body) {
-    console.warn('[SmsUploadTask] No SMS body in task data');
-    return;
-  }
-
-  const { from, body } = taskData;
-  console.log(`[SmsUploadTask] Headless task started, SMS from ${from}`);
-
-  // 1. 提取验证码
-  const code = extractVerificationCode(body);
-  if (!code) {
-    console.log('[SmsUploadTask] No verification code found in SMS');
-    return;
-  }
-  console.log(`[SmsUploadTask] Verification code extracted: ${code}`);
-
-  // 2. 复制到剪贴板（headless 模式下可能失败，不阻塞上传）
-  try {
-    const Clipboard = require('expo-clipboard');
+  },
+  extractVerificationCode: nativeExtractVerificationCode,
+  copyToClipboard: async (code) => {
     await Clipboard.setStringAsync(code);
-    console.log(`[SmsUploadTask] Copied to clipboard: ${code}`);
-  } catch (e) {
-    console.warn('[SmsUploadTask] Failed to copy to clipboard (headless mode):', e);
-  }
+  },
+  loadConfig,
+  ensureCurrentServer: () => networkAutoSwitchService.ensureCurrentServer(),
+  getAPIClient,
+  calculateHash,
+  updateNotification: (text) => {
+    updateSmsUploadNotification(text);
+  },
+  notifyUploadSucceeded: (code) => {
+    startSmsUploadCountdown(code);
+  },
+};
+const smsCodeUploader = new SmsCodeUploader(dependencies);
 
-  // 3. 加载配置
-  let config = await loadConfig();
-  if (!config) {
-    console.error('[SmsUploadTask] No config found, cannot upload');
-    return;
-  }
-
-  if (!config.enableSmsForwarding) {
-    console.log('[SmsUploadTask] SMS forwarding disabled in config');
-    return;
-  }
-
-  // Headless 入口可能没有收到主进程的网络事件，访问服务器前重新评估。
-  await networkAutoSwitchService.ensureCurrentServer();
-  config = await loadConfig();
-  if (!config) {
-    console.error('[SmsUploadTask] Config unavailable after network evaluation');
-    return;
-  }
-
-  // 4. 获取当前激活的服务器
-  const server = config.servers?.[config.activeServerIndex];
-  if (!server?.url) {
-    console.error('[SmsUploadTask] No active server configured');
-    return;
-  }
-
-  // 5. 创建 API 客户端并上传
+/** Headless JS 任务入口。 */
+export default async function SmsUploadTask(taskData?: SmsCodeUploadRequest): Promise<void> {
+  if (Platform.OS !== 'android') return;
   try {
-    const client = await getAPIClient();
-    const profileHash = calculateHash(code);
-    await updateNotification(`正在上传验证码：${code}`);
-    await uploadWithRetry(client, code, profileHash);
+    initLogger();
   } catch (error) {
-    console.error('[SmsUploadTask] Unexpected error during upload:', error);
+    // 文件日志初始化失败时保留 Logcat 线索，但不阻止验证码上传。
+    console.error('[SmsUploadTask] stage=logging logger initialization failed', error);
   }
-
-  console.log('[SmsUploadTask] Headless task completed');
+  await smsCodeUploader.upload(taskData);
 }
