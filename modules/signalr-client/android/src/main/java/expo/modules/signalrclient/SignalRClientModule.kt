@@ -196,19 +196,30 @@ class SignalRClientModule : Module() {
     }
 
     private fun scheduleReconnect() {
-        if (currentUrl == null) return
+        if (currentUrl == null) {
+            NativeLogger.d(TAG, "Skipping SignalR reconnect because the client was disconnected")
+            return
+        }
 
-        // 取消上一个定时器，但不重置计数（避免退避延迟永远不增长）
-        reconnectRunnable?.let { reconnectHandler.removeCallbacks(it) }
-        reconnectRunnable = null
+        if (reconnectRunnable != null) {
+            NativeLogger.d(TAG, "SignalR reconnect is already scheduled")
+            return
+        }
 
-        // 限制位移量防止 Long 溢出；从第 3 次起延迟固定在 10000ms
-        val attempt = minOf(reconnectAttempt, 10)
-        val delayMs = minOf(2000L * (1L shl attempt), 10000L)
-        reconnectAttempt++
-        NativeLogger.d(TAG, "Scheduling SignalR reconnect attempt $reconnectAttempt in ${delayMs}ms")
+        val delayMs = ReconnectBackoffPolicy.delayMillis(reconnectAttempt)
+        val attemptNumber = if (reconnectAttempt == Int.MAX_VALUE) {
+            Int.MAX_VALUE
+        } else {
+            reconnectAttempt + 1
+        }
+        reconnectAttempt = attemptNumber
+        NativeLogger.d(
+            TAG,
+            "Scheduling SignalR reconnect attempt $attemptNumber in ${delayMs}ms (jitter +/-20%)"
+        )
 
         val runnable = Runnable {
+            reconnectRunnable = null
             val url = currentUrl ?: return@Runnable
             val user = currentUsername ?: return@Runnable
             val pass = currentPassword ?: return@Runnable
@@ -220,11 +231,15 @@ class SignalRClientModule : Module() {
     }
 
     private fun cancelReconnect() {
+        val hadPendingReconnect = reconnectRunnable != null
         reconnectRunnable?.let {
             reconnectHandler.removeCallbacks(it)
         }
         reconnectRunnable = null
         reconnectAttempt = 0
+        if (hadPendingReconnect) {
+            NativeLogger.d(TAG, "Cancelled pending SignalR reconnect")
+        }
     }
 
     private fun getJsonString(json: JsonObject, key: String, default: String): String {
