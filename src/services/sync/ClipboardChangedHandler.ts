@@ -21,6 +21,14 @@ import { historyService } from '../history/HistoryService';
 import { calculateTextHash } from '../../utils/hash';
 import i18n from '@/i18n';
 
+const STARTUP_BASELINE_WINDOW_MS = 2_000;
+
+/** 判断下一次非空剪贴板内容是否应仅作为应用启动基线。 */
+function shouldUseStartupBaseline(previousHash: string | null): boolean {
+  const appUptimeMs = performance.now();
+  return previousHash === null && appUptimeMs >= 0 && appUptimeMs < STARTUP_BASELINE_WINDOW_MS;
+}
+
 class ClipboardChangedHandler {
   private static instance: ClipboardChangedHandler | null = null;
   private lastRemoteProfileHash: string | null = null;
@@ -57,6 +65,8 @@ class ClipboardChangedHandler {
   }
 
   async processRemoteClipboardContent(content: ClipboardContent): Promise<void> {
+    const isStartupBaseline = shouldUseStartupBaseline(this.lastRemoteProfileHash);
+
     if (!content.hasData && content.type === 'Text' && !content.profileHash && content.text) {
       content.profileHash = await calculateTextHash(content.text);
     }
@@ -82,7 +92,6 @@ class ClipboardChangedHandler {
     }
 
     const config = await configService.getConfig();
-    const isFirstLoad = this.lastRemoteProfileHash === null;
     if (currentHash === this.lastRemoteProfileHash) return;
     this.lastRemoteProfileHash = currentHash;
 
@@ -106,7 +115,7 @@ class ClipboardChangedHandler {
 
     clipboardSyncState.setRemoteContent(content);
 
-    if (isFirstLoad) return;
+    if (isStartupBaseline) return;
 
     await this.tryAutoCopyToClipboard(content, config);
   }
@@ -192,6 +201,7 @@ class ClipboardChangedHandler {
   }
 
   async handleAutoUpload(content: ClipboardContent): Promise<void> {
+    const isStartupBaseline = shouldUseStartupBaseline(this.lastLocalProfileHash);
     const config = await configService.getConfig();
 
     const autoSync = config?.autoSync ?? false;
@@ -217,13 +227,9 @@ class ClipboardChangedHandler {
     }
     clearJustSetLocalHash();
 
-    if (this.lastLocalProfileHash === null) {
-      this.lastLocalProfileHash = currentHash;
-      return;
-    }
-
     if (currentHash === this.lastLocalProfileHash) return;
     this.lastLocalProfileHash = currentHash;
+    if (isStartupBaseline) return;
 
     try {
       const uploaded = await uploadLocalClipboard(content);
