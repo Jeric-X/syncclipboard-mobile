@@ -200,6 +200,22 @@ describe('NetworkAutoSwitchService', () => {
     expect(h.service.getState().phase).toBe('manual-override');
   });
 
+  it('服务处于等待网络时关闭自动切换后忽略旧状态', async () => {
+    const h = harness(createConfig(0));
+    h.setSnapshot({ ...wifi, isConnected: false, type: 'none' });
+    await h.service.start();
+    expect(h.service.getState().phase).toBe('waiting');
+    const current = h.getConfig();
+    h.setConfig({
+      ...current,
+      networkAutoSwitch: { ...current.networkAutoSwitch, enabled: false },
+    });
+
+    await expect(h.service.selectServerForCurrentNetworkOnce()).resolves.toBeUndefined();
+
+    expect(h.switchServer).not.toHaveBeenCalled();
+  });
+
   it('运行中的评估被网络事件作废后重新读取最新快照', async () => {
     jest.useFakeTimers();
     const h = harness(createConfig(0));

@@ -281,6 +281,8 @@ export class NetworkAutoSwitchService {
   private async performOneShotSelection(): Promise<void> {
     if (this.startupPromise || this.running) {
       await this.ensureCurrentServer();
+      const config = await this.deps.getConfig();
+      if (!config.networkAutoSwitch.enabled) return;
       if (this.state.phase === 'waiting') {
         throw new Error('Network unavailable during server selection');
       }
