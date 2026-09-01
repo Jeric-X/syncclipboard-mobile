@@ -126,6 +126,7 @@ export class NetworkAutoSwitchService {
   private networkDirty = true;
   private generation = 0;
   private operation: Promise<void> = Promise.resolve();
+  private oneShotOperation: Promise<void> = Promise.resolve();
   private lastConfigSignature: string | null = null;
   private manualOverrideFingerprint: string | 'pending' | null = null;
 
@@ -242,7 +243,6 @@ export class NetworkAutoSwitchService {
   async ensureCurrentServer(): Promise<void> {
     if (this.startupPromise) {
       await this.startupPromise;
-      return;
     }
     if (!this.running) {
       await this.start();
@@ -271,6 +271,14 @@ export class NetworkAutoSwitchService {
    * 由调用方决定是否重试，不回退到选择前的服务器。
    */
   async selectServerForCurrentNetworkOnce(): Promise<void> {
+    const selection = this.oneShotOperation
+      .catch(() => {})
+      .then(() => this.performOneShotSelection());
+    this.oneShotOperation = selection;
+    await selection;
+  }
+
+  private async performOneShotSelection(): Promise<void> {
     if (this.startupPromise || this.running) {
       await this.ensureCurrentServer();
       if (this.state.phase === 'waiting') {

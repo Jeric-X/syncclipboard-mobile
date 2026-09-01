@@ -228,6 +228,77 @@ describe('NetworkAutoSwitchService', () => {
     });
   });
 
+  it('启动评估被网络事件作废后重新读取最新快照', async () => {
+    jest.useFakeTimers();
+    const h = harness(createConfig(0));
+    let resolveStartupSnapshot: ((snapshot: MobileNetworkSnapshot) => void) | undefined;
+    const startupSnapshot = new Promise<MobileNetworkSnapshot>((resolve) => {
+      resolveStartupSnapshot = resolve;
+    });
+    (h.deps.getSnapshot as jest.Mock).mockImplementationOnce(() => startupSnapshot);
+
+    const startup = h.service.start();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(h.service.getState().phase).toBe('detecting');
+
+    h.setSnapshot({ ...wifi, ssid: 'Office', capturedAt: 200 });
+    h.service.handleNetworkChanged();
+    const oneShotSelection = h.service.selectServerForCurrentNetworkOnce();
+    resolveStartupSnapshot?.(wifi);
+    await Promise.all([startup, oneShotSelection]);
+
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(2);
+    expect(h.service.getState()).toMatchObject({
+      phase: 'no-match',
+      snapshot: expect.objectContaining({ ssid: 'Office' }),
+    });
+  });
+
+  it('并发冷启动选服串行执行且最后应用较新的网络快照', async () => {
+    const initial = createConfig();
+    const h = harness({
+      ...initial,
+      networkAutoSwitch: {
+        ...initial.networkAutoSwitch,
+        noMatchAction: 'defaultServer',
+        defaultServerId: 'public',
+      },
+    });
+    let resolveFirstSwitch: (() => void) | undefined;
+    const firstSwitch = new Promise<void>((resolve) => {
+      resolveFirstSwitch = resolve;
+    });
+    (h.deps.getSnapshot as jest.Mock)
+      .mockResolvedValueOnce(wifi)
+      .mockResolvedValueOnce({ ...wifi, ssid: 'Office', capturedAt: 200 });
+    (h.deps.switchServer as jest.Mock).mockImplementation(async (serverId: string | null) => {
+      if (serverId === 'home') await firstSwitch;
+      const current = h.getConfig();
+      const next = {
+        ...current,
+        activeServerIndex:
+          serverId === null ? -1 : current.servers.findIndex((server) => server.id === serverId),
+      };
+      h.setConfig(next);
+      return next;
+    });
+
+    const first = h.service.selectServerForCurrentNetworkOnce();
+    const second = h.service.selectServerForCurrentNetworkOnce();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(1);
+
+    resolveFirstSwitch?.();
+    await Promise.all([first, second]);
+
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(2);
+    expect(h.getConfig().servers[h.getConfig().activeServerIndex]?.id).toBe('public');
+  });
+
   it('一次性选择在网络不可用时失败而不使用原服务器', async () => {
     const h = harness();
     h.setSnapshot({ ...wifi, isConnected: false, type: 'none' });
