@@ -23,7 +23,7 @@ import i18n from '@/i18n';
 
 const STARTUP_BASELINE_WINDOW_MS = 2_000;
 
-/** 判断下一次非空剪贴板内容是否应仅作为应用启动基线。 */
+/** 判断下一次剪贴板内容是否应仅作为应用启动基线。 */
 function shouldUseStartupBaseline(previousHash: string | null): boolean {
   const appUptimeMs = performance.now();
   return previousHash === null && appUptimeMs >= 0 && appUptimeMs < STARTUP_BASELINE_WINDOW_MS;
