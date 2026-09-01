@@ -29,7 +29,7 @@ function createHarness(overrides: Partial<SmsCodeUploaderDependencies> = {}) {
     extractVerificationCode: jest.fn(() => '123456'),
     copyToClipboard: jest.fn(async () => undefined),
     loadConfig: jest.fn(async () => createConfig()),
-    ensureCurrentServer: jest.fn(async () => undefined),
+    selectServerForCurrentNetworkOnce: jest.fn(async () => undefined),
     getAPIClient: jest.fn(async () => ({ putClipboard }) as unknown as ISyncClipboardAPI),
     calculateHash: jest.fn(() => 'HASH'),
     updateNotification: jest.fn(),
@@ -62,7 +62,7 @@ describe('SmsCodeUploader', () => {
     });
 
     expect(result).toEqual({ status: 'uploaded', attempts: 1 });
-    expect(h.deps.ensureCurrentServer).toHaveBeenCalledTimes(1);
+    expect(h.deps.selectServerForCurrentNetworkOnce).toHaveBeenCalledTimes(1);
     expect(h.putClipboard).toHaveBeenCalledWith({
       type: 'Text',
       text: '123456',
@@ -71,7 +71,7 @@ describe('SmsCodeUploader', () => {
     });
     const messages = h.logs.map((entry) => entry.message).join('\n');
     expect(messages).toContain('stage=network-preflight');
-    expect(messages).toContain('network auto-switch preflight completed');
+    expect(messages).toContain('one-shot network server selection completed');
     expect(messages).toContain('stage=client-create');
     expect(messages).toContain('upload attempt=1/4 succeeded');
     expect(messages).not.toContain('+8613800000000');
@@ -81,7 +81,7 @@ describe('SmsCodeUploader', () => {
   it('自动选服冷启动失败时记录准确阶段和错误', async () => {
     const error = new Error('native network unavailable');
     const h = createHarness({
-      ensureCurrentServer: jest.fn(async () => {
+      selectServerForCurrentNetworkOnce: jest.fn(async () => {
         throw error;
       }),
     });

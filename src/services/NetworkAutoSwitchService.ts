@@ -261,6 +261,47 @@ export class NetworkAutoSwitchService {
     await this.evaluateNow('sync-preflight');
   }
 
+  /**
+   * 按当前网络执行一次服务器选择，不启动常驻服务或注册网络监听。
+   *
+   * 供 Headless 等一次性任务使用。读取网络或切换服务器失败时直接抛出，
+   * 由调用方终止当前业务，不回退到选择前的服务器。
+   */
+  async selectServerForCurrentNetworkOnce(): Promise<void> {
+    const config = await this.deps.getConfig();
+    if (!config.networkAutoSwitch.enabled) {
+      console.log('[NetworkAutoSwitch] trigger=one-shot result=disabled target=none-or-keep');
+      return;
+    }
+
+    const snapshot = await this.deps.getSnapshot();
+    const evaluation = evaluateNetworkAutoSwitch(
+      config.networkAutoSwitch,
+      config.servers,
+      snapshot
+    );
+    const before = activeServer(config);
+    const targetChanged =
+      evaluation.targetServerId !== undefined && evaluation.targetServerId !== (before?.id ?? null);
+
+    let resultingConfig = config;
+    if (targetChanged) {
+      resultingConfig = await this.deps.switchServer(evaluation.targetServerId ?? null);
+      if (config.networkAutoSwitch.notificationMode !== 'none') {
+        this.deps.notify(
+          this.notificationMessage(evaluation, resultingConfig),
+          config.networkAutoSwitch.notificationMode
+        );
+      }
+    }
+
+    console.log(
+      `[NetworkAutoSwitch] trigger=one-shot result=${evaluation.reason} target=${
+        evaluation.targetServerId ?? 'none-or-keep'
+      }`
+    );
+  }
+
   private async initialize(): Promise<void> {
     try {
       const config = await this.deps.getConfig();

@@ -36,7 +36,7 @@ export interface SmsCodeUploaderDependencies {
   extractVerificationCode(body: string): string | null;
   copyToClipboard(code: string): Promise<void>;
   loadConfig(): Promise<AppConfig | null>;
-  ensureCurrentServer(): Promise<void>;
+  selectServerForCurrentNetworkOnce(): Promise<void>;
   getAPIClient(): Promise<ISyncClipboardAPI>;
   calculateHash(text: string): string;
   updateNotification(text: string): void;
@@ -155,9 +155,9 @@ async function executeSmsCodeUpload(
     }
 
     stage = 'network-preflight';
-    log('info', 'network auto-switch preflight started');
-    await deps.ensureCurrentServer();
-    log('info', 'network auto-switch preflight completed');
+    log('info', 'one-shot network server selection started');
+    await deps.selectServerForCurrentNetworkOnce();
+    log('info', 'one-shot network server selection completed');
 
     stage = 'config-load';
     config = await deps.loadConfig();

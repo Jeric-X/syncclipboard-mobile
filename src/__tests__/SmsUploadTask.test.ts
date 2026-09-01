@@ -13,7 +13,7 @@ jest.mock('../services/ClientFactory', () => ({
 }));
 
 jest.mock('../services/NetworkAutoSwitchService', () => ({
-  networkAutoSwitchService: { ensureCurrentServer: jest.fn() },
+  networkAutoSwitchService: { selectServerForCurrentNetworkOnce: jest.fn() },
 }));
 
 jest.mock(

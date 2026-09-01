@@ -161,6 +161,44 @@ describe('NetworkAutoSwitchService', () => {
     expect(h.switchServer).toHaveBeenCalledTimes(1);
   });
 
+  it('一次性选择不启动服务或注册网络监听', async () => {
+    const h = harness();
+
+    await h.service.selectServerForCurrentNetworkOnce();
+
+    expect(h.service.isRunning()).toBe(false);
+    expect(h.deps.subscribeNetwork).not.toHaveBeenCalled();
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(1);
+    expect(h.switchServer).toHaveBeenCalledWith('home');
+  });
+
+  it('自动切换关闭时一次性选择不读取网络', async () => {
+    const initial = createConfig();
+    const h = harness({
+      ...initial,
+      networkAutoSwitch: { ...initial.networkAutoSwitch, enabled: false },
+    });
+
+    await h.service.selectServerForCurrentNetworkOnce();
+
+    expect(h.deps.getSnapshot).not.toHaveBeenCalled();
+    expect(h.deps.subscribeNetwork).not.toHaveBeenCalled();
+    expect(h.switchServer).not.toHaveBeenCalled();
+  });
+
+  it('一次性选择失败时向调用方抛出且不回退服务器', async () => {
+    const h = harness();
+    const error = new Error('network unavailable');
+    (h.deps.getSnapshot as jest.Mock).mockRejectedValueOnce(error);
+
+    await expect(h.service.selectServerForCurrentNetworkOnce()).rejects.toBe(error);
+
+    expect(h.service.isRunning()).toBe(false);
+    expect(h.deps.subscribeNetwork).not.toHaveBeenCalled();
+    expect(h.switchServer).not.toHaveBeenCalled();
+    expect(h.getConfig().activeServerIndex).toBe(1);
+  });
+
   it('按配置选择 Toast 通知方式', async () => {
     const initial = createConfig();
     const h = harness({
