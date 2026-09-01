@@ -22,6 +22,9 @@ import {
 } from '@/types/history';
 import { SyncConflictError, RecordNotFoundError } from '@/errors';
 import type { IHistoryAPI } from '@/api/history';
+import type { AxiosRequestConfig } from 'axios';
+import { deviceIdentityService, SYNC_DEVICE_ID_HEADER } from '@/services/DeviceIdentityService';
+import { Platform } from 'react-native';
 
 /**
  * SyncClipboard API 客户端
@@ -66,11 +69,15 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
         JSON.stringify(profile, null, 2)
       );
 
-      await this.put(
-        SyncClipboardClient.PROFILE_ENDPOINT,
-        profile,
-        signal ? { signal } : undefined
-      );
+      const deviceId = await this.getUploadDeviceId();
+      let requestConfig: AxiosRequestConfig | undefined;
+      if (signal || deviceId) {
+        requestConfig = {};
+        if (signal) requestConfig.signal = signal;
+        if (deviceId) requestConfig.headers = { [SYNC_DEVICE_ID_HEADER]: deviceId };
+      }
+
+      await this.put(SyncClipboardClient.PROFILE_ENDPOINT, profile, requestConfig);
 
       console.log('[SyncClipboardClient] putClipboard - Upload successful');
     } catch (error) {
@@ -89,6 +96,19 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
         );
       }
       throw error;
+    }
+  }
+
+  private async getUploadDeviceId(): Promise<string | null> {
+    if (Platform.OS !== 'android') return null;
+    try {
+      return await deviceIdentityService.getDeviceId();
+    } catch (error) {
+      console.warn(
+        '[SyncClipboardClient] Device identity unavailable; uploading without origin header:',
+        error
+      );
+      return null;
     }
   }
 

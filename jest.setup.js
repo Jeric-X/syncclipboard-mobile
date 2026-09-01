@@ -1,5 +1,6 @@
 jest.mock('expo-crypto', () => ({
   digestStringAsync: jest.fn(),
+  randomUUID: jest.fn(),
   CryptoDigestAlgorithm: {
     SHA256: 'SHA-256',
   },

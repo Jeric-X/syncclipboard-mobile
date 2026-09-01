@@ -285,6 +285,9 @@ export const STORAGE_KEYS = {
   /** 认证凭据（AuthService 缓存） */
   AUTH_CREDENTIALS: '@syncclipboard:credentials',
 
+  /** 安装级同步设备 UUID */
+  DEVICE_ID: '@syncclipboard:device_id',
+
   /** 用户选择的主题模式 */
   THEME_MODE: '@syncclipboard:theme_mode',
 
