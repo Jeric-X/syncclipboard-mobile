@@ -216,6 +216,49 @@ describe('NetworkAutoSwitchService', () => {
     expect(h.switchServer).not.toHaveBeenCalled();
   });
 
+  it('冷启动选服读取网络期间关闭自动切换后保留当前服务器', async () => {
+    const h = harness();
+    let resolveSnapshot: ((snapshot: MobileNetworkSnapshot) => void) | undefined;
+    const pendingSnapshot = new Promise<MobileNetworkSnapshot>((resolve) => {
+      resolveSnapshot = resolve;
+    });
+    (h.deps.getSnapshot as jest.Mock).mockImplementationOnce(() => pendingSnapshot);
+
+    const selection = h.service.selectServerForCurrentNetworkOnce();
+    await Promise.resolve();
+    await Promise.resolve();
+    const current = h.getConfig();
+    h.setConfig({
+      ...current,
+      networkAutoSwitch: { ...current.networkAutoSwitch, enabled: false },
+    });
+    resolveSnapshot?.(wifi);
+    await selection;
+
+    expect(h.switchServer).not.toHaveBeenCalled();
+    expect(h.getConfig().servers[h.getConfig().activeServerIndex]?.id).toBe('public');
+  });
+
+  it('冷启动选服读取网络期间手动选择服务器后不覆盖用户选择', async () => {
+    const h = harness(createConfig(0));
+    let resolveSnapshot: ((snapshot: MobileNetworkSnapshot) => void) | undefined;
+    const pendingSnapshot = new Promise<MobileNetworkSnapshot>((resolve) => {
+      resolveSnapshot = resolve;
+    });
+    (h.deps.getSnapshot as jest.Mock).mockImplementationOnce(() => pendingSnapshot);
+
+    const selection = h.service.selectServerForCurrentNetworkOnce();
+    await Promise.resolve();
+    await Promise.resolve();
+    h.service.beginManualOverride();
+    h.setConfig({ ...h.getConfig(), activeServerIndex: 1 });
+    resolveSnapshot?.(wifi);
+    await selection;
+
+    expect(h.switchServer).not.toHaveBeenCalled();
+    expect(h.getConfig().servers[h.getConfig().activeServerIndex]?.id).toBe('public');
+  });
+
   it('运行中的评估被网络事件作废后重新读取最新快照', async () => {
     jest.useFakeTimers();
     const h = harness(createConfig(0));

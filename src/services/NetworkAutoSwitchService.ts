@@ -280,25 +280,42 @@ export class NetworkAutoSwitchService {
 
   private async performOneShotSelection(): Promise<void> {
     if (this.startupPromise || this.running) {
-      await this.ensureCurrentServer();
-      const config = await this.deps.getConfig();
-      if (!config.networkAutoSwitch.enabled) return;
-      if (this.state.phase === 'waiting') {
-        throw new Error('Network unavailable during server selection');
-      }
-      if (this.state.phase === 'error') {
-        throw new Error(this.state.error || 'Server selection failed');
-      }
+      await this.performRunningOneShotSelection();
       return;
     }
 
-    const config = await this.deps.getConfig();
+    const selectionGeneration = this.generation;
+    let config = await this.deps.getConfig();
+    if (this.startupPromise || this.running) {
+      await this.performRunningOneShotSelection();
+      return;
+    }
     if (!config.networkAutoSwitch.enabled) {
       console.log('[NetworkAutoSwitch] trigger=one-shot result=disabled target=none-or-keep');
       return;
     }
+    if (selectionGeneration !== this.generation || this.manualOverrideFingerprint !== null) {
+      return;
+    }
 
     const snapshot = await this.deps.getSnapshot();
+    if (this.startupPromise || this.running) {
+      await this.performRunningOneShotSelection();
+      return;
+    }
+    config = await this.deps.getConfig();
+    if (this.startupPromise || this.running) {
+      await this.performRunningOneShotSelection();
+      return;
+    }
+    if (!config.networkAutoSwitch.enabled) {
+      console.log('[NetworkAutoSwitch] trigger=one-shot result=disabled target=none-or-keep');
+      return;
+    }
+    if (selectionGeneration !== this.generation || this.manualOverrideFingerprint !== null) {
+      return;
+    }
+
     const evaluation = evaluateNetworkAutoSwitch(
       config.networkAutoSwitch,
       config.servers,
@@ -327,6 +344,18 @@ export class NetworkAutoSwitchService {
         evaluation.targetServerId ?? 'none-or-keep'
       }`
     );
+  }
+
+  private async performRunningOneShotSelection(): Promise<void> {
+    await this.ensureCurrentServer();
+    const config = await this.deps.getConfig();
+    if (!config.networkAutoSwitch.enabled) return;
+    if (this.state.phase === 'waiting') {
+      throw new Error('Network unavailable during server selection');
+    }
+    if (this.state.phase === 'error') {
+      throw new Error(this.state.error || 'Server selection failed');
+    }
   }
 
   private async initialize(): Promise<void> {
