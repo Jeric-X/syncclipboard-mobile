@@ -200,6 +200,34 @@ describe('NetworkAutoSwitchService', () => {
     expect(h.service.getState().phase).toBe('manual-override');
   });
 
+  it('运行中的评估被网络事件作废后重新读取最新快照', async () => {
+    jest.useFakeTimers();
+    const h = harness(createConfig(0));
+    await h.service.start();
+    let resolveStaleSnapshot: ((snapshot: MobileNetworkSnapshot) => void) | undefined;
+    const staleSnapshot = new Promise<MobileNetworkSnapshot>((resolve) => {
+      resolveStaleSnapshot = resolve;
+    });
+    (h.deps.getSnapshot as jest.Mock).mockImplementationOnce(() => staleSnapshot);
+
+    const foregroundEvaluation = h.service.onForeground();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(h.service.getState().phase).toBe('detecting');
+
+    h.setSnapshot({ ...wifi, ssid: 'Office', capturedAt: 200 });
+    h.emitNetwork();
+    const oneShotSelection = h.service.selectServerForCurrentNetworkOnce();
+    resolveStaleSnapshot?.(wifi);
+    await Promise.all([foregroundEvaluation, oneShotSelection]);
+
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(3);
+    expect(h.service.getState()).toMatchObject({
+      phase: 'no-match',
+      snapshot: expect.objectContaining({ ssid: 'Office' }),
+    });
+  });
+
   it('一次性选择在网络不可用时失败而不使用原服务器', async () => {
     const h = harness();
     h.setSnapshot({ ...wifi, isConnected: false, type: 'none' });

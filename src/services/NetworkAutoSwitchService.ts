@@ -252,7 +252,6 @@ export class NetworkAutoSwitchService {
     if (!config.networkAutoSwitch.enabled) return;
     if (this.state.phase === 'detecting') {
       await this.operation;
-      return;
     }
     if (
       !this.networkDirty &&
