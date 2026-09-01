@@ -47,8 +47,10 @@ class FakeRemoteEventSource implements RemoteEventSource {
   private readonly profileCallbacks = new Set<(hint: RemoteProfileChangeHint) => void>();
   private readonly stateCallbacks = new Set<(state: RemoteEventSourceConnectionState) => void>();
 
+  constructor(private readonly connectsSuccessfully = true) {}
+
   readonly connect = jest.fn(async () => {
-    this.connected = true;
+    this.connected = this.connectsSuccessfully;
   });
 
   readonly disconnect = jest.fn(async () => {
@@ -126,7 +128,7 @@ describe('RemoteClipboardMonitor event transport', () => {
     const callback = jest.fn();
     monitor.addCallback(callback);
 
-    await monitor.connect();
+    await monitor.resumeAndRefresh();
     expect(callback).toHaveBeenLastCalledWith(
       expect.objectContaining({ profileHash: 'initial-hash', text: 'initial' })
     );
@@ -170,7 +172,7 @@ describe('RemoteClipboardMonitor event transport', () => {
     const callback = jest.fn();
     monitor.addCallback(callback);
 
-    await monitor.connect();
+    await monitor.resumeAndRefresh();
     callback.mockClear();
     pushSource.emitProfileChanged({ hash: 'changed-hash' });
     await flushPromises();
@@ -182,5 +184,73 @@ describe('RemoteClipboardMonitor event transport', () => {
         text: 'authoritative HTTP value',
       })
     );
+  });
+
+  it('switches to push-only background mode only after push registration succeeds', async () => {
+    const signalRSource = new FakeRemoteEventSource();
+    const pushSource = new FakeRemoteEventSource();
+    const getClipboard = jest.fn().mockResolvedValue(initialProfile);
+    mockedGetAPIClient.mockResolvedValue({
+      getClipboard,
+    } as never);
+    const monitor = new RemoteClipboardMonitor(
+      () => signalRSource,
+      () => pushSource
+    );
+    monitor.addBackgroundRunningChecker(() => true);
+
+    await monitor.resumeAndRefresh();
+    await monitor.handleBackground();
+
+    expect(signalRSource.disconnect).toHaveBeenCalledTimes(1);
+    expect(pushSource.disconnect).not.toHaveBeenCalled();
+    expect(monitor.isSignalRConnected()).toBe(false);
+    expect(monitor.isPushConnected()).toBe(true);
+    expect(monitor.isConnected()).toBe(true);
+
+    await monitor.handleForeground();
+    expect(signalRSource.connect).toHaveBeenCalledTimes(2);
+    expect(monitor.isSignalRConnected()).toBe(true);
+    expect(getClipboard).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves SignalR background behavior when push registration is unavailable', async () => {
+    const signalRSource = new FakeRemoteEventSource();
+    const unavailablePushSource = new FakeRemoteEventSource(false);
+    mockedGetAPIClient.mockResolvedValue({
+      getClipboard: jest.fn().mockResolvedValue(initialProfile),
+    } as never);
+    const monitor = new RemoteClipboardMonitor(
+      () => signalRSource,
+      () => unavailablePushSource
+    );
+    monitor.addBackgroundRunningChecker(() => true);
+
+    await monitor.connect();
+    await monitor.handleBackground();
+
+    expect(signalRSource.disconnect).not.toHaveBeenCalled();
+    expect(unavailablePushSource.disconnect).not.toHaveBeenCalled();
+    expect(monitor.isSignalRConnected()).toBe(true);
+    expect(monitor.isPushConnected()).toBe(false);
+  });
+
+  it('disconnects both transports when background remote sync is disabled', async () => {
+    const signalRSource = new FakeRemoteEventSource();
+    const pushSource = new FakeRemoteEventSource();
+    mockedGetAPIClient.mockResolvedValue({
+      getClipboard: jest.fn().mockResolvedValue(initialProfile),
+    } as never);
+    const monitor = new RemoteClipboardMonitor(
+      () => signalRSource,
+      () => pushSource
+    );
+
+    await monitor.connect();
+    await monitor.handleBackground();
+
+    expect(signalRSource.disconnect).toHaveBeenCalledTimes(1);
+    expect(pushSource.disconnect).toHaveBeenCalledTimes(1);
+    expect(monitor.isConnected()).toBe(false);
   });
 });

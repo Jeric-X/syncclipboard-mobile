@@ -19,6 +19,7 @@ import type {
 } from './RemoteEventSource';
 import { SignalRRemoteEventSource } from './SignalRRemoteEventSource';
 import { PushEventSource } from './PushEventSource';
+import { selectBackgroundRemoteTransportPolicy } from './RemoteTransportPolicy';
 
 /** 远程剪贴板变化回调：仅在内容哈希变化时触发 */
 export type RemoteClipboardChangedCallback = (content: ClipboardContent) => void;
@@ -85,11 +86,28 @@ export class RemoteClipboardMonitor {
 
   /**
    * App 进入后台时由外部（RemoteClipboardMonitorTask.onBackground）调用。
-   * 若无任何 checker 返回 true，则断开连接。
+   * Push 注册可用时只断开 SignalR；否则保留原有 SignalR 后台行为。
    */
   async handleBackground(): Promise<void> {
-    if (!this._isBgRunningEnabled()) {
+    const policy = selectBackgroundRemoteTransportPolicy({
+      backgroundRemoteSyncEnabled: this._isBgRunningEnabled(),
+      pushRegistrationActive: this.isPushConnected(),
+    });
+
+    if (policy === 'disconnect-all') {
+      console.debug(
+        '[RemoteClipboardMonitor] Background remote sync disabled; disconnecting transports'
+      );
       await this.disconnect();
+    } else if (policy === 'push-only') {
+      console.debug(
+        '[RemoteClipboardMonitor] Push registration active; disconnecting SignalR in background'
+      );
+      await this._disconnectSignalR();
+    } else {
+      console.debug(
+        '[RemoteClipboardMonitor] Push unavailable; preserving SignalR background behavior'
+      );
     }
   }
 
@@ -122,7 +140,6 @@ export class RemoteClipboardMonitor {
 
   /**
    * 前台恢复时调用：确保连接并立即触发一次内容拉取。
-   * 若未连接则先重连，若已连接则直接刷新。
    * 无需区分服务器类型，内部统一处理。
    */
   async resumeAndRefresh(): Promise<void> {
@@ -164,7 +181,7 @@ export class RemoteClipboardMonitor {
   }
 
   isConnected(): boolean {
-    return this.isPolling() || this.isSignalRConnected();
+    return this.isPolling() || this.isSignalRConnected() || this.isPushConnected();
   }
 
   isPushConnected(): boolean {
@@ -277,9 +294,6 @@ export class RemoteClipboardMonitor {
       await eventSource.connect();
       if (this._eventSource !== eventSource) return;
       console.log('[RemoteClipboardMonitor] SignalR connected');
-      await this.refresh().catch((e) => {
-        console.error('[RemoteClipboardMonitor] Initial refresh failed:', e);
-      });
     } catch (e) {
       if (eventSource && this._eventSource === eventSource) {
         this._eventSource = null;

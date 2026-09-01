@@ -38,7 +38,7 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
     const config = await configService.getConfig();
     this._activeServer = server;
     this._activePollingInterval = config?.remotePollingInterval;
-    await remoteClipboardMonitor.connect();
+    await remoteClipboardMonitor.resumeAndRefresh();
   }
 
   async stop(): Promise<void> {
@@ -72,9 +72,9 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
       await remoteClipboardMonitor.disconnect();
       this._activeServer = newServer;
       this._activePollingInterval = newPollingInterval;
-      await remoteClipboardMonitor.connect();
+      await remoteClipboardMonitor.resumeAndRefresh();
     } else if (!remoteClipboardMonitor.isConnected()) {
-      await remoteClipboardMonitor.connect();
+      await remoteClipboardMonitor.resumeAndRefresh();
     }
   }
 
