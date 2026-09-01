@@ -41,6 +41,13 @@ export interface NetworkAutoSwitchDependencies {
   notify(message: string, mode: Exclude<NetworkSwitchNotificationMode, 'none'>): void;
 }
 
+type EvaluationOutcome = 'completed' | 'superseded';
+
+type OneShotSelectionRoute =
+  | { kind: 'managed' }
+  | { kind: 'cold'; config: AppConfig }
+  | { kind: 'skip'; reason: 'disabled' | 'superseded' };
+
 const NETWORK_CHANGE_DEBOUNCE_MS = 1000;
 
 const initialState: NetworkAutoSwitchState = {
@@ -125,8 +132,8 @@ export class NetworkAutoSwitchService {
   private debounceTimerTag: string | null = null;
   private networkDirty = true;
   private generation = 0;
-  private operation: Promise<void> = Promise.resolve();
-  private oneShotOperation: Promise<void> = Promise.resolve();
+  private evaluationQueue: Promise<EvaluationOutcome> = Promise.resolve('completed');
+  private oneShotSelectionQueue: Promise<void> = Promise.resolve();
   private lastConfigSignature: string | null = null;
   private manualOverrideFingerprint: string | 'pending' | null = null;
 
@@ -204,7 +211,7 @@ export class NetworkAutoSwitchService {
         if (this.debounceTimerTag !== timerTag) return;
         clearTimer(timerTag);
         this.debounceTimerTag = null;
-        this.enqueueEvaluation(generation, true, 'network-change');
+        this.enqueueEvaluation(generation, 'network-change');
       },
       NETWORK_CHANGE_DEBOUNCE_MS,
       timerTag
@@ -250,20 +257,14 @@ export class NetworkAutoSwitchService {
       }
       const config = await this.deps.getConfig();
       if (!config.networkAutoSwitch.enabled) return;
+
       if (this.state.phase === 'detecting') {
-        await this.operation;
+        await this.evaluationQueue;
       }
-      if (
-        !this.networkDirty &&
-        !this.debounceTimerTag &&
-        this.state.snapshot &&
-        this.state.phase !== 'error' &&
-        this.state.phase !== 'detecting'
-      ) {
-        return;
-      }
-      await this.evaluateNow('sync-preflight');
-      if (this.state.phase === 'waiting' || this.state.phase === 'error') return;
+
+      if (this.hasCurrentEvaluation()) return;
+      const outcome = await this.evaluateNow('sync-preflight');
+      if (outcome === 'completed') return;
     }
   }
 
@@ -274,51 +275,55 @@ export class NetworkAutoSwitchService {
    * 由调用方决定是否重试，不回退到选择前的服务器。
    */
   async selectServerForCurrentNetworkOnce(): Promise<void> {
-    const selection = this.oneShotOperation
+    const selection = this.oneShotSelectionQueue
       .catch(() => {})
       .then(() => this.performOneShotSelection());
-    this.oneShotOperation = selection;
+    this.oneShotSelectionQueue = selection;
     await selection;
   }
 
   private async performOneShotSelection(): Promise<void> {
-    if (this.startupPromise || this.running) {
-      await this.performRunningOneShotSelection();
-      return;
-    }
-
     const selectionGeneration = this.generation;
-    let config = await this.deps.getConfig();
-    if (this.startupPromise || this.running) {
-      await this.performRunningOneShotSelection();
-      return;
-    }
-    if (!config.networkAutoSwitch.enabled) {
-      console.log('[NetworkAutoSwitch] trigger=one-shot result=disabled target=none-or-keep');
-      return;
-    }
-    if (selectionGeneration !== this.generation || this.manualOverrideFingerprint !== null) {
-      return;
-    }
+    let route = await this.resolveOneShotSelectionRoute(selectionGeneration);
+    if (route.kind !== 'cold') return this.finishNonColdOneShotSelection(route);
 
     const snapshot = await this.deps.getSnapshot();
-    if (this.startupPromise || this.running) {
-      await this.performRunningOneShotSelection();
-      return;
-    }
-    config = await this.deps.getConfig();
-    if (this.startupPromise || this.running) {
-      await this.performRunningOneShotSelection();
-      return;
-    }
+    route = await this.resolveOneShotSelectionRoute(selectionGeneration);
+    if (route.kind !== 'cold') return this.finishNonColdOneShotSelection(route);
+
+    await this.applyColdOneShotSelection(route.config, snapshot);
+  }
+
+  private async resolveOneShotSelectionRoute(
+    selectionGeneration: number
+  ): Promise<OneShotSelectionRoute> {
+    if (this.hasManagedRuntime()) return { kind: 'managed' };
+
+    const config = await this.deps.getConfig();
+    if (this.hasManagedRuntime()) return { kind: 'managed' };
     if (!config.networkAutoSwitch.enabled) {
-      console.log('[NetworkAutoSwitch] trigger=one-shot result=disabled target=none-or-keep');
-      return;
+      return { kind: 'skip', reason: 'disabled' };
     }
     if (selectionGeneration !== this.generation || this.manualOverrideFingerprint !== null) {
+      return { kind: 'skip', reason: 'superseded' };
+    }
+    return { kind: 'cold', config };
+  }
+
+  private async finishNonColdOneShotSelection(
+    route: Exclude<OneShotSelectionRoute, { kind: 'cold' }>
+  ): Promise<void> {
+    if (route.kind === 'managed') {
+      await this.performManagedOneShotSelection();
       return;
     }
+    console.log(`[NetworkAutoSwitch] trigger=one-shot result=${route.reason} target=none-or-keep`);
+  }
 
+  private async applyColdOneShotSelection(
+    config: AppConfig,
+    snapshot: MobileNetworkSnapshot
+  ): Promise<void> {
     const evaluation = evaluateNetworkAutoSwitch(
       config.networkAutoSwitch,
       config.servers,
@@ -349,7 +354,7 @@ export class NetworkAutoSwitchService {
     );
   }
 
-  private async performRunningOneShotSelection(): Promise<void> {
+  private async performManagedOneShotSelection(): Promise<void> {
     await this.ensureCurrentServer();
     const config = await this.deps.getConfig();
     if (!config.networkAutoSwitch.enabled) return;
@@ -359,6 +364,24 @@ export class NetworkAutoSwitchService {
     if (this.state.phase === 'error') {
       throw new Error(this.state.error || 'Server selection failed');
     }
+  }
+
+  private hasManagedRuntime(): boolean {
+    return this.startupPromise !== null || this.running;
+  }
+
+  private hasCurrentEvaluation(): boolean {
+    const currentPhase =
+      this.state.phase === 'waiting' ||
+      this.state.phase === 'matched' ||
+      this.state.phase === 'no-match' ||
+      this.state.phase === 'manual-override';
+    return (
+      !this.networkDirty &&
+      this.debounceTimerTag === null &&
+      this.state.snapshot !== null &&
+      currentPhase
+    );
   }
 
   private async initialize(): Promise<void> {
@@ -391,33 +414,29 @@ export class NetworkAutoSwitchService {
     this.debounceTimerTag = null;
   }
 
-  private evaluateNow(reason: string): Promise<void> {
+  private evaluateNow(reason: string): Promise<EvaluationOutcome> {
     this.generation += 1;
     const generation = this.generation;
     this.clearDebounce();
-    return this.enqueueEvaluation(generation, true, reason);
+    return this.enqueueEvaluation(generation, reason);
   }
 
-  private enqueueEvaluation(generation: number, apply: boolean, reason: string): Promise<void> {
-    this.operation = this.operation
-      .catch(() => {})
-      .then(() => this.performEvaluation(generation, apply, reason));
-    return this.operation;
+  private enqueueEvaluation(generation: number, reason: string): Promise<EvaluationOutcome> {
+    this.evaluationQueue = this.evaluationQueue
+      .catch((): EvaluationOutcome => 'completed')
+      .then(() => this.performEvaluation(generation, reason));
+    return this.evaluationQueue;
   }
 
-  private async performEvaluation(
-    generation: number,
-    apply: boolean,
-    trigger: string
-  ): Promise<void> {
-    if (!this.running || generation !== this.generation) return;
+  private async performEvaluation(generation: number, trigger: string): Promise<EvaluationOutcome> {
+    if (!this.running || generation !== this.generation) return 'superseded';
     this.updateState({ phase: 'detecting', error: null });
     try {
       const [snapshot, config] = await Promise.all([
         this.deps.getSnapshot(),
         this.deps.getConfig(),
       ]);
-      if (!this.running || generation !== this.generation) return;
+      if (!this.running || generation !== this.generation) return 'superseded';
 
       const currentFingerprint = getNetworkFingerprint(snapshot);
       if (this.manualOverrideFingerprint) {
@@ -435,7 +454,7 @@ export class NetworkAutoSwitchService {
             manualOverride: true,
           });
           this.networkDirty = false;
-          return;
+          return 'completed';
         }
         this.manualOverrideFingerprint = null;
       }
@@ -451,9 +470,9 @@ export class NetworkAutoSwitchService {
         evaluation.targetServerId !== undefined &&
         evaluation.targetServerId !== (before?.id ?? null);
 
-      if (apply && config.networkAutoSwitch.enabled && targetChanged) {
+      if (config.networkAutoSwitch.enabled && targetChanged) {
         resultingConfig = await this.deps.switchServer(evaluation.targetServerId ?? null);
-        if (!this.running || generation !== this.generation) return;
+        if (!this.running || generation !== this.generation) return 'superseded';
         if (config.networkAutoSwitch.notificationMode !== 'none') {
           this.deps.notify(
             this.notificationMessage(evaluation, resultingConfig),
@@ -479,12 +498,14 @@ export class NetworkAutoSwitchService {
         manualOverride: false,
       });
       this.networkDirty = false;
+      return 'completed';
     } catch (error) {
-      if (generation !== this.generation) return;
+      if (!this.running || generation !== this.generation) return 'superseded';
       this.networkDirty = true;
       const message = error instanceof Error ? error.message : String(error);
       console.error(`[NetworkAutoSwitch] trigger=${trigger} failed:`, error);
       this.updateState({ phase: 'error', error: message, lastEvaluatedAt: Date.now() });
+      return 'completed';
     }
   }
 

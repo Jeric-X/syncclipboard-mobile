@@ -119,6 +119,12 @@ function harness(initial = createConfig()) {
   };
 }
 
+async function flushMicrotasksUntil(predicate: () => boolean): Promise<void> {
+  for (let step = 0; step < 20 && !predicate(); step += 1) {
+    await Promise.resolve();
+  }
+}
+
 describe('NetworkAutoSwitchService', () => {
   beforeEach(() => {
     jest.useRealTimers();
@@ -225,8 +231,8 @@ describe('NetworkAutoSwitchService', () => {
     (h.deps.getSnapshot as jest.Mock).mockImplementationOnce(() => pendingSnapshot);
 
     const selection = h.service.selectServerForCurrentNetworkOnce();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushMicrotasksUntil(() => (h.deps.getSnapshot as jest.Mock).mock.calls.length === 1);
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(1);
     const current = h.getConfig();
     h.setConfig({
       ...current,
@@ -248,8 +254,8 @@ describe('NetworkAutoSwitchService', () => {
     (h.deps.getSnapshot as jest.Mock).mockImplementationOnce(() => pendingSnapshot);
 
     const selection = h.service.selectServerForCurrentNetworkOnce();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushMicrotasksUntil(() => (h.deps.getSnapshot as jest.Mock).mock.calls.length === 1);
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(1);
     h.service.beginManualOverride();
     h.setConfig({ ...h.getConfig(), activeServerIndex: 1 });
     resolveSnapshot?.(wifi);
@@ -270,8 +276,7 @@ describe('NetworkAutoSwitchService', () => {
     (h.deps.getSnapshot as jest.Mock).mockImplementationOnce(() => staleSnapshot);
 
     const foregroundEvaluation = h.service.onForeground();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushMicrotasksUntil(() => h.service.getState().phase === 'detecting');
     expect(h.service.getState().phase).toBe('detecting');
 
     h.setSnapshot({ ...wifi, ssid: 'Office', capturedAt: 200 });
@@ -300,9 +305,7 @@ describe('NetworkAutoSwitchService', () => {
     h.setSnapshot({ ...wifi, ssid: 'Office', capturedAt: 200 });
     h.emitNetwork();
     const oneShotSelection = h.service.selectServerForCurrentNetworkOnce();
-    for (let step = 0; step < 10 && h.service.getState().phase !== 'detecting'; step += 1) {
-      await Promise.resolve();
-    }
+    await flushMicrotasksUntil(() => h.service.getState().phase === 'detecting');
     expect(h.service.getState().phase).toBe('detecting');
 
     h.setSnapshot({ ...wifi, capturedAt: 300 });
@@ -327,9 +330,7 @@ describe('NetworkAutoSwitchService', () => {
     (h.deps.getSnapshot as jest.Mock).mockImplementationOnce(() => startupSnapshot);
 
     const startup = h.service.start();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushMicrotasksUntil(() => h.service.getState().phase === 'detecting');
     expect(h.service.getState().phase).toBe('detecting');
 
     h.setSnapshot({ ...wifi, ssid: 'Office', capturedAt: 200 });
@@ -376,9 +377,7 @@ describe('NetworkAutoSwitchService', () => {
 
     const first = h.service.selectServerForCurrentNetworkOnce();
     const second = h.service.selectServerForCurrentNetworkOnce();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushMicrotasksUntil(() => (h.deps.getSnapshot as jest.Mock).mock.calls.length === 1);
     expect(h.deps.getSnapshot).toHaveBeenCalledTimes(1);
 
     resolveFirstSwitch?.();
