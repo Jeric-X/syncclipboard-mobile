@@ -2,8 +2,10 @@ import type { ISyncClipboardAPI } from '@/api/clients/APIClient';
 import type { ProfileDto } from '@/types/api';
 import type { AppConfig } from '@/types/storage';
 
-const MAX_RETRIES = 3;
-const RETRY_DELAYS = [3_000, 10_000, 30_000] as const;
+const FIRST_RETRY_DELAY_MS = 3_000;
+const SUBSEQUENT_RETRY_DELAY_MS = 10_000;
+// Headless JS 上限为 60 秒，超过 50 秒不再安排下一轮，为日志与服务收尾预留时间。
+const RETRY_WINDOW_MS = 50_000;
 
 export interface SmsCodeUploadRequest {
   from: string;
@@ -78,6 +80,10 @@ function serverSummary(config: AppConfig): string {
   }
 
   return `index=${config.activeServerIndex} id=${server.id ?? 'missing'} type=${server.type} endpoint=${endpoint}`;
+}
+
+function retryDelayMs(attempt: number): number {
+  return attempt === 0 ? FIRST_RETRY_DELAY_MS : SUBSEQUENT_RETRY_DELAY_MS;
 }
 
 /**
@@ -162,11 +168,11 @@ async function executeSmsCodeUpload(
     };
     updateNotification(`正在上传验证码：${code}`);
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    for (let attempt = 0; ; attempt++) {
       const attemptNumber = attempt + 1;
       const attemptStartedAt = deps.now();
       stage = 'network-preflight';
-      log('info', `attempt=${attemptNumber}/${MAX_RETRIES + 1} started`);
+      log('info', `attempt=${attemptNumber} started`);
       try {
         log('info', 'one-shot network server selection started');
         await deps.selectServerForCurrentNetworkOnce();
@@ -192,24 +198,25 @@ async function executeSmsCodeUpload(
         log('info', 'API client creation completed');
 
         stage = 'upload';
-        log('info', `upload attempt=${attemptNumber}/${MAX_RETRIES + 1} started`);
+        log('info', `upload attempt=${attemptNumber} started`);
         await client.putClipboard(profile);
       } catch (error) {
         const errorText = formatError(error);
+        const attemptMs = Math.max(0, deps.now() - attemptStartedAt);
+        const elapsedMs = Math.max(0, deps.now() - startedAt);
+        const delay = retryDelayMs(attempt);
+        const canRetry = elapsedMs + delay <= RETRY_WINDOW_MS;
         log(
-          attempt < MAX_RETRIES ? 'warn' : 'error',
-          `attempt=${attemptNumber}/${MAX_RETRIES + 1} failed attemptMs=${Math.max(
-            0,
-            deps.now() - attemptStartedAt
-          )} error=${errorText}`,
+          canRetry ? 'warn' : 'error',
+          `attempt=${attemptNumber} failed attemptMs=${attemptMs} error=${errorText}`,
           error
         );
-        if (attempt >= MAX_RETRIES) {
-          updateNotification(`验证码上传失败: ${code}\n已重试${MAX_RETRIES}次`);
+        if (!canRetry) {
+          updateNotification(`验证码上传失败: ${code}\n已尝试${attemptNumber}次`);
+          log('error', `retry window exhausted elapsedMs=${elapsedMs}`);
           return { status: 'failed', stage, error: errorText };
         }
 
-        const delay = RETRY_DELAYS[attempt] ?? RETRY_DELAYS[RETRY_DELAYS.length - 1];
         updateNotification(
           `验证码上传重试中: ${code}\n第${attemptNumber}次失败，${Math.round(
             delay / 1000
@@ -222,7 +229,7 @@ async function executeSmsCodeUpload(
 
       log(
         'info',
-        `upload attempt=${attemptNumber}/${MAX_RETRIES + 1} succeeded attemptMs=${Math.max(
+        `upload attempt=${attemptNumber} succeeded attemptMs=${Math.max(
           0,
           deps.now() - attemptStartedAt
         )}`

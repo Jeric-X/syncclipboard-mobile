@@ -24,7 +24,9 @@ function createHarness(overrides: Partial<SmsCodeUploaderDependencies> = {}) {
   const logs: Array<{ level: string; message: string; error?: unknown }> = [];
   const deps: SmsCodeUploaderDependencies = {
     now: jest.fn(() => now++),
-    sleep: jest.fn(async () => undefined),
+    sleep: jest.fn(async (delayMs) => {
+      now += delayMs;
+    }),
     log: jest.fn((level, message, error) => logs.push({ level, message, error })),
     extractVerificationCode: jest.fn(() => '123456'),
     copyToClipboard: jest.fn(async () => undefined),
@@ -73,7 +75,7 @@ describe('SmsCodeUploader', () => {
     expect(messages).toContain('stage=network-preflight');
     expect(messages).toContain('one-shot network server selection completed');
     expect(messages).toContain('stage=client-create');
-    expect(messages).toContain('upload attempt=1/4 succeeded');
+    expect(messages).toContain('upload attempt=1 succeeded');
     expect(messages).not.toContain('+8613800000000');
     expect(messages).not.toContain('123456');
   });
@@ -121,13 +123,15 @@ describe('SmsCodeUploader', () => {
       stage: 'network-preflight',
       error: 'Error: network unavailable',
     });
-    expect(h.deps.selectServerForCurrentNetworkOnce).toHaveBeenCalledTimes(4);
+    expect(h.deps.selectServerForCurrentNetworkOnce).toHaveBeenCalledTimes(6);
     expect(h.deps.getAPIClient).not.toHaveBeenCalled();
     expect(h.putClipboard).not.toHaveBeenCalled();
-    expect(h.deps.sleep).toHaveBeenCalledTimes(3);
+    expect(h.deps.sleep).toHaveBeenCalledTimes(5);
     expect(h.deps.sleep).toHaveBeenNthCalledWith(1, 3_000);
     expect(h.deps.sleep).toHaveBeenNthCalledWith(2, 10_000);
-    expect(h.deps.sleep).toHaveBeenNthCalledWith(3, 30_000);
+    expect(h.deps.sleep).toHaveBeenNthCalledWith(3, 10_000);
+    expect(h.deps.sleep).toHaveBeenNthCalledWith(4, 10_000);
+    expect(h.deps.sleep).toHaveBeenNthCalledWith(5, 10_000);
   });
 
   it('记录每次上传失败和重试等待', async () => {
@@ -146,10 +150,10 @@ describe('SmsCodeUploader', () => {
     expect(h.deps.getAPIClient).toHaveBeenCalledTimes(2);
     expect(h.deps.sleep).toHaveBeenCalledWith(3_000);
     const messages = h.logs.map((entry) => entry.message).join('\n');
-    expect(messages).toContain('attempt=1/4 failed');
+    expect(messages).toContain('attempt=1 failed');
     expect(messages).toContain('code=ETIMEDOUT');
     expect(messages).toContain('retry scheduled delayMs=3000');
-    expect(messages).toContain('upload attempt=2/4 succeeded');
+    expect(messages).toContain('upload attempt=2 succeeded');
   });
 
   it('上传成功后的通知失败不会导致重复上传', async () => {
