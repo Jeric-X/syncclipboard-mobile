@@ -62,7 +62,8 @@ const dependencies: SmsCodeUploaderDependencies = {
     await Clipboard.setStringAsync(code);
   },
   loadConfig,
-  ensureCurrentServer: () => networkAutoSwitchService.ensureCurrentServer(),
+  selectServerForCurrentNetworkOnce: () =>
+    networkAutoSwitchService.selectServerForCurrentNetworkOnce(),
   getAPIClient,
   calculateHash,
   updateNotification: (text) => {

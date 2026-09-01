@@ -119,6 +119,12 @@ function harness(initial = createConfig()) {
   };
 }
 
+async function flushMicrotasksUntil(predicate: () => boolean): Promise<void> {
+  for (let step = 0; step < 20 && !predicate(); step += 1) {
+    await Promise.resolve();
+  }
+}
+
 describe('NetworkAutoSwitchService', () => {
   beforeEach(() => {
     jest.useRealTimers();
@@ -159,6 +165,251 @@ describe('NetworkAutoSwitchService', () => {
 
     expect(h.deps.getSnapshot).toHaveBeenCalledTimes(1);
     expect(h.switchServer).toHaveBeenCalledTimes(1);
+  });
+
+  it('一次性选择不启动服务或注册网络监听', async () => {
+    const h = harness();
+
+    await h.service.selectServerForCurrentNetworkOnce();
+
+    expect(h.service.isRunning()).toBe(false);
+    expect(h.deps.subscribeNetwork).not.toHaveBeenCalled();
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(1);
+    expect(h.switchServer).toHaveBeenCalledWith('home');
+  });
+
+  it('自动切换关闭时一次性选择不读取网络', async () => {
+    const initial = createConfig();
+    const h = harness({
+      ...initial,
+      networkAutoSwitch: { ...initial.networkAutoSwitch, enabled: false },
+    });
+
+    await h.service.selectServerForCurrentNetworkOnce();
+
+    expect(h.deps.getSnapshot).not.toHaveBeenCalled();
+    expect(h.deps.subscribeNetwork).not.toHaveBeenCalled();
+    expect(h.switchServer).not.toHaveBeenCalled();
+  });
+
+  it('服务运行时一次性选择委托给同步前检查并保留手动选择', async () => {
+    const h = harness(createConfig(0));
+    await h.service.start();
+    h.service.beginManualOverride();
+    h.setConfig({ ...h.getConfig(), activeServerIndex: 1 });
+    const ensureCurrentServer = jest.spyOn(h.service, 'ensureCurrentServer');
+
+    await h.service.selectServerForCurrentNetworkOnce();
+
+    expect(ensureCurrentServer).toHaveBeenCalledTimes(1);
+    expect(h.switchServer).not.toHaveBeenCalled();
+    expect(h.service.getState().phase).toBe('manual-override');
+  });
+
+  it('服务处于等待网络时关闭自动切换后忽略旧状态', async () => {
+    const h = harness(createConfig(0));
+    h.setSnapshot({ ...wifi, isConnected: false, type: 'none' });
+    await h.service.start();
+    expect(h.service.getState().phase).toBe('waiting');
+    const current = h.getConfig();
+    h.setConfig({
+      ...current,
+      networkAutoSwitch: { ...current.networkAutoSwitch, enabled: false },
+    });
+
+    await expect(h.service.selectServerForCurrentNetworkOnce()).resolves.toBeUndefined();
+
+    expect(h.switchServer).not.toHaveBeenCalled();
+  });
+
+  it('冷启动选服读取网络期间关闭自动切换后保留当前服务器', async () => {
+    const h = harness();
+    let resolveSnapshot: ((snapshot: MobileNetworkSnapshot) => void) | undefined;
+    const pendingSnapshot = new Promise<MobileNetworkSnapshot>((resolve) => {
+      resolveSnapshot = resolve;
+    });
+    (h.deps.getSnapshot as jest.Mock).mockImplementationOnce(() => pendingSnapshot);
+
+    const selection = h.service.selectServerForCurrentNetworkOnce();
+    await flushMicrotasksUntil(() => (h.deps.getSnapshot as jest.Mock).mock.calls.length === 1);
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(1);
+    const current = h.getConfig();
+    h.setConfig({
+      ...current,
+      networkAutoSwitch: { ...current.networkAutoSwitch, enabled: false },
+    });
+    resolveSnapshot?.(wifi);
+    await selection;
+
+    expect(h.switchServer).not.toHaveBeenCalled();
+    expect(h.getConfig().servers[h.getConfig().activeServerIndex]?.id).toBe('public');
+  });
+
+  it('冷启动选服读取网络期间手动选择服务器后不覆盖用户选择', async () => {
+    const h = harness(createConfig(0));
+    let resolveSnapshot: ((snapshot: MobileNetworkSnapshot) => void) | undefined;
+    const pendingSnapshot = new Promise<MobileNetworkSnapshot>((resolve) => {
+      resolveSnapshot = resolve;
+    });
+    (h.deps.getSnapshot as jest.Mock).mockImplementationOnce(() => pendingSnapshot);
+
+    const selection = h.service.selectServerForCurrentNetworkOnce();
+    await flushMicrotasksUntil(() => (h.deps.getSnapshot as jest.Mock).mock.calls.length === 1);
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(1);
+    h.service.beginManualOverride();
+    h.setConfig({ ...h.getConfig(), activeServerIndex: 1 });
+    resolveSnapshot?.(wifi);
+    await selection;
+
+    expect(h.switchServer).not.toHaveBeenCalled();
+    expect(h.getConfig().servers[h.getConfig().activeServerIndex]?.id).toBe('public');
+  });
+
+  it('运行中的评估被网络事件作废后重新读取最新快照', async () => {
+    jest.useFakeTimers();
+    const h = harness(createConfig(0));
+    await h.service.start();
+    let resolveStaleSnapshot: ((snapshot: MobileNetworkSnapshot) => void) | undefined;
+    const staleSnapshot = new Promise<MobileNetworkSnapshot>((resolve) => {
+      resolveStaleSnapshot = resolve;
+    });
+    (h.deps.getSnapshot as jest.Mock).mockImplementationOnce(() => staleSnapshot);
+
+    const foregroundEvaluation = h.service.onForeground();
+    await flushMicrotasksUntil(() => h.service.getState().phase === 'detecting');
+    expect(h.service.getState().phase).toBe('detecting');
+
+    h.setSnapshot({ ...wifi, ssid: 'Office', capturedAt: 200 });
+    h.emitNetwork();
+    const oneShotSelection = h.service.selectServerForCurrentNetworkOnce();
+    resolveStaleSnapshot?.(wifi);
+    await Promise.all([foregroundEvaluation, oneShotSelection]);
+
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(3);
+    expect(h.service.getState()).toMatchObject({
+      phase: 'no-match',
+      snapshot: expect.objectContaining({ ssid: 'Office' }),
+    });
+  });
+
+  it('同步前最终评估被网络事件作废后继续读取最新快照', async () => {
+    jest.useFakeTimers();
+    const h = harness(createConfig(0));
+    await h.service.start();
+    let resolveStaleSnapshot: ((snapshot: MobileNetworkSnapshot) => void) | undefined;
+    const staleSnapshot = new Promise<MobileNetworkSnapshot>((resolve) => {
+      resolveStaleSnapshot = resolve;
+    });
+    (h.deps.getSnapshot as jest.Mock).mockImplementationOnce(() => staleSnapshot);
+
+    h.setSnapshot({ ...wifi, ssid: 'Office', capturedAt: 200 });
+    h.emitNetwork();
+    const oneShotSelection = h.service.selectServerForCurrentNetworkOnce();
+    await flushMicrotasksUntil(() => h.service.getState().phase === 'detecting');
+    expect(h.service.getState().phase).toBe('detecting');
+
+    h.setSnapshot({ ...wifi, capturedAt: 300 });
+    h.emitNetwork();
+    resolveStaleSnapshot?.({ ...wifi, ssid: 'Office', capturedAt: 200 });
+    await oneShotSelection;
+
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(3);
+    expect(h.service.getState()).toMatchObject({
+      phase: 'matched',
+      snapshot: expect.objectContaining({ ssid: 'Home', capturedAt: 300 }),
+    });
+  });
+
+  it('启动评估被网络事件作废后重新读取最新快照', async () => {
+    jest.useFakeTimers();
+    const h = harness(createConfig(0));
+    let resolveStartupSnapshot: ((snapshot: MobileNetworkSnapshot) => void) | undefined;
+    const startupSnapshot = new Promise<MobileNetworkSnapshot>((resolve) => {
+      resolveStartupSnapshot = resolve;
+    });
+    (h.deps.getSnapshot as jest.Mock).mockImplementationOnce(() => startupSnapshot);
+
+    const startup = h.service.start();
+    await flushMicrotasksUntil(() => h.service.getState().phase === 'detecting');
+    expect(h.service.getState().phase).toBe('detecting');
+
+    h.setSnapshot({ ...wifi, ssid: 'Office', capturedAt: 200 });
+    h.service.handleNetworkChanged();
+    const oneShotSelection = h.service.selectServerForCurrentNetworkOnce();
+    resolveStartupSnapshot?.(wifi);
+    await Promise.all([startup, oneShotSelection]);
+
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(2);
+    expect(h.service.getState()).toMatchObject({
+      phase: 'no-match',
+      snapshot: expect.objectContaining({ ssid: 'Office' }),
+    });
+  });
+
+  it('并发冷启动选服串行执行且最后应用较新的网络快照', async () => {
+    const initial = createConfig();
+    const h = harness({
+      ...initial,
+      networkAutoSwitch: {
+        ...initial.networkAutoSwitch,
+        noMatchAction: 'defaultServer',
+        defaultServerId: 'public',
+      },
+    });
+    let resolveFirstSwitch: (() => void) | undefined;
+    const firstSwitch = new Promise<void>((resolve) => {
+      resolveFirstSwitch = resolve;
+    });
+    (h.deps.getSnapshot as jest.Mock)
+      .mockResolvedValueOnce(wifi)
+      .mockResolvedValueOnce({ ...wifi, ssid: 'Office', capturedAt: 200 });
+    (h.deps.switchServer as jest.Mock).mockImplementation(async (serverId: string | null) => {
+      if (serverId === 'home') await firstSwitch;
+      const current = h.getConfig();
+      const next = {
+        ...current,
+        activeServerIndex:
+          serverId === null ? -1 : current.servers.findIndex((server) => server.id === serverId),
+      };
+      h.setConfig(next);
+      return next;
+    });
+
+    const first = h.service.selectServerForCurrentNetworkOnce();
+    const second = h.service.selectServerForCurrentNetworkOnce();
+    await flushMicrotasksUntil(() => (h.deps.getSnapshot as jest.Mock).mock.calls.length === 1);
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(1);
+
+    resolveFirstSwitch?.();
+    await Promise.all([first, second]);
+
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(2);
+    expect(h.getConfig().servers[h.getConfig().activeServerIndex]?.id).toBe('public');
+  });
+
+  it('一次性选择在网络不可用时失败而不使用原服务器', async () => {
+    const h = harness();
+    h.setSnapshot({ ...wifi, isConnected: false, type: 'none' });
+
+    await expect(h.service.selectServerForCurrentNetworkOnce()).rejects.toThrow(
+      'Network unavailable during server selection'
+    );
+
+    expect(h.switchServer).not.toHaveBeenCalled();
+    expect(h.getConfig().activeServerIndex).toBe(1);
+  });
+
+  it('一次性选择失败时向调用方抛出且不回退服务器', async () => {
+    const h = harness();
+    const error = new Error('network unavailable');
+    (h.deps.getSnapshot as jest.Mock).mockRejectedValueOnce(error);
+
+    await expect(h.service.selectServerForCurrentNetworkOnce()).rejects.toBe(error);
+
+    expect(h.service.isRunning()).toBe(false);
+    expect(h.deps.subscribeNetwork).not.toHaveBeenCalled();
+    expect(h.switchServer).not.toHaveBeenCalled();
+    expect(h.getConfig().activeServerIndex).toBe(1);
   });
 
   it('按配置选择 Toast 通知方式', async () => {
