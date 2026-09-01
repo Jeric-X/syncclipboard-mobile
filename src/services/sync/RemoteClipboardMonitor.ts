@@ -1,29 +1,39 @@
 /**
  * Remote Clipboard Monitor
- * 远程剪贴板变化监听服务 - 管理 SignalR 或定时轮询两种模式，
- * 通过发布订阅将变化事件通知给上层（ClipboardSyncService）。
+ * 远程剪贴板变化监听服务 - 管理低延迟事件源或定时轮询，
+ * 并始终通过 HTTP API 获取权威状态后通知上层（ClipboardSyncService）。
  */
 
 import type { ClipboardContent } from '../../types/clipboard';
-import type { ClipboardContentType, ProfileDto, ServerConfig } from '../../types/api';
-import type { ProfileChangedEvent, ConnectionState } from 'signalr-client';
-import { getSignalRClient } from 'signalr-client';
+import type { ServerConfig } from '../../types/api';
 import { setTimer, clearTimer } from 'native-timer';
 import { getAPIClient } from '../ClientFactory';
 import { profileDtoToContent } from '../../utils/clipboard/convert';
 import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
 import { DedupedOperation } from '../../utils/DedupedOperation';
+import type {
+  RemoteEventSource,
+  RemoteEventSourceConnectionState,
+  RemoteProfileChangeHint,
+} from './RemoteEventSource';
+import { SignalRRemoteEventSource } from './SignalRRemoteEventSource';
 
 /** 远程剪贴板变化回调：仅在内容哈希变化时触发 */
 export type RemoteClipboardChangedCallback = (content: ClipboardContent) => void;
 
-class RemoteClipboardMonitor {
+export type RemoteEventSourceFactory = (server: ServerConfig) => RemoteEventSource;
+
+const createSignalRRemoteEventSource: RemoteEventSourceFactory = (server) =>
+  new SignalRRemoteEventSource(server);
+
+export class RemoteClipboardMonitor {
   private static _instance: RemoteClipboardMonitor | null = null;
 
   private callbacks = new Set<RemoteClipboardChangedCallback>();
   private pollingTag: string | null = null;
-  private _signalRConnected = false;
+  private _eventSource: RemoteEventSource | null = null;
+  private _eventSourceCleanups: Array<() => void> = [];
   /** 上次触发回调时的内容哈希，用于过滤重复通知 */
   private _lastContentHash: string | null = null;
   /** 对 fetchLatest 进行去重：并发调用共享同一次请求；配置变更时通过 abort() 取消 */
@@ -34,7 +44,9 @@ class RemoteClipboardMonitor {
    */
   private readonly _bgRunningCheckers: Set<() => boolean> = new Set();
 
-  private constructor() {}
+  constructor(
+    private readonly _createRemoteEventSource: RemoteEventSourceFactory = createSignalRRemoteEventSource
+  ) {}
 
   static getInstance(): RemoteClipboardMonitor {
     if (!this._instance) this._instance = new RemoteClipboardMonitor();
@@ -137,9 +149,9 @@ class RemoteClipboardMonitor {
    * 检查 SignalR 是否已连接（同时验证底层客户端状态）。
    */
   isSignalRConnected(): boolean {
-    if (!this._signalRConnected) return false;
+    if (!this._eventSource) return false;
     try {
-      return getSignalRClient().isConnected();
+      return this._eventSource.isConnected();
     } catch {
       return false;
     }
@@ -149,7 +161,7 @@ class RemoteClipboardMonitor {
     return this.isPolling() || this.isSignalRConnected();
   }
 
-  private readonly _signalRStateCallback = (state: ConnectionState): void => {
+  private readonly _eventSourceStateCallback = (state: RemoteEventSourceConnectionState): void => {
     if (state === 'DISCONNECTED') {
       clipboardSyncState.setSyncError({ title: '服务器连接断开' });
     } else if (state === 'CONNECTED') {
@@ -160,24 +172,16 @@ class RemoteClipboardMonitor {
     }
   };
 
-  private readonly _signalREventCallback = (event: ProfileChangedEvent): void => {
-    try {
-      const profile: ProfileDto = {
-        type: event.type as ClipboardContentType,
-        hash: event.hash,
-        text: event.text,
-        hasData: event.hasData,
-        dataName: event.dataName,
-        size: event.size,
-      };
-      const content: ClipboardContent = profileDtoToContent(profile);
-      const hash = content.profileHash || content.text;
-      if (hash === this._lastContentHash) return;
-      this._lastContentHash = hash;
-      this.notifyCallbacks(content);
-    } catch (e) {
-      console.error('[RemoteClipboardMonitor] Failed to convert SignalR event:', e);
+  private readonly _remoteProfileChangeCallback = (hint: RemoteProfileChangeHint): void => {
+    if (hint.hash && hint.hash === this._lastContentHash) {
+      console.debug('[RemoteClipboardMonitor] Ignoring already-known remote profile hint');
+      return;
     }
+
+    console.debug(
+      '[RemoteClipboardMonitor] Remote profile change hint received; refreshing authoritative state'
+    );
+    void this.refresh();
   };
 
   private _startPolling(interval?: number): void {
@@ -244,33 +248,58 @@ class RemoteClipboardMonitor {
   }
 
   private async _connectSignalR(server: ServerConfig): Promise<void> {
-    if (this._signalRConnected) return;
+    if (this._eventSource) return;
+    let eventSource: RemoteEventSource | null = null;
+
     try {
-      const client = getSignalRClient();
-      client.onRemoteClipboardChanged(this._signalREventCallback);
-      client.onConnectionStateChanged(this._signalRStateCallback);
-      await client.connect(server);
-      this._signalRConnected = true;
+      eventSource = this._createRemoteEventSource(server);
+      this._eventSource = eventSource;
+      this._eventSourceCleanups = [];
+      this._eventSourceCleanups.push(
+        eventSource.onProfileChanged(this._remoteProfileChangeCallback)
+      );
+      if (eventSource.onConnectionStateChanged) {
+        this._eventSourceCleanups.push(
+          eventSource.onConnectionStateChanged(this._eventSourceStateCallback)
+        );
+      }
+
+      await eventSource.connect();
+      if (this._eventSource !== eventSource) return;
       console.log('[RemoteClipboardMonitor] SignalR connected');
       await this.refresh().catch((e) => {
         console.error('[RemoteClipboardMonitor] Initial refresh failed:', e);
       });
     } catch (e) {
+      if (eventSource && this._eventSource === eventSource) {
+        this._eventSource = null;
+        this._clearEventSourceSubscriptions();
+      }
+      await eventSource?.disconnect().catch(() => {});
       console.error('[RemoteClipboardMonitor] Failed to connect SignalR:', e);
       clipboardSyncState.setSyncError({ title: '服务器连接断开' });
     }
   }
 
   private async _disconnectSignalR(): Promise<void> {
-    if (!this._signalRConnected) return;
-    this._signalRConnected = false;
+    const eventSource = this._eventSource;
+    if (!eventSource) return;
+    this._eventSource = null;
+    this._clearEventSourceSubscriptions();
     try {
-      const client = getSignalRClient();
-      client.offRemoteClipboardChanged(this._signalREventCallback);
-      client.offConnectionStateChanged(this._signalRStateCallback);
-      await client.disconnect();
+      await eventSource.disconnect();
       console.log('[RemoteClipboardMonitor] SignalR disconnected');
     } catch {}
+  }
+
+  private _clearEventSourceSubscriptions(): void {
+    const cleanups = this._eventSourceCleanups;
+    this._eventSourceCleanups = [];
+    cleanups.forEach((cleanup) => {
+      try {
+        cleanup();
+      } catch {}
+    });
   }
 }
 
