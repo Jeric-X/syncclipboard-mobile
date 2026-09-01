@@ -241,27 +241,30 @@ export class NetworkAutoSwitchService {
 
   /** 快捷操作和后台同步访问服务器前调用。 */
   async ensureCurrentServer(): Promise<void> {
-    if (this.startupPromise) {
-      await this.startupPromise;
+    while (true) {
+      if (this.startupPromise) {
+        await this.startupPromise;
+      }
+      if (!this.running) {
+        await this.start();
+      }
+      const config = await this.deps.getConfig();
+      if (!config.networkAutoSwitch.enabled) return;
+      if (this.state.phase === 'detecting') {
+        await this.operation;
+      }
+      if (
+        !this.networkDirty &&
+        !this.debounceTimerTag &&
+        this.state.snapshot &&
+        this.state.phase !== 'error' &&
+        this.state.phase !== 'detecting'
+      ) {
+        return;
+      }
+      await this.evaluateNow('sync-preflight');
+      if (this.state.phase === 'waiting' || this.state.phase === 'error') return;
     }
-    if (!this.running) {
-      await this.start();
-      return;
-    }
-    const config = await this.deps.getConfig();
-    if (!config.networkAutoSwitch.enabled) return;
-    if (this.state.phase === 'detecting') {
-      await this.operation;
-    }
-    if (
-      !this.networkDirty &&
-      !this.debounceTimerTag &&
-      this.state.snapshot &&
-      this.state.phase !== 'error'
-    ) {
-      return;
-    }
-    await this.evaluateNow('sync-preflight');
   }
 
   /**

@@ -287,6 +287,36 @@ describe('NetworkAutoSwitchService', () => {
     });
   });
 
+  it('同步前最终评估被网络事件作废后继续读取最新快照', async () => {
+    jest.useFakeTimers();
+    const h = harness(createConfig(0));
+    await h.service.start();
+    let resolveStaleSnapshot: ((snapshot: MobileNetworkSnapshot) => void) | undefined;
+    const staleSnapshot = new Promise<MobileNetworkSnapshot>((resolve) => {
+      resolveStaleSnapshot = resolve;
+    });
+    (h.deps.getSnapshot as jest.Mock).mockImplementationOnce(() => staleSnapshot);
+
+    h.setSnapshot({ ...wifi, ssid: 'Office', capturedAt: 200 });
+    h.emitNetwork();
+    const oneShotSelection = h.service.selectServerForCurrentNetworkOnce();
+    for (let step = 0; step < 10 && h.service.getState().phase !== 'detecting'; step += 1) {
+      await Promise.resolve();
+    }
+    expect(h.service.getState().phase).toBe('detecting');
+
+    h.setSnapshot({ ...wifi, capturedAt: 300 });
+    h.emitNetwork();
+    resolveStaleSnapshot?.({ ...wifi, ssid: 'Office', capturedAt: 200 });
+    await oneShotSelection;
+
+    expect(h.deps.getSnapshot).toHaveBeenCalledTimes(3);
+    expect(h.service.getState()).toMatchObject({
+      phase: 'matched',
+      snapshot: expect.objectContaining({ ssid: 'Home', capturedAt: 300 }),
+    });
+  });
+
   it('启动评估被网络事件作废后重新读取最新快照', async () => {
     jest.useFakeTimers();
     const h = harness(createConfig(0));
