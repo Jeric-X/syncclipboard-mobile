@@ -186,6 +186,32 @@ describe('NetworkAutoSwitchService', () => {
     expect(h.switchServer).not.toHaveBeenCalled();
   });
 
+  it('服务运行时一次性选择委托给同步前检查并保留手动选择', async () => {
+    const h = harness(createConfig(0));
+    await h.service.start();
+    h.service.beginManualOverride();
+    h.setConfig({ ...h.getConfig(), activeServerIndex: 1 });
+    const ensureCurrentServer = jest.spyOn(h.service, 'ensureCurrentServer');
+
+    await h.service.selectServerForCurrentNetworkOnce();
+
+    expect(ensureCurrentServer).toHaveBeenCalledTimes(1);
+    expect(h.switchServer).not.toHaveBeenCalled();
+    expect(h.service.getState().phase).toBe('manual-override');
+  });
+
+  it('一次性选择在网络不可用时失败而不使用原服务器', async () => {
+    const h = harness();
+    h.setSnapshot({ ...wifi, isConnected: false, type: 'none' });
+
+    await expect(h.service.selectServerForCurrentNetworkOnce()).rejects.toThrow(
+      'Network unavailable during server selection'
+    );
+
+    expect(h.switchServer).not.toHaveBeenCalled();
+    expect(h.getConfig().activeServerIndex).toBe(1);
+  });
+
   it('一次性选择失败时向调用方抛出且不回退服务器', async () => {
     const h = harness();
     const error = new Error('network unavailable');

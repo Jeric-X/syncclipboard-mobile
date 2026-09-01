@@ -250,6 +250,10 @@ export class NetworkAutoSwitchService {
     }
     const config = await this.deps.getConfig();
     if (!config.networkAutoSwitch.enabled) return;
+    if (this.state.phase === 'detecting') {
+      await this.operation;
+      return;
+    }
     if (
       !this.networkDirty &&
       !this.debounceTimerTag &&
@@ -265,9 +269,20 @@ export class NetworkAutoSwitchService {
    * 按当前网络执行一次服务器选择，不启动常驻服务或注册网络监听。
    *
    * 供 Headless 等一次性任务使用。读取网络或切换服务器失败时直接抛出，
-   * 由调用方终止当前业务，不回退到选择前的服务器。
+   * 由调用方决定是否重试，不回退到选择前的服务器。
    */
   async selectServerForCurrentNetworkOnce(): Promise<void> {
+    if (this.startupPromise || this.running) {
+      await this.ensureCurrentServer();
+      if (this.state.phase === 'waiting') {
+        throw new Error('Network unavailable during server selection');
+      }
+      if (this.state.phase === 'error') {
+        throw new Error(this.state.error || 'Server selection failed');
+      }
+      return;
+    }
+
     const config = await this.deps.getConfig();
     if (!config.networkAutoSwitch.enabled) {
       console.log('[NetworkAutoSwitch] trigger=one-shot result=disabled target=none-or-keep');
@@ -280,6 +295,9 @@ export class NetworkAutoSwitchService {
       config.servers,
       snapshot
     );
+    if (evaluation.reason === 'waiting-for-network') {
+      throw new Error('Network unavailable during server selection');
+    }
     const before = activeServer(config);
     const targetChanged =
       evaluation.targetServerId !== undefined && evaluation.targetServerId !== (before?.id ?? null);

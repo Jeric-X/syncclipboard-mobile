@@ -154,31 +154,6 @@ async function executeSmsCodeUpload(
       return { status: 'skipped', reason: 'disabled' };
     }
 
-    stage = 'network-preflight';
-    log('info', 'one-shot network server selection started');
-    await deps.selectServerForCurrentNetworkOnce();
-    log('info', 'one-shot network server selection completed');
-
-    stage = 'config-load';
-    config = await deps.loadConfig();
-    if (!config) {
-      log('error', 'stopped reason=config-unavailable-after-network-preflight');
-      return { status: 'skipped', reason: 'no-config' };
-    }
-    log('info', `post-preflight config loaded activeServer=${serverSummary(config)}`);
-
-    const server = config.servers[config.activeServerIndex];
-    if (!server?.url) {
-      log('error', 'stopped reason=no-active-server');
-      return { status: 'skipped', reason: 'no-active-server' };
-    }
-
-    stage = 'client-create';
-    log('info', `API client creation started server=${serverSummary(config)}`);
-    const client = await deps.getAPIClient();
-    log('info', 'API client creation completed');
-
-    stage = 'upload';
     const profile: ProfileDto = {
       type: 'Text',
       text: code,
@@ -190,14 +165,40 @@ async function executeSmsCodeUpload(
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       const attemptNumber = attempt + 1;
       const attemptStartedAt = deps.now();
-      log('info', `upload attempt=${attemptNumber}/${MAX_RETRIES + 1} started`);
+      stage = 'network-preflight';
+      log('info', `attempt=${attemptNumber}/${MAX_RETRIES + 1} started`);
       try {
+        log('info', 'one-shot network server selection started');
+        await deps.selectServerForCurrentNetworkOnce();
+        log('info', 'one-shot network server selection completed');
+
+        stage = 'config-load';
+        config = await deps.loadConfig();
+        if (!config) {
+          log('error', 'stopped reason=config-unavailable-after-network-preflight');
+          return { status: 'skipped', reason: 'no-config' };
+        }
+        log('info', `post-selection config loaded activeServer=${serverSummary(config)}`);
+
+        const server = config.servers[config.activeServerIndex];
+        if (!server?.url) {
+          log('error', 'stopped reason=no-active-server');
+          return { status: 'skipped', reason: 'no-active-server' };
+        }
+
+        stage = 'client-create';
+        log('info', `API client creation started server=${serverSummary(config)}`);
+        const client = await deps.getAPIClient();
+        log('info', 'API client creation completed');
+
+        stage = 'upload';
+        log('info', `upload attempt=${attemptNumber}/${MAX_RETRIES + 1} started`);
         await client.putClipboard(profile);
       } catch (error) {
         const errorText = formatError(error);
         log(
           attempt < MAX_RETRIES ? 'warn' : 'error',
-          `upload attempt=${attemptNumber}/${MAX_RETRIES + 1} failed requestMs=${Math.max(
+          `attempt=${attemptNumber}/${MAX_RETRIES + 1} failed attemptMs=${Math.max(
             0,
             deps.now() - attemptStartedAt
           )} error=${errorText}`,
@@ -221,7 +222,7 @@ async function executeSmsCodeUpload(
 
       log(
         'info',
-        `upload attempt=${attemptNumber}/${MAX_RETRIES + 1} succeeded requestMs=${Math.max(
+        `upload attempt=${attemptNumber}/${MAX_RETRIES + 1} succeeded attemptMs=${Math.max(
           0,
           deps.now() - attemptStartedAt
         )}`

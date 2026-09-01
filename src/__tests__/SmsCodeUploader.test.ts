@@ -78,8 +78,36 @@ describe('SmsCodeUploader', () => {
     expect(messages).not.toContain('123456');
   });
 
-  it('自动选服冷启动失败时记录准确阶段和错误', async () => {
+  it('自动选服失败时按上传重试计划重新选服', async () => {
     const error = new Error('native network unavailable');
+    const selectServerForCurrentNetworkOnce = jest
+      .fn()
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce(undefined);
+    const h = createHarness({
+      selectServerForCurrentNetworkOnce,
+    });
+
+    const result = await h.uploader.upload({ from: '10086', body: '验证码 123456' });
+
+    expect(result).toEqual({ status: 'uploaded', attempts: 2 });
+    expect(selectServerForCurrentNetworkOnce).toHaveBeenCalledTimes(2);
+    expect(h.deps.getAPIClient).toHaveBeenCalledTimes(1);
+    expect(h.putClipboard).toHaveBeenCalledTimes(1);
+    expect(h.deps.sleep).toHaveBeenCalledWith(3_000);
+    expect(h.logs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: 'warn',
+          message: expect.stringContaining('stage=network-preflight'),
+          error,
+        }),
+      ])
+    );
+  });
+
+  it('自动选服持续失败时耗尽重试且不创建客户端', async () => {
+    const error = new Error('network unavailable');
     const h = createHarness({
       selectServerForCurrentNetworkOnce: jest.fn(async () => {
         throw error;
@@ -91,18 +119,15 @@ describe('SmsCodeUploader', () => {
     expect(result).toEqual({
       status: 'failed',
       stage: 'network-preflight',
-      error: 'Error: native network unavailable',
+      error: 'Error: network unavailable',
     });
+    expect(h.deps.selectServerForCurrentNetworkOnce).toHaveBeenCalledTimes(4);
+    expect(h.deps.getAPIClient).not.toHaveBeenCalled();
     expect(h.putClipboard).not.toHaveBeenCalled();
-    expect(h.logs).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          level: 'error',
-          message: expect.stringContaining('stage=network-preflight'),
-          error,
-        }),
-      ])
-    );
+    expect(h.deps.sleep).toHaveBeenCalledTimes(3);
+    expect(h.deps.sleep).toHaveBeenNthCalledWith(1, 3_000);
+    expect(h.deps.sleep).toHaveBeenNthCalledWith(2, 10_000);
+    expect(h.deps.sleep).toHaveBeenNthCalledWith(3, 30_000);
   });
 
   it('记录每次上传失败和重试等待', async () => {
@@ -117,9 +142,11 @@ describe('SmsCodeUploader', () => {
     const result = await h.uploader.upload({ from: '10086', body: '验证码 123456' });
 
     expect(result).toEqual({ status: 'uploaded', attempts: 2 });
+    expect(h.deps.selectServerForCurrentNetworkOnce).toHaveBeenCalledTimes(2);
+    expect(h.deps.getAPIClient).toHaveBeenCalledTimes(2);
     expect(h.deps.sleep).toHaveBeenCalledWith(3_000);
     const messages = h.logs.map((entry) => entry.message).join('\n');
-    expect(messages).toContain('upload attempt=1/4 failed');
+    expect(messages).toContain('attempt=1/4 failed');
     expect(messages).toContain('code=ETIMEDOUT');
     expect(messages).toContain('retry scheduled delayMs=3000');
     expect(messages).toContain('upload attempt=2/4 succeeded');
