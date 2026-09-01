@@ -18,6 +18,7 @@ web-build/
 *.key
 *.mobileprovision
 *.orig.*
+google-services.json
 
 # Metro
 .metro-health-check*

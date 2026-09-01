@@ -25,6 +25,10 @@ jest.mock('native-timer', () => ({
   clearTimer: jest.fn(),
 }));
 
+jest.mock('../services/sync/PushEventSource', () => ({
+  PushEventSource: jest.fn(),
+}));
+
 import { getAPIClient } from '../services/ClientFactory';
 import { configService } from '../services/ConfigService';
 import {
@@ -116,7 +120,9 @@ describe('RemoteClipboardMonitor event transport', () => {
       .mockResolvedValueOnce(initialProfile)
       .mockResolvedValueOnce(changedProfile);
     mockedGetAPIClient.mockResolvedValue({ getClipboard } as never);
-    const monitor = new RemoteClipboardMonitor(sourceFactory);
+    const pushSource = new FakeRemoteEventSource();
+    const pushSourceFactory: RemoteEventSourceFactory = jest.fn(() => pushSource);
+    const monitor = new RemoteClipboardMonitor(sourceFactory, pushSourceFactory);
     const callback = jest.fn();
     monitor.addCallback(callback);
 
@@ -144,6 +150,37 @@ describe('RemoteClipboardMonitor event transport', () => {
 
     await monitor.disconnect();
     expect(source.disconnect).toHaveBeenCalledTimes(1);
+    expect(pushSource.disconnect).toHaveBeenCalledTimes(1);
     expect(source.profileCallbackCount).toBe(0);
+    expect(pushSource.profileCallbackCount).toBe(0);
+  });
+
+  it('fetches authoritative HTTP state after an FCM hash-only hint', async () => {
+    const signalRSource = new FakeRemoteEventSource();
+    const pushSource = new FakeRemoteEventSource();
+    const getClipboard = jest
+      .fn()
+      .mockResolvedValueOnce(initialProfile)
+      .mockResolvedValueOnce(changedProfile);
+    mockedGetAPIClient.mockResolvedValue({ getClipboard } as never);
+    const monitor = new RemoteClipboardMonitor(
+      () => signalRSource,
+      () => pushSource
+    );
+    const callback = jest.fn();
+    monitor.addCallback(callback);
+
+    await monitor.connect();
+    callback.mockClear();
+    pushSource.emitProfileChanged({ hash: 'changed-hash' });
+    await flushPromises();
+
+    expect(getClipboard).toHaveBeenCalledTimes(2);
+    expect(callback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profileHash: 'changed-hash',
+        text: 'authoritative HTTP value',
+      })
+    );
   });
 });

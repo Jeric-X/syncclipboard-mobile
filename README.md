@@ -38,9 +38,14 @@ npm install
 
 ### 生成原生项目
 
+FCM 是可选能力。需要启用时，从 Firebase 控制台下载与
+`com.jericx.syncclipboardmobile` 匹配的 Android `google-services.json`，放到仓库根目录后再生成原生项目。该文件不会提交到 Git。
+
 ```bash
 npm run prebuild
 ```
+
+缺少该文件时项目仍可正常构建，Push 会保持不可用，客户端继续使用原有 SignalR 行为。FCM 消息只携带版本、事件类型和 Profile hash；收到提示后客户端仍通过 HTTP 获取权威剪贴板状态。
 
 ### 调试运行
 
@@ -114,6 +119,7 @@ npm run plugin:build
 | [react-native-community/jsc-android-buildscripts](https://github.com/react-native-community/jsc-android-buildscripts) | JavaScriptCore Android 引擎（备选）     |
 | [RikkaApps/Shizuku](https://github.com/RikkaApps/Shizuku)                                                             | Shizuku API：无需 Root 的系统 API 访问  |
 | [dotnet/aspnetcore (SignalR Java 客户端)](https://github.com/dotnet/aspnetcore)                                       | SignalR 实时推送（Java/Android 客户端） |
+| [firebase/firebase-android-sdk](https://github.com/firebase/firebase-android-sdk)                                     | 可选的 FCM 变化提示                     |
 | [google/gson](https://github.com/google/gson)                                                                         | JSON 序列化（SignalR 协议层）           |
 
 ## 打赏

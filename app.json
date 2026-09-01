@@ -42,6 +42,12 @@
       "./plugins/build/withSmsPermission.js",
       "./plugins/build/withStaticSmsReceiver.js",
       "./plugins/build/withForegroundService.js",
+      [
+        "./plugins/build/withOptionalFirebaseMessaging.js",
+        {
+          "googleServicesFile": "./google-services.json"
+        }
+      ],
       "./plugins/build/withShizukuProvider.js",
       "./plugins/build/withDarkSplashScreen.js",
       "./plugins/build/withAbiSplits.js",

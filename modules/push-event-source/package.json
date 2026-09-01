@@ -1,0 +1,19 @@
+{
+  "name": "push-event-source",
+  "version": "1.0.0",
+  "description": "Optional native FCM change hint source for SyncClipboard",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "scripts": {
+    "build": "expo-module build",
+    "clean": "expo-module clean",
+    "prepare": "expo-module build"
+  },
+  "devDependencies": {
+    "expo-module-scripts": "^55.0.2"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "expo-modules-core": "*"
+  }
+}
