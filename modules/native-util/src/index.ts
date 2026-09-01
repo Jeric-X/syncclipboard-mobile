@@ -72,6 +72,7 @@ export interface NativeNotificationOptions {
 export interface NativeUtilModuleType {
   moveTaskToBack(): boolean;
   getCurrentNetworkInfo(): NativeCurrentNetworkInfo;
+  getElapsedRealtimeMs(): number;
   isLocationServicesEnabled(): boolean;
   openLocationSettings(): boolean;
   showNotification(options: NativeNotificationOptions): boolean;
@@ -128,6 +129,12 @@ export function moveTaskToBack(): boolean {
 export function getCurrentNetworkInfo(): NativeCurrentNetworkInfo | null {
   if (Platform.OS !== 'android') return null;
   return NativeUtilModule.getCurrentNetworkInfo();
+}
+
+/** Returns milliseconds since Android boot, including time spent in deep sleep. */
+export function getElapsedRealtimeMs(): number | null {
+  if (Platform.OS !== 'android') return null;
+  return NativeUtilModule.getElapsedRealtimeMs();
 }
 
 /** Subscribe to Android default-network invalidation events. */

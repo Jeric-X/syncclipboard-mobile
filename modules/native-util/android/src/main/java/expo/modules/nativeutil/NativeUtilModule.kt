@@ -9,6 +9,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.webkit.MimeTypeMap
 import expo.modules.kotlin.Promise
@@ -114,6 +115,10 @@ class NativeUtilModule : Module() {
 
         Function("getCurrentNetworkInfo") {
             CurrentNetworkInfoReader.read(appContext.reactContext)
+        }
+
+        Function("getElapsedRealtimeMs") {
+            SystemClock.elapsedRealtime().toDouble()
         }
 
         Function("isLocationServicesEnabled") {

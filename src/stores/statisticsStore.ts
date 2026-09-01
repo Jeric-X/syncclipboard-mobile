@@ -5,6 +5,7 @@
 
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { calculateBackgroundDurationMs } from '../utils/backgroundDuration';
 
 const STORAGE_KEY = '@statistics';
 const MAX_RECORDS = 5;
@@ -12,8 +13,12 @@ const MAX_RECORDS = 5;
 export interface BackgroundTaskRecord {
   /** 启动时间（ISO 字符串） */
   startedAt: string;
-  /** 最后心跳时间（ISO 字符串） */
+  /** 统计截止时间（ISO 字符串）；保留该字段以兼容已有持久化数据 */
   lastHeartbeat: string;
+  /** 已结算的后台时长 */
+  durationMs?: number;
+  /** Android 开机后的单调时钟起点；存在时表示该记录仍待结算 */
+  backgroundStartElapsedRealtimeMs?: number;
 }
 
 export interface StatisticsData {
@@ -33,10 +38,10 @@ interface StatisticsState {
   load: () => Promise<void>;
 
   /** 记录后台任务启动（新增一条记录，超过上限自动删除最旧的） */
-  recordBackgroundTaskStart: () => Promise<void>;
+  recordBackgroundTaskStart: (elapsedRealtimeMs: number) => Promise<void>;
 
-  /** 更新心跳（更新最新一条记录的最后活跃时间） */
-  updateHeartbeat: () => Promise<void>;
+  /** 结算最新一条待完成的后台记录；没有待完成记录时返回 null */
+  completeBackgroundTask: (elapsedRealtimeMs: number) => Promise<number | null>;
 
   /** 获取所有统计信息的文本 */
   getStatisticsText: () => string;
@@ -99,12 +104,14 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
     }
   },
 
-  recordBackgroundTaskStart: async () => {
+  recordBackgroundTaskStart: async (elapsedRealtimeMs) => {
     if (!get().isLoaded) await get().load();
     const now = new Date().toISOString();
     const newRecord: BackgroundTaskRecord = {
       startedAt: now,
       lastHeartbeat: now,
+      durationMs: 0,
+      backgroundStartElapsedRealtimeMs: elapsedRealtimeMs,
     };
     const records = [newRecord, ...get().data.backgroundTaskRecords].slice(0, MAX_RECORDS);
     const newData: StatisticsData = { ...get().data, backgroundTaskRecords: records };
@@ -112,14 +119,36 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
     await save(newData);
   },
 
-  updateHeartbeat: async () => {
+  completeBackgroundTask: async (elapsedRealtimeMs) => {
     if (!get().isLoaded) await get().load();
     const records = [...get().data.backgroundTaskRecords];
-    if (records.length === 0) return;
-    records[0] = { ...records[0], lastHeartbeat: new Date().toISOString() };
+    const latestRecord = records[0];
+    if (latestRecord?.backgroundStartElapsedRealtimeMs === undefined) return null;
+
+    const currentWallClockMs = Date.now();
+    const parsedStartWallClockMs = new Date(latestRecord.startedAt).getTime();
+    const backgroundStartWallClockMs = Number.isFinite(parsedStartWallClockMs)
+      ? parsedStartWallClockMs
+      : currentWallClockMs;
+    const durationMs = calculateBackgroundDurationMs({
+      accumulatedDurationMs: latestRecord.durationMs ?? 0,
+      backgroundStartElapsedRealtimeMs: latestRecord.backgroundStartElapsedRealtimeMs,
+      currentElapsedRealtimeMs: elapsedRealtimeMs,
+      backgroundStartWallClockMs,
+      currentWallClockMs,
+    });
+    const completedRecord = { ...latestRecord };
+    delete completedRecord.backgroundStartElapsedRealtimeMs;
+    records[0] = {
+      ...completedRecord,
+      durationMs,
+      // Keep rollbacks compatible with the previous lastHeartbeat-based duration calculation.
+      lastHeartbeat: new Date(backgroundStartWallClockMs + durationMs).toISOString(),
+    };
     const newData: StatisticsData = { ...get().data, backgroundTaskRecords: records };
     set({ data: newData });
     await save(newData);
+    return durationMs;
   },
 
   getStatisticsText: () => {
@@ -133,7 +162,7 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
       backgroundTaskRecords.forEach((record, index) => {
         const start = new Date(record.startedAt).getTime();
         const last = new Date(record.lastHeartbeat).getTime();
-        const duration = formatDuration(last - start);
+        const duration = formatDuration(record.durationMs ?? last - start);
         lines.push(`  ${index + 1}. 启动: ${formatTime(record.startedAt)}`);
         lines.push(`     持续: ${duration}`);
       });
