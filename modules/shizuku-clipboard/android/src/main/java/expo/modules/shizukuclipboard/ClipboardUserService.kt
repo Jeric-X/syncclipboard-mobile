@@ -20,7 +20,7 @@ class ClipboardUserService : IClipboardUserService.Stub() {
         // UserService 以 UID 2000 (shell) 运行，需要使用 shell 的包名
         private const val PACKAGE_NAME = "com.android.shell"
         private const val PRIMARY_CLIP_CHANGED_DESCRIPTOR =
-            "android.content.IOnPrimaryClipChangedListener"
+            SyncClipboardListenerProbeProtocol.LISTENER_DESCRIPTOR
         private const val TRANSACTION_DISPATCH_PRIMARY_CLIP_CHANGED =
             IBinder.FIRST_CALL_TRANSACTION
 
@@ -161,6 +161,29 @@ class ClipboardUserService : IClipboardUserService.Stub() {
                             android.util.Log.w(TAG, "Failed to forward clipboard change", e)
                             removeFailedClient(token, callback)
                         }
+                    }
+                    return true
+                }
+                SyncClipboardListenerProbeProtocol.TRANSACTION_CODE -> {
+                    data.enforceInterface(PRIMARY_CLIP_CHANGED_DESCRIPTOR)
+                    val requestMagic = data.readInt()
+                    val requestVersion = data.readInt()
+                    val requestNonce = data.readLong()
+                    reply ?: return false
+                    reply.writeNoException()
+                    if (
+                        requestMagic == SyncClipboardListenerProbeProtocol.REQUEST_MAGIC &&
+                        requestVersion == SyncClipboardListenerProbeProtocol.VERSION
+                    ) {
+                        reply.writeInt(SyncClipboardListenerProbeProtocol.RESPONSE_MAGIC)
+                        reply.writeInt(SyncClipboardListenerProbeProtocol.VERSION)
+                        reply.writeLong(
+                            SyncClipboardListenerProbeProtocol.responseNonce(requestNonce)
+                        )
+                    } else {
+                        reply.writeInt(0)
+                        reply.writeInt(0)
+                        reply.writeLong(0L)
                     }
                     return true
                 }
