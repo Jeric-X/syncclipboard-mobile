@@ -5,6 +5,7 @@ import App from './App';
 import QuickActionApp from './src/QuickActionApp';
 import ServiceRestartApp from './src/ServiceRestartApp';
 import SmsUploadTask from './src/tasks/SmsUploadTask';
+import PushClipboardRefreshTask from './src/tasks/PushClipboardRefreshTask';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
 // It also ensures that whether you load the app in Expo Go or in a native build,
@@ -19,3 +20,6 @@ AppRegistry.registerComponent('serviceRestart', () => ServiceRestartApp);
 
 // Headless JS task for SMS verification code upload (runs without UI)
 AppRegistry.registerHeadlessTask('SmsUploadTask', () => SmsUploadTask);
+
+// FCM cold-start path: fetches authoritative HTTP state without opening the UI.
+AppRegistry.registerHeadlessTask('PushClipboardRefreshTask', () => PushClipboardRefreshTask);

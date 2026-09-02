@@ -41,10 +41,15 @@ export class RemoteClipboardMonitor {
   private _pushEventSource: RemoteEventSource | null = null;
   private _pushEventSourceCleanups: Array<() => void> = [];
   private readonly _pushRegistrationStateListeners = new Set<(active: boolean) => void>();
+  private _backgroundMode = false;
+  private _backgroundTransportQueue: Promise<void> = Promise.resolve();
   /** 上次触发回调时的内容哈希，用于过滤重复通知 */
   private _lastContentHash: string | null = null;
   /** 对 fetchLatest 进行去重：并发调用共享同一次请求；配置变更时通过 abort() 取消 */
   private readonly _fetchOp = new DedupedOperation<true, ClipboardContent>(() => true);
+  private _authoritativeFetchInFlight = false;
+  private _fetchDirty = false;
+  private _pendingHintHash: string | null = null;
   /**
    * 注入的后台运行检测函数集合。
    * 只要任意一个函数返回 true，后台时就继续监听而不断开。
@@ -96,16 +101,24 @@ export class RemoteClipboardMonitor {
    * Push 注册可用时只断开 SignalR；否则保留原有 SignalR 后台行为。
    */
   async handleBackground(): Promise<void> {
+    this._backgroundMode = true;
+    await this._reconcileBackgroundTransports();
+  }
+
+  private async _reconcileBackgroundTransports(): Promise<void> {
+    if (!this._backgroundMode) return;
+    const config = await configService.getConfig();
     const policy = selectBackgroundRemoteTransportPolicy({
-      backgroundRemoteSyncEnabled: this._isBgRunningEnabled(),
+      backgroundRemoteSyncEnabled: this._isBgRunningEnabled() || !!config?.enableHistorySync,
       pushRegistrationActive: this.isPushConnected(),
+      historyRealtimeRequired: !!config?.enableHistorySync,
     });
 
     if (policy === 'disconnect-all') {
       console.debug(
         '[RemoteClipboardMonitor] Background remote sync disabled; disconnecting transports'
       );
-      await this.disconnect();
+      await Promise.all([this._disconnectSignalR(), this._disconnectPush()]);
     } else if (policy === 'push-only') {
       console.debug(
         '[RemoteClipboardMonitor] Push registration active; disconnecting SignalR in background'
@@ -113,8 +126,12 @@ export class RemoteClipboardMonitor {
       await this._disconnectSignalR();
     } else {
       console.debug(
-        '[RemoteClipboardMonitor] Push unavailable; preserving SignalR background behavior'
+        config?.enableHistorySync
+          ? '[RemoteClipboardMonitor] History realtime requires SignalR; preserving background connection'
+          : '[RemoteClipboardMonitor] Push unavailable; preserving SignalR background behavior'
       );
+      const server = await configService.getActiveServer();
+      if (server?.type === 'syncclipboard') await this._connectSignalR(server);
     }
   }
 
@@ -139,7 +156,8 @@ export class RemoteClipboardMonitor {
     if (!server) return;
     const config = await configService.getConfig();
     if (server.type === 'syncclipboard') {
-      await Promise.all([this._connectSignalR(server), this._connectPush(server)]);
+      await this._connectSignalR(server);
+      void this._connectPush(server);
     } else {
       this._startPolling(config?.remotePollingInterval);
     }
@@ -161,11 +179,15 @@ export class RemoteClipboardMonitor {
    * 重新连接并刷新。
    */
   async handleForeground(): Promise<void> {
+    this._backgroundMode = false;
     await this.resumeAndRefresh();
   }
 
   async disconnect(): Promise<void> {
+    this._backgroundMode = false;
     this._fetchOp.abort();
+    this._fetchDirty = false;
+    this._pendingHintHash = null;
     this._lastContentHash = null;
     this._stopPolling();
     await Promise.all([this._disconnectSignalR(), this._disconnectPush()]);
@@ -215,11 +237,29 @@ export class RemoteClipboardMonitor {
     console.debug(
       '[RemoteClipboardMonitor] Remote profile change hint received; refreshing authoritative state'
     );
+    if (this._authoritativeFetchInFlight) {
+      this._fetchDirty = true;
+      this._pendingHintHash = hint.hash;
+      console.debug(
+        '[RemoteClipboardMonitor] Authoritative fetch in flight; queued one follow-up refresh'
+      );
+      return;
+    }
     void this.refresh();
   };
 
   private readonly _pushEventSourceStateCallback = (): void => {
     this._notifyPushRegistrationState();
+    if (!this._backgroundMode) return;
+    this._backgroundTransportQueue = this._backgroundTransportQueue
+      .catch(() => {})
+      .then(() => this._reconcileBackgroundTransports())
+      .catch((error) => {
+        console.error(
+          '[RemoteClipboardMonitor] Background transport reconciliation failed:',
+          error
+        );
+      });
   };
 
   private _startPolling(interval?: number): void {
@@ -261,19 +301,38 @@ export class RemoteClipboardMonitor {
    * @throws 无服务器连接或拉取失败时抛出异常
    */
   async fetchLatest(signal?: AbortSignal): Promise<ClipboardContent> {
-    return this._fetchOp.execute(true, undefined, signal ?? null, async (sig) => {
-      const apiClient = await getAPIClient();
-      const profile = await apiClient.getClipboard(sig);
-      if (!profile) throw new Error('No clipboard data returned');
-      const content: ClipboardContent = profileDtoToContent(profile);
-      const hash = content.profileHash || content.text;
-      if (hash !== this._lastContentHash) {
-        this._lastContentHash = hash;
-        this.notifyCallbacks(content);
+    let latest: ClipboardContent;
+    do {
+      latest = await this._fetchOp.execute(true, undefined, signal ?? null, async (sig) => {
+        this._authoritativeFetchInFlight = true;
+        try {
+          const apiClient = await getAPIClient();
+          const profile = await apiClient.getClipboard(sig);
+          if (!profile) throw new Error('No clipboard data returned');
+          const content: ClipboardContent = profileDtoToContent(profile);
+          const hash = content.profileHash || content.text;
+          if (hash !== this._lastContentHash) {
+            this._lastContentHash = hash;
+            this.notifyCallbacks(content);
+          }
+          clipboardSyncState.clearSyncError();
+          return content;
+        } finally {
+          this._authoritativeFetchInFlight = false;
+        }
+      });
+
+      if (!this._fetchDirty) return latest;
+      const pendingHintHash = this._pendingHintHash;
+      this._fetchDirty = false;
+      this._pendingHintHash = null;
+      if (pendingHintHash && pendingHintHash === this._lastContentHash) {
+        return latest;
       }
-      clipboardSyncState.clearSyncError();
-      return content;
-    });
+      console.debug('[RemoteClipboardMonitor] Running queued follow-up authoritative refresh');
+    } while (!signal?.aborted);
+
+    return latest;
   }
 
   private _stopPolling(): void {
@@ -346,7 +405,10 @@ export class RemoteClipboardMonitor {
         );
       }
       await eventSource.connect();
-      if (this._pushEventSource !== eventSource) return;
+      if (this._pushEventSource !== eventSource) {
+        await eventSource.disconnect().catch(() => {});
+        return;
+      }
       this._notifyPushRegistrationState();
       console.debug(
         eventSource.isConnected()

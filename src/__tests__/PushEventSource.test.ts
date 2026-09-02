@@ -110,16 +110,20 @@ describe('PushEventSource', () => {
     await source.connect();
 
     expect(source.isConnected()).toBe(true);
-    expect(client.registerPushDevice).toHaveBeenCalledWith(deviceId, {
-      platform: 'android',
-      provider: 'fcm',
-      token: 'push-token',
-      appVersion: '1.2.3',
-    });
+    expect(client.registerPushDevice).toHaveBeenCalledWith(
+      deviceId,
+      {
+        platform: 'android',
+        provider: 'fcm',
+        token: 'push-token',
+        appVersion: '1.2.3',
+      },
+      expect.any(AbortSignal)
+    );
     expect(client.registerPushDevice.mock.calls[0][1]).not.toHaveProperty('text');
 
     await source.disconnect();
-    expect(client.unregisterPushDevice).toHaveBeenCalledWith(deviceId);
+    expect(client.unregisterPushDevice).toHaveBeenCalledWith(deviceId, expect.any(AbortSignal));
   });
 
   it('keeps push unavailable without native Firebase configuration', async () => {
@@ -213,7 +217,8 @@ describe('PushEventSource', () => {
 
     expect(client.registerPushDevice).toHaveBeenLastCalledWith(
       deviceId,
-      expect.objectContaining({ token: 'replacement-token' })
+      expect.objectContaining({ token: 'replacement-token' }),
+      expect.any(AbortSignal)
     );
     expect(source.isConnected()).toBe(true);
   });
@@ -268,5 +273,28 @@ describe('PushEventSource', () => {
       { name: 'NetworkError' }
     );
     consoleWarn.mockRestore();
+  });
+
+  it('clears local push state without waiting for an unreachable old server', async () => {
+    const nativeGateway = new FakeNativePushEventGateway();
+    const client = createClient();
+    let finishUnregister: (() => void) | undefined;
+    client.unregisterPushDevice.mockImplementation(
+      () => new Promise<void>((resolve) => (finishUnregister = resolve))
+    );
+    const source = new PushEventSource(
+      server,
+      nativeGateway,
+      () => client,
+      async () => deviceId
+    );
+    await source.connect();
+
+    await expect(source.disconnect()).resolves.toBeUndefined();
+
+    expect(source.isConnected()).toBe(false);
+    expect(client.unregisterPushDevice).toHaveBeenCalledWith(deviceId, expect.any(AbortSignal));
+    finishUnregister?.();
+    await flushPromises();
   });
 });

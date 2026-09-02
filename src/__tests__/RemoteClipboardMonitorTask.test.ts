@@ -69,4 +69,20 @@ describe('RemoteClipboardMonitorTask', () => {
     expect(mockedMonitor.disconnect).toHaveBeenCalledTimes(1);
     expect(task.isRunning()).toBe(true);
   });
+
+  it('后台切换服务器后重新应用 push 与 SignalR 的后台策略', async () => {
+    const replacement = { ...server, id: 'office', url: 'https://office.example' };
+    mockedConfig.getActiveServer.mockResolvedValueOnce(server).mockResolvedValueOnce(replacement);
+    const task = new RemoteClipboardMonitorTask();
+    await task.start();
+    await task.onBackground();
+    jest.clearAllMocks();
+    mockedConfig.getConfig.mockResolvedValue({ remotePollingInterval: 3000 } as never);
+
+    await task.onConfigChanged();
+
+    expect(mockedMonitor.disconnect).toHaveBeenCalledTimes(1);
+    expect(mockedMonitor.resumeAndRefresh).toHaveBeenCalledTimes(1);
+    expect(mockedMonitor.handleBackground).toHaveBeenCalledTimes(1);
+  });
 });

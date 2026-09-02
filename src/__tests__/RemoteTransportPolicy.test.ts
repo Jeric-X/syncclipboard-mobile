@@ -6,6 +6,7 @@ describe('background remote transport policy', () => {
       selectBackgroundRemoteTransportPolicy({
         backgroundRemoteSyncEnabled: false,
         pushRegistrationActive: true,
+        historyRealtimeRequired: false,
       })
     ).toBe('disconnect-all');
   });
@@ -15,6 +16,7 @@ describe('background remote transport policy', () => {
       selectBackgroundRemoteTransportPolicy({
         backgroundRemoteSyncEnabled: true,
         pushRegistrationActive: true,
+        historyRealtimeRequired: false,
       })
     ).toBe('push-only');
   });
@@ -24,6 +26,17 @@ describe('background remote transport policy', () => {
       selectBackgroundRemoteTransportPolicy({
         backgroundRemoteSyncEnabled: true,
         pushRegistrationActive: false,
+        historyRealtimeRequired: false,
+      })
+    ).toBe('preserve-existing');
+  });
+
+  it('preserves SignalR because V1 push does not carry history events', () => {
+    expect(
+      selectBackgroundRemoteTransportPolicy({
+        backgroundRemoteSyncEnabled: true,
+        pushRegistrationActive: true,
+        historyRealtimeRequired: true,
       })
     ).toBe('preserve-existing');
   });

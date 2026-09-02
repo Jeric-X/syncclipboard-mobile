@@ -100,6 +100,7 @@ class ForegroundServiceTask extends LongRunningTask {
       backgroundTransferEnabled: !!(
         config?.enableBackgroundDownload || config?.enableBackgroundUpload
       ),
+      backgroundUploadEnabled: !!config?.enableBackgroundUpload,
       foregroundNotificationEnabled: !!config?.enableForegroundNotification,
       pushRegistrationActive: remoteClipboardMonitor.isPushConnected(),
       activeTransfer: this._hasActiveTransfer(),

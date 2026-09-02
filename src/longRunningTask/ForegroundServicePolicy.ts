@@ -1,6 +1,7 @@
 export interface ForegroundServicePolicyInput {
   backgroundTasksEnabled: boolean;
   backgroundTransferEnabled: boolean;
+  backgroundUploadEnabled: boolean;
   foregroundNotificationEnabled: boolean;
   temporarilyDisabled: boolean;
   pushRegistrationActive: boolean;
@@ -10,6 +11,7 @@ export interface ForegroundServicePolicyInput {
 export type ForegroundServicePolicyReason =
   | 'disabled-by-settings'
   | 'push-idle'
+  | 'local-upload-monitor'
   | 'active-transfer'
   | 'signalr-fallback';
 
@@ -35,9 +37,13 @@ export function selectForegroundServicePolicy(
   }
 
   if (input.pushRegistrationActive) {
-    return input.activeTransfer
-      ? { shouldRun: true, reason: 'active-transfer' }
-      : { shouldRun: false, reason: 'push-idle' };
+    if (input.activeTransfer) {
+      return { shouldRun: true, reason: 'active-transfer' };
+    }
+    if (input.backgroundUploadEnabled) {
+      return { shouldRun: true, reason: 'local-upload-monitor' };
+    }
+    return { shouldRun: false, reason: 'push-idle' };
   }
   return { shouldRun: true, reason: 'signalr-fallback' };
 }

@@ -16,11 +16,15 @@ class PushEventSourceModule : Module() {
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    @Volatile
+    private var profileEventsObserved = false
     private val eventListener = object : PushEventDispatcher.Listener {
-        override fun onProfileChanged(hint: PushProfileChangeHint) {
+        override fun onProfileChanged(hint: PushProfileChangeHint): Boolean {
+            if (!profileEventsObserved) return false
             mainHandler.post {
                 sendEvent("onProfileChanged", mapOf("hash" to hint.hash))
             }
+            return true
         }
 
         override fun onTokenChanged() {
@@ -33,6 +37,14 @@ class PushEventSourceModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("PushEventSourceModule")
         Events("onProfileChanged", "onTokenChanged")
+
+        OnStartObserving("onProfileChanged") {
+            profileEventsObserved = true
+        }
+
+        OnStopObserving("onProfileChanged") {
+            profileEventsObserved = false
+        }
 
         OnCreate {
             PushEventDispatcher.addListener(eventListener)
@@ -74,6 +86,7 @@ class PushEventSourceModule : Module() {
         }
 
         OnDestroy {
+            profileEventsObserved = false
             PushEventDispatcher.removeListener(eventListener)
         }
     }

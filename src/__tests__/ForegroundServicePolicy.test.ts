@@ -4,6 +4,7 @@ describe('foreground service policy', () => {
   const enabledConfig = {
     backgroundTasksEnabled: true,
     backgroundTransferEnabled: true,
+    backgroundUploadEnabled: false,
     foregroundNotificationEnabled: true,
     temporarilyDisabled: false,
     pushRegistrationActive: false,
@@ -34,6 +35,16 @@ describe('foreground service policy', () => {
         activeTransfer: true,
       })
     ).toEqual({ shouldRun: true, reason: 'active-transfer' });
+  });
+
+  it('keeps the foreground service alive for the background local-upload monitor', () => {
+    expect(
+      selectForegroundServicePolicy({
+        ...enabledConfig,
+        pushRegistrationActive: true,
+        backgroundUploadEnabled: true,
+      })
+    ).toEqual({ shouldRun: true, reason: 'local-upload-monitor' });
   });
 
   it('honors user and runtime disable switches even during a transfer', () => {

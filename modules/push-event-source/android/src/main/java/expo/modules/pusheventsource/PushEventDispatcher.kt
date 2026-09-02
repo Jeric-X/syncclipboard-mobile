@@ -4,7 +4,8 @@ import java.util.concurrent.CopyOnWriteArraySet
 
 object PushEventDispatcher {
     interface Listener {
-        fun onProfileChanged(hint: PushProfileChangeHint)
+        /** Returns true only when the hint has an active JS consumer. */
+        fun onProfileChanged(hint: PushProfileChangeHint): Boolean
         fun onTokenChanged()
     }
 
@@ -18,8 +19,13 @@ object PushEventDispatcher {
         listeners.remove(listener)
     }
 
-    fun dispatchProfileChanged(hint: PushProfileChangeHint) {
-        listeners.forEach { it.onProfileChanged(hint) }
+    fun dispatchProfileChanged(hint: PushProfileChangeHint): Boolean {
+        if (listeners.isEmpty()) return false
+        var delivered = false
+        listeners.forEach { listener ->
+            delivered = listener.onProfileChanged(hint) || delivered
+        }
+        return delivered
     }
 
     fun dispatchTokenChanged() {

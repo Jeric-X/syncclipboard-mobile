@@ -77,6 +77,11 @@ class FakeRemoteEventSource implements RemoteEventSource {
     this.profileCallbacks.forEach((callback) => callback(hint));
   }
 
+  emitConnectionState(state: RemoteEventSourceConnectionState): void {
+    this.connected = state === 'CONNECTED';
+    this.stateCallbacks.forEach((callback) => callback(state));
+  }
+
   get profileCallbackCount(): number {
     return this.profileCallbacks.size;
   }
@@ -111,7 +116,10 @@ describe('RemoteClipboardMonitor event transport', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedConfig.getActiveServer.mockResolvedValue(server);
-    mockedConfig.getConfig.mockResolvedValue({ remotePollingInterval: 3000 } as never);
+    mockedConfig.getConfig.mockResolvedValue({
+      remotePollingInterval: 3000,
+      enableHistorySync: false,
+    } as never);
   });
 
   it('fetches authoritative HTTP state after a SignalR change hint', async () => {
@@ -233,6 +241,118 @@ describe('RemoteClipboardMonitor event transport', () => {
     expect(unavailablePushSource.disconnect).not.toHaveBeenCalled();
     expect(monitor.isSignalRConnected()).toBe(true);
     expect(monitor.isPushConnected()).toBe(false);
+  });
+
+  it('preserves SignalR in background when history realtime notifications are enabled', async () => {
+    const signalRSource = new FakeRemoteEventSource();
+    const pushSource = new FakeRemoteEventSource();
+    mockedConfig.getConfig.mockResolvedValue({
+      remotePollingInterval: 3000,
+      enableHistorySync: true,
+    } as never);
+    mockedGetAPIClient.mockResolvedValue({
+      getClipboard: jest.fn().mockResolvedValue(initialProfile),
+    } as never);
+    const monitor = new RemoteClipboardMonitor(
+      () => signalRSource,
+      () => pushSource
+    );
+    monitor.addBackgroundRunningChecker(() => true);
+
+    await monitor.resumeAndRefresh();
+    await monitor.handleBackground();
+
+    expect(signalRSource.disconnect).not.toHaveBeenCalled();
+    expect(monitor.isSignalRConnected()).toBe(true);
+  });
+
+  it('restores SignalR immediately when push registration drops in background', async () => {
+    const signalRSource = new FakeRemoteEventSource();
+    const pushSource = new FakeRemoteEventSource();
+    mockedGetAPIClient.mockResolvedValue({
+      getClipboard: jest.fn().mockResolvedValue(initialProfile),
+    } as never);
+    const monitor = new RemoteClipboardMonitor(
+      () => signalRSource,
+      () => pushSource
+    );
+    monitor.addBackgroundRunningChecker(() => true);
+
+    await monitor.resumeAndRefresh();
+    await monitor.handleBackground();
+    expect(monitor.isSignalRConnected()).toBe(false);
+
+    pushSource.emitConnectionState('DISCONNECTED');
+    await flushPromises();
+
+    expect(signalRSource.connect).toHaveBeenCalledTimes(2);
+    expect(monitor.isSignalRConnected()).toBe(true);
+  });
+
+  it('runs one follow-up fetch when a newer hint arrives during an authoritative fetch', async () => {
+    const signalRSource = new FakeRemoteEventSource();
+    const pushSource = new FakeRemoteEventSource();
+    let resolveFirstHint: ((profile: ProfileDto) => void) | undefined;
+    const getClipboard = jest
+      .fn()
+      .mockResolvedValueOnce(initialProfile)
+      .mockImplementationOnce(
+        () => new Promise<ProfileDto>((resolve) => (resolveFirstHint = resolve))
+      )
+      .mockResolvedValueOnce(changedProfile);
+    mockedGetAPIClient.mockResolvedValue({ getClipboard } as never);
+    const monitor = new RemoteClipboardMonitor(
+      () => signalRSource,
+      () => pushSource
+    );
+    const callback = jest.fn();
+    monitor.addCallback(callback);
+    await monitor.resumeAndRefresh();
+    callback.mockClear();
+
+    signalRSource.emitProfileChanged({ hash: 'intermediate-hash' });
+    await flushPromises();
+    pushSource.emitProfileChanged({ hash: 'changed-hash' });
+    resolveFirstHint?.({
+      type: 'Text',
+      hash: 'intermediate-hash',
+      text: 'intermediate',
+      hasData: false,
+    });
+    await flushPromises();
+
+    expect(getClipboard).toHaveBeenCalledTimes(3);
+    expect(callback).toHaveBeenLastCalledWith(
+      expect.objectContaining({ profileHash: 'changed-hash' })
+    );
+  });
+
+  it('does not block authoritative refresh on optional push setup', async () => {
+    const signalRSource = new FakeRemoteEventSource();
+    const pushSource = new FakeRemoteEventSource();
+    let finishPushSetup: (() => void) | undefined;
+    pushSource.connect.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishPushSetup = () => {
+            pushSource.emitConnectionState('CONNECTED');
+            resolve();
+          };
+        })
+    );
+    const getClipboard = jest.fn().mockResolvedValue(initialProfile);
+    mockedGetAPIClient.mockResolvedValue({ getClipboard } as never);
+    const monitor = new RemoteClipboardMonitor(
+      () => signalRSource,
+      () => pushSource
+    );
+
+    await expect(monitor.resumeAndRefresh()).resolves.toBeUndefined();
+
+    expect(getClipboard).toHaveBeenCalledTimes(1);
+    expect(pushSource.connect).toHaveBeenCalledTimes(1);
+    finishPushSetup?.();
+    await flushPromises();
   });
 
   it('publishes push registration state for foreground service policy', async () => {

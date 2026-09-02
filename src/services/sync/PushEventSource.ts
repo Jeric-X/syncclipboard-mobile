@@ -44,6 +44,15 @@ export interface NativePushEventGateway {
 
 export type PushRegistrationClientFactory = (server: ServerConfig) => PushRegistrationClient;
 
+interface PushRegistrationSession {
+  client: PushRegistrationClient;
+  controller: AbortController;
+  deviceId: string | null;
+  queue: Promise<void>;
+}
+
+const UNREGISTER_TIMEOUT_MS = 5_000;
+
 function errorDiagnostic(error: unknown): { name: string; statusCode?: number } {
   if (!error || typeof error !== 'object') return { name: typeof error };
   const value = error as { name?: unknown; statusCode?: unknown };
@@ -74,11 +83,8 @@ export class PushEventSource implements RemoteEventSource {
   private readonly callbacks = new Set<(hint: RemoteProfileChangeHint) => void>();
   private readonly stateCallbacks = new Set<(state: RemoteEventSourceConnectionState) => void>();
   private subscriptions: EventSubscription[] = [];
-  private registrationClient: PushRegistrationClient | null = null;
-  private registrationDeviceId: string | null = null;
-  private registrationQueue: Promise<void> = Promise.resolve();
+  private registrationSession: PushRegistrationSession | null = null;
   private connected = false;
-  private lifecycle = 0;
 
   constructor(
     private readonly server: ServerConfig,
@@ -89,8 +95,8 @@ export class PushEventSource implements RemoteEventSource {
 
   async connect(): Promise<void> {
     if (this.connected) return;
-    if (this.subscriptions.length > 0) {
-      await this.enqueueRegistration(this.lifecycle);
+    if (this.registrationSession) {
+      await this.enqueueRegistration(this.registrationSession);
       return;
     }
 
@@ -108,40 +114,52 @@ export class PushEventSource implements RemoteEventSource {
       return;
     }
 
-    const lifecycle = ++this.lifecycle;
-    this.registrationClient = this.clientFactory(this.server);
+    const session: PushRegistrationSession = {
+      client: this.clientFactory(this.server),
+      controller: new AbortController(),
+      deviceId: null,
+      queue: Promise.resolve(),
+    };
+    this.registrationSession = session;
     this.subscriptions = [
       this.nativeGateway.addProfileChangedListener((hint) => this.emitProfileChanged(hint)),
       this.nativeGateway.addTokenChangedListener(() => {
         this.setConnected(false);
-        void this.enqueueRegistration(lifecycle);
+        void this.enqueueRegistration(session);
       }),
     ];
 
     const pendingHint = this.nativeGateway.consumePendingProfileChangeHint();
     if (pendingHint) this.emitProfileChanged(pendingHint);
 
-    await this.enqueueRegistration(lifecycle);
+    await this.enqueueRegistration(session);
   }
 
   async disconnect(): Promise<void> {
-    ++this.lifecycle;
-    const client = this.registrationClient;
+    const session = this.registrationSession;
+    this.registrationSession = null;
     this.subscriptions.forEach((subscription) => subscription.remove());
     this.subscriptions = [];
     this.setConnected(false);
+    session?.controller.abort();
 
-    await this.registrationQueue.catch(() => {});
-    const deviceId = this.registrationDeviceId;
-    this.registrationClient = null;
-    this.registrationDeviceId = null;
-    if (!client || !deviceId) return;
+    if (!session?.deviceId) return;
+    void this.cleanupRegistration(session.client, session.deviceId);
+  }
 
+  private async cleanupRegistration(
+    client: PushRegistrationClient,
+    deviceId: string
+  ): Promise<void> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), UNREGISTER_TIMEOUT_MS);
     try {
-      await client.unregisterPushDevice(deviceId);
+      await client.unregisterPushDevice(deviceId, controller.signal);
       console.debug('[PushEventSource] Removed push registration for inactive server');
     } catch (error) {
       console.warn('[PushEventSource] Failed to remove push registration:', errorDiagnostic(error));
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -161,46 +179,50 @@ export class PushEventSource implements RemoteEventSource {
     return () => this.stateCallbacks.delete(callback);
   }
 
-  private enqueueRegistration(lifecycle: number): Promise<void> {
-    const registration = this.registrationQueue
+  private enqueueRegistration(session: PushRegistrationSession): Promise<void> {
+    const registration = session.queue
       .catch(() => {})
-      .then(() => this.registerLatestToken(lifecycle));
-    this.registrationQueue = registration;
+      .then(() => this.registerLatestToken(session));
+    session.queue = registration;
     return registration;
   }
 
-  private async registerLatestToken(lifecycle: number): Promise<void> {
+  private async registerLatestToken(session: PushRegistrationSession): Promise<void> {
     try {
-      if (lifecycle !== this.lifecycle || !this.registrationClient) return;
+      if (this.registrationSession !== session) return;
       const token = await this.nativeGateway.getToken();
-      if (lifecycle !== this.lifecycle || !this.registrationClient) return;
+      if (this.registrationSession !== session) return;
       if (!token) {
         console.debug('[PushEventSource] FCM token unavailable; push remains disabled');
         return;
       }
 
-      const capabilities = await this.registrationClient.getRealtimeCapabilities();
-      if (lifecycle !== this.lifecycle || !this.registrationClient) return;
+      const capabilities = await session.client.getRealtimeCapabilities(session.controller.signal);
+      if (this.registrationSession !== session) return;
       if (!capabilities?.push.fcm) {
         console.debug('[PushEventSource] Server does not advertise FCM push support');
         return;
       }
 
       const deviceId = await this.getDeviceId();
-      if (lifecycle !== this.lifecycle || !this.registrationClient) return;
-      this.registrationDeviceId = deviceId;
-      await this.registrationClient.registerPushDevice(deviceId, {
-        platform: 'android',
-        provider: 'fcm',
-        token,
-        appVersion: APP_VERSION,
-      });
-      if (lifecycle !== this.lifecycle) return;
+      if (this.registrationSession !== session) return;
+      session.deviceId = deviceId;
+      await session.client.registerPushDevice(
+        deviceId,
+        {
+          platform: 'android',
+          provider: 'fcm',
+          token,
+          appVersion: APP_VERSION,
+        },
+        session.controller.signal
+      );
+      if (this.registrationSession !== session) return;
 
       this.setConnected(true);
       console.debug('[PushEventSource] FCM push registration active');
     } catch (error) {
-      if (lifecycle !== this.lifecycle) return;
+      if (this.registrationSession !== session) return;
       this.setConnected(false);
       console.warn(
         '[PushEventSource] Push registration failed; SignalR fallback remains active:',

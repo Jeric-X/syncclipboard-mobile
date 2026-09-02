@@ -23,7 +23,12 @@ class SyncClipboardFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         PushEventStore.savePendingProfileChange(applicationContext, hint)
-        PushEventDispatcher.dispatchProfileChanged(hint)
-        NativeLogger.d(TAG, "FCM clipboard change hint received")
+        val deliveredToRunningBridge = PushEventDispatcher.dispatchProfileChanged(hint)
+        if (!deliveredToRunningBridge) {
+            PushClipboardHeadlessTaskService.start(applicationContext, hint)
+            NativeLogger.d(TAG, "FCM hint started authoritative headless refresh")
+        } else {
+            NativeLogger.d(TAG, "FCM hint delivered to active JS bridge")
+        }
     }
 }
