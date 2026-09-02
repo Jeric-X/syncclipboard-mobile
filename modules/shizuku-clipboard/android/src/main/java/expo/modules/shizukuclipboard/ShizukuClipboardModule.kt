@@ -71,7 +71,7 @@ class ShizukuClipboardModule : Module() {
             .daemon(true)
             .processNameSuffix("clipboard")
             .debuggable(true)
-            .version(8)
+            .version(9)
     }
 
     /** Creates a callback object tied to exactly one bind attempt. */
