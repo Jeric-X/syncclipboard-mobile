@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["PushEventSourceModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.pusheventsource.PushEventSourceModule"]
+  }
+}

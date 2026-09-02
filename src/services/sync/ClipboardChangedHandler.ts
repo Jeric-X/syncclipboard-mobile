@@ -64,8 +64,13 @@ class ClipboardChangedHandler {
     this.lastLocalProfileHash = hash;
   }
 
-  async processRemoteClipboardContent(content: ClipboardContent): Promise<void> {
-    const isStartupBaseline = shouldUseStartupBaseline(this.lastRemoteProfileHash);
+  async processRemoteClipboardContent(
+    content: ClipboardContent,
+    options: { allowStartupBaseline?: boolean } = {}
+  ): Promise<void> {
+    const isStartupBaseline =
+      options.allowStartupBaseline !== false &&
+      shouldUseStartupBaseline(this.lastRemoteProfileHash);
 
     if (!content.hasData && content.type === 'Text' && !content.profileHash && content.text) {
       content.profileHash = await calculateTextHash(content.text);

@@ -14,6 +14,7 @@ import { useTheme } from './src/hooks/useTheme';
 import { setDynamicShortcuts } from 'shortcut';
 import { moveTaskToBack, setExcludeFromRecents } from 'native-util';
 import { networkAutoSwitchService } from './src/services/NetworkAutoSwitchService';
+import { deviceIdentityService } from './src/services/DeviceIdentityService';
 
 const QUICK_UPLOAD_URL = 'syncclipboard://quick-upload';
 const QUICK_DOWNLOAD_URL = 'syncclipboard://quick-download';
@@ -65,6 +66,11 @@ export default function App() {
 
   useEffect(() => {
     initLogger();
+    if (Platform.OS === 'android') {
+      void deviceIdentityService.getDeviceId().catch((error) => {
+        console.warn('[App] Failed to initialize persistent device identity:', error);
+      });
+    }
     setDynamicShortcuts();
   }, []);
 

@@ -10,7 +10,13 @@ import {
   ProgressInfo,
 } from 'native-util';
 import { APIClient, APIClientConfig, PutContentOptions, ISyncClipboardAPI } from './APIClient';
-import { ProfileDto, ServerInfo, ClipboardContentType } from '@/types/api';
+import {
+  ProfileDto,
+  ServerInfo,
+  ClipboardContentType,
+  PushDeviceRegistrationRequest,
+  RealtimeCapabilities,
+} from '@/types/api';
 import type { ClipboardContent } from '@/types/clipboard';
 import { ValidationError, ServerError } from '@/errors';
 import { isTextInvalid } from '@/utils/index';
@@ -22,6 +28,9 @@ import {
 } from '@/types/history';
 import { SyncConflictError, RecordNotFoundError } from '@/errors';
 import type { IHistoryAPI } from '@/api/history';
+import type { AxiosRequestConfig } from 'axios';
+import { deviceIdentityService, SYNC_DEVICE_ID_HEADER } from '@/services/DeviceIdentityService';
+import { Platform } from 'react-native';
 
 /**
  * SyncClipboard API 客户端
@@ -30,6 +39,7 @@ import type { IHistoryAPI } from '@/api/history';
 export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI, IHistoryAPI {
   private static readonly PROFILE_ENDPOINT = '/SyncClipboard.json';
   private static readonly HISTORY_API_PREFIX = '/api/history';
+  private static readonly CAPABILITIES_ENDPOINT = '/api/capabilities';
 
   constructor(config: APIClientConfig) {
     super(config);
@@ -66,11 +76,15 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
         JSON.stringify(profile, null, 2)
       );
 
-      await this.put(
-        SyncClipboardClient.PROFILE_ENDPOINT,
-        profile,
-        signal ? { signal } : undefined
-      );
+      const deviceId = await this.getUploadDeviceId();
+      let requestConfig: AxiosRequestConfig | undefined;
+      if (signal || deviceId) {
+        requestConfig = {};
+        if (signal) requestConfig.signal = signal;
+        if (deviceId) requestConfig.headers = { [SYNC_DEVICE_ID_HEADER]: deviceId };
+      }
+
+      await this.put(SyncClipboardClient.PROFILE_ENDPOINT, profile, requestConfig);
 
       console.log('[SyncClipboardClient] putClipboard - Upload successful');
     } catch (error) {
@@ -90,6 +104,55 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
       }
       throw error;
     }
+  }
+
+  private async getUploadDeviceId(): Promise<string | null> {
+    if (Platform.OS !== 'android') return null;
+    try {
+      return await deviceIdentityService.getDeviceId();
+    } catch (error) {
+      console.warn(
+        '[SyncClipboardClient] Device identity unavailable; uploading without origin header:',
+        error
+      );
+      return null;
+    }
+  }
+
+  /** Returns null for legacy servers that do not expose capability discovery. */
+  async getRealtimeCapabilities(signal?: AbortSignal): Promise<RealtimeCapabilities | null> {
+    const response = await this.client.get<RealtimeCapabilities>(
+      SyncClipboardClient.CAPABILITIES_ENDPOINT,
+      {
+        signal,
+        validateStatus: (status) => status === 200 || status === 404,
+      }
+    );
+    if (response.status === 404) return null;
+
+    return {
+      signalR: response.data?.signalR === true,
+      push: { fcm: response.data?.push?.fcm === true },
+    };
+  }
+
+  async registerPushDevice(
+    deviceId: string,
+    registration: PushDeviceRegistrationRequest,
+    signal?: AbortSignal
+  ): Promise<void> {
+    await this.put(
+      `/api/devices/${encodeURIComponent(deviceId)}/push`,
+      registration,
+      signal ? { signal } : undefined
+    );
+  }
+
+  async unregisterPushDevice(deviceId: string, signal?: AbortSignal): Promise<void> {
+    await this.delete(
+      `/api/devices/${encodeURIComponent(deviceId)}/push`,
+      signal ? { signal } : undefined
+    );
   }
 
   /**

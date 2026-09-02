@@ -16,6 +16,7 @@ import type { ServerConfig } from '../types/api';
 import { remoteClipboardMonitor } from '../services/sync/RemoteClipboardMonitor';
 import { configService } from '../services/ConfigService';
 import { clipboardSyncState } from '../services/sync/SyncState';
+import { AppState } from 'react-native';
 
 export class RemoteClipboardMonitorTask extends LongRunningTask {
   readonly name = 'remoteClipboardMonitor';
@@ -23,6 +24,7 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
   private _started = false;
   private _activeServer: ServerConfig | null = null;
   private _activePollingInterval: number | undefined = undefined;
+  private _inBackground = AppState.currentState === 'background';
 
   async start(): Promise<void> {
     if (this._started) return;
@@ -38,7 +40,7 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
     const config = await configService.getConfig();
     this._activeServer = server;
     this._activePollingInterval = config?.remotePollingInterval;
-    await remoteClipboardMonitor.connect();
+    await this._resumeForCurrentLifecycle();
   }
 
   async stop(): Promise<void> {
@@ -72,18 +74,25 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
       await remoteClipboardMonitor.disconnect();
       this._activeServer = newServer;
       this._activePollingInterval = newPollingInterval;
-      await remoteClipboardMonitor.connect();
+      await this._resumeForCurrentLifecycle();
     } else if (!remoteClipboardMonitor.isConnected()) {
-      await remoteClipboardMonitor.connect();
+      await this._resumeForCurrentLifecycle();
     }
   }
 
   override async onBackground(): Promise<void> {
+    this._inBackground = true;
     await remoteClipboardMonitor.handleBackground();
   }
 
   override async onForeground(): Promise<void> {
+    this._inBackground = false;
     await remoteClipboardMonitor.handleForeground();
+  }
+
+  private async _resumeForCurrentLifecycle(): Promise<void> {
+    await remoteClipboardMonitor.resumeAndRefresh();
+    if (this._inBackground) await remoteClipboardMonitor.handleBackground();
   }
 }
 

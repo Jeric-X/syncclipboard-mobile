@@ -125,19 +125,40 @@ class SyncForegroundService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    /**
-     * Android 14+ 回调：dataSync 类型前台服务 6小时/24小时配额耗尽时由系统调用。
-     * 若不在此回调中及时停止，系统会强制 ANR 终止进程（不经过 onDestroy 优雅路径）。
-     * 处理同用户临时停止：通知 JS 侧重新调度，下次 App 进入前台时重启服务。
-     */
+    /** Android 14+ shortService timeout callback. Kept as a defensive legacy path. */
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     override fun onTimeout(startId: Int) {
-        NativeLogger.w(TAG, "dataSync foreground service timed out (6h/24h quota exhausted), stopping gracefully")
+        NativeLogger.w(TAG, "Foreground service timed out via shortService callback, startId=$startId")
+        stopAfterTimeout()
+    }
+
+    /**
+     * Android 15+ callback for time-limited foreground service types such as dataSync.
+     * The service must stop promptly after this callback to avoid a system ANR.
+     */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        if (!ForegroundServiceTimeoutPolicy.isDataSync(fgsType)) {
+            NativeLogger.w(TAG, "Ignoring timeout for unsupported fgsType=$fgsType, startId=$startId")
+            super.onTimeout(startId, fgsType)
+            return
+        }
+
+        NativeLogger.w(
+            TAG,
+            "dataSync foreground service timed out, startId=$startId, fgsType=$fgsType; stopping gracefully"
+        )
+        stopAfterTimeout()
+    }
+
+    private fun stopAfterTimeout() {
         stoppedByUser = true
+        isRunning = false
+        // Reuse the temporary-stop event so JS runtime state and other background tasks converge.
+        ForegroundServiceModule.sendTempStopEvent()
         showRestartNotification(contentText = getAppString("fg_timeout_content"))
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
-        isRunning = false
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {

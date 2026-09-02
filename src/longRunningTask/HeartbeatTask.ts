@@ -1,57 +1,79 @@
 /**
  * HeartbeatTask（Android 专属）
- * 持续任务：后台统计心跳。
+ * 生命周期任务：记录每次 Android 后台会话的持续时间。
  *
  * 职责：
- * - 进入后台时记录后台任务启动事件，并开始每 60 秒的心跳计数
- * - 返回前台时停止心跳
+ * - 进入后台时持久化墙钟时间和 elapsedRealtime 起点
+ * - 返回前台时用 elapsedRealtime 结算时长
+ * - 进程被杀后，在下一次前台启动时结算遗留记录
  *
- * 注册为 keepAlive = false，后台且总开关关闭时由 LongRunningTaskManager 调用 stop() 停止心跳。
  * 非 Android 平台上为空操作。
  * 生命周期由 LongRunningTaskManager 统一管理。
  */
 
-import { Platform } from 'react-native';
-import { setTimer, clearTimer } from 'native-timer';
+import { AppState, Platform } from 'react-native';
+import { getElapsedRealtimeMs } from 'native-util';
 import { LongRunningTask } from './LongRunningTask';
+import { useStatisticsStore } from '../stores/statisticsStore';
 
 class HeartbeatTask extends LongRunningTask {
   readonly name = 'heartbeat';
 
-  private heartbeatTag: string | null = null;
+  private running = false;
+  private pendingRecoveryChecked = false;
+  private lifecycleOperation: Promise<void> = Promise.resolve();
 
   async start(): Promise<void> {
-    // 心跳只在后台运行，start() 为空操作，等待 onBackground()
+    if (Platform.OS !== 'android') return;
+    this.running = true;
+    if (this.pendingRecoveryChecked || AppState.currentState === 'background') return;
+
+    this.pendingRecoveryChecked = true;
+    await this.enqueueLifecycleOperation(async () => {
+      await this.completePendingSession('Recovered pending background statistics');
+    });
   }
 
   async stop(): Promise<void> {
-    if (!this.heartbeatTag) return;
-    try {
-      clearTimer(this.heartbeatTag);
-    } catch {}
-    this.heartbeatTag = null;
+    this.running = false;
   }
 
   isRunning(): boolean {
-    return this.heartbeatTag !== null;
+    return this.running;
   }
 
   override async onBackground(): Promise<void> {
     if (Platform.OS !== 'android') return;
-    await this.stop(); // 确保不重复启动
-    try {
-      const { useStatisticsStore } = require('../stores/statisticsStore');
-      await useStatisticsStore.getState().recordBackgroundTaskStart();
-      this.heartbeatTag = setTimer(() => {
-        useStatisticsStore.getState().updateHeartbeat();
-      }, 60_000);
-    } catch (e) {
-      console.error('[HeartbeatTask] Failed to start heartbeat:', e);
-    }
+    await this.enqueueLifecycleOperation(async () => {
+      const elapsedRealtimeMs = getElapsedRealtimeMs();
+      if (elapsedRealtimeMs === null) return;
+      await useStatisticsStore.getState().recordBackgroundTaskStart(elapsedRealtimeMs);
+      console.debug('[HeartbeatTask] Background statistics session started');
+    });
   }
 
   override async onForeground(): Promise<void> {
-    await this.stop();
+    if (Platform.OS !== 'android') return;
+    await this.enqueueLifecycleOperation(async () => {
+      await this.completePendingSession('Background statistics session completed');
+    });
+  }
+
+  private async completePendingSession(logMessage: string): Promise<void> {
+    const elapsedRealtimeMs = getElapsedRealtimeMs();
+    if (elapsedRealtimeMs === null) return;
+    const durationMs = await useStatisticsStore
+      .getState()
+      .completeBackgroundTask(elapsedRealtimeMs);
+    if (durationMs !== null) {
+      console.debug(`[HeartbeatTask] ${logMessage}: durationMs=${durationMs}`);
+    }
+  }
+
+  private enqueueLifecycleOperation(operation: () => Promise<void>): Promise<void> {
+    const nextOperation = this.lifecycleOperation.then(operation, operation);
+    this.lifecycleOperation = nextOperation.catch(() => undefined);
+    return nextOperation;
   }
 }
 

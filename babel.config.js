@@ -22,6 +22,7 @@ module.exports = function (api) {
             '@assets': './src/assets',
             'native-util': './modules/native-util/src',
             'shortcut': './modules/shortcut/src',
+            'push-event-source': './modules/push-event-source/src',
           },
         },
       ],

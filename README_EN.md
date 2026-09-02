@@ -38,9 +38,14 @@ npm install
 
 ### Generate Native Projects
 
+FCM is optional. To enable it, download the Android `google-services.json` matching
+`com.jericx.syncclipboardmobile` from the Firebase console, place it in the repository root, and then generate the native project. The file is excluded from Git.
+
 ```bash
 npm run prebuild
 ```
+
+The project still builds without this file. Push remains unavailable and the client keeps its existing SignalR behavior. FCM messages contain only a version, event type, and profile hash; the client still fetches authoritative clipboard state over HTTP after a hint.
 
 ### Debug Run
 
@@ -114,6 +119,7 @@ npm run plugin:build
 | [react-native-community/jsc-android-buildscripts](https://github.com/react-native-community/jsc-android-buildscripts) | JavaScriptCore Android engine (alternative)  |
 | [RikkaApps/Shizuku](https://github.com/RikkaApps/Shizuku)                                                             | Shizuku API: System API access without root  |
 | [dotnet/aspnetcore (SignalR Java Client)](https://github.com/dotnet/aspnetcore)                                       | SignalR real-time push (Java/Android client) |
+| [firebase/firebase-android-sdk](https://github.com/firebase/firebase-android-sdk)                                     | Optional FCM change hints                    |
 | [google/gson](https://github.com/google/gson)                                                                         | JSON serialization (SignalR protocol layer)  |
 
 ## Donate

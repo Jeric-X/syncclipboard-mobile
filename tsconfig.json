@@ -22,7 +22,8 @@
       "clipboard-overlay": ["modules/clipboard-overlay/src"],
       "shizuku-clipboard": ["modules/shizuku-clipboard/src"],
       "sms-forwarder": ["modules/sms-forwarder/src"],
-      "foreground-service": ["modules/foreground-service/src"]
+      "foreground-service": ["modules/foreground-service/src"],
+      "push-event-source": ["modules/push-event-source/src"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],

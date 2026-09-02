@@ -7,7 +7,7 @@ jest.mock('../services/ConfigService', () => ({
 
 jest.mock('../services/sync/RemoteClipboardMonitor', () => ({
   remoteClipboardMonitor: {
-    connect: jest.fn(),
+    resumeAndRefresh: jest.fn(),
     disconnect: jest.fn(),
     isConnected: jest.fn(),
     handleBackground: jest.fn(),
@@ -40,7 +40,7 @@ describe('RemoteClipboardMonitorTask', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedConfig.getConfig.mockResolvedValue({ remotePollingInterval: 3000 } as never);
-    mockedMonitor.connect.mockResolvedValue(undefined);
+    mockedMonitor.resumeAndRefresh.mockResolvedValue(undefined);
     mockedMonitor.disconnect.mockResolvedValue(undefined);
     mockedMonitor.isConnected.mockReturnValue(false);
   });
@@ -52,11 +52,11 @@ describe('RemoteClipboardMonitorTask', () => {
     await task.start();
     expect(task.isRunning()).toBe(true);
     expect(clipboardSyncState.setRemoteContent).toHaveBeenCalledWith(null);
-    expect(mockedMonitor.connect).not.toHaveBeenCalled();
+    expect(mockedMonitor.resumeAndRefresh).not.toHaveBeenCalled();
 
     await task.onConfigChanged();
     expect(task.isRunning()).toBe(true);
-    expect(mockedMonitor.connect).toHaveBeenCalledTimes(1);
+    expect(mockedMonitor.resumeAndRefresh).toHaveBeenCalledTimes(1);
   });
 
   it('切换到不使用服务器时只断开传输，不停止任务', async () => {
@@ -68,5 +68,21 @@ describe('RemoteClipboardMonitorTask', () => {
 
     expect(mockedMonitor.disconnect).toHaveBeenCalledTimes(1);
     expect(task.isRunning()).toBe(true);
+  });
+
+  it('后台切换服务器后重新应用 push 与 SignalR 的后台策略', async () => {
+    const replacement = { ...server, id: 'office', url: 'https://office.example' };
+    mockedConfig.getActiveServer.mockResolvedValueOnce(server).mockResolvedValueOnce(replacement);
+    const task = new RemoteClipboardMonitorTask();
+    await task.start();
+    await task.onBackground();
+    jest.clearAllMocks();
+    mockedConfig.getConfig.mockResolvedValue({ remotePollingInterval: 3000 } as never);
+
+    await task.onConfigChanged();
+
+    expect(mockedMonitor.disconnect).toHaveBeenCalledTimes(1);
+    expect(mockedMonitor.resumeAndRefresh).toHaveBeenCalledTimes(1);
+    expect(mockedMonitor.handleBackground).toHaveBeenCalledTimes(1);
   });
 });

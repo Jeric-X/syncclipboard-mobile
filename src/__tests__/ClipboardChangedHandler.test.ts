@@ -137,4 +137,20 @@ describe('ClipboardChangedHandler 启动基线窗口', () => {
     expect(copyToLocalClipboard).toHaveBeenCalledWith(content);
     expect(clipboardSyncState.setRemoteContent).toHaveBeenCalledWith(content);
   });
+
+  it('headless push refresh 不把首次远程内容误判为 UI 启动基线', async () => {
+    jest.spyOn(performance, 'now').mockReturnValue(100);
+    const copyToLocalClipboard = jest
+      .spyOn(
+        handler as unknown as {
+          copyToLocalClipboard(value: ClipboardContent): Promise<void>;
+        },
+        'copyToLocalClipboard'
+      )
+      .mockResolvedValue();
+
+    await handler.processRemoteClipboardContent({ ...content }, { allowStartupBaseline: false });
+
+    expect(copyToLocalClipboard).toHaveBeenCalledWith(content);
+  });
 });

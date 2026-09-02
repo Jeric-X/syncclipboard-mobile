@@ -20,4 +20,5 @@ dependencies {
   implementation project(':native-util')
   implementation 'com.microsoft.signalr:signalr:8.0.15'
   implementation 'com.google.code.gson:gson:2.11.0'
+  testImplementation 'junit:junit:4.13.2'
 }

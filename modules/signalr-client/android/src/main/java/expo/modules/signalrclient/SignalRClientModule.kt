@@ -17,14 +17,22 @@ class SignalRClientModule : Module() {
 
     private val handler = Handler(Looper.getMainLooper())
 
+    @Volatile
     private var hubConnection: HubConnection? = null
+    @Volatile
     private var isConnecting = false
     private val reconnectHandler = Handler(Looper.getMainLooper())
     private var reconnectRunnable: Runnable? = null
     private var reconnectAttempt = 0
+    @Volatile
     private var currentUrl: String? = null
+    @Volatile
     private var currentUsername: String? = null
+    @Volatile
     private var currentPassword: String? = null
+    @Volatile
+    private var hasActiveNetwork = false
+    private val validatedNetworkMonitor = ValidatedNetworkMonitor(::onValidatedNetworkChanged)
 
     companion object {
         private const val TAG = "SignalRClientModule"
@@ -42,6 +50,7 @@ class SignalRClientModule : Module() {
                     NativeLogger.e(TAG, "RxJava undeliverable exception (SignalR bug workaround)", e)
                 }
             }
+            validatedNetworkMonitor.start(appContext.reactContext)
         }
 
         Events("onProfileChanged", "onHistoryChanged", "onStateChanged")
@@ -63,6 +72,7 @@ class SignalRClientModule : Module() {
         }
 
         OnDestroy {
+            validatedNetworkMonitor.stop()
             disconnectSignalR()
         }
     }
@@ -80,6 +90,16 @@ class SignalRClientModule : Module() {
         currentUrl = url
         currentUsername = username
         currentPassword = password
+
+        if (!hasActiveNetwork) {
+            cancelReconnect()
+            NativeLogger.d(TAG, "Deferring SignalR connection until an active network is available")
+            handler.post {
+                sendEvent("onStateChanged", mapOf("state" to "DISCONNECTED"))
+            }
+            return
+        }
+
         isConnecting = true
 
         val hubUrl = url.trimEnd('/') + "/SyncClipboardHub"
@@ -131,6 +151,10 @@ class SignalRClientModule : Module() {
             }, JsonObject::class.java)
 
             connection.onClosed { error ->
+                if (hubConnection !== connection) {
+                    NativeLogger.d(TAG, "Ignoring close event from stale SignalR connection")
+                    return@onClosed
+                }
                 NativeLogger.d(TAG, "SignalR connection closed: ${error?.message}")
                 handler.post {
                     sendEvent("onStateChanged", mapOf("state" to "DISCONNECTED"))
@@ -145,6 +169,11 @@ class SignalRClientModule : Module() {
             Thread {
                 try {
                     connection.start().blockingAwait()
+                    if (hubConnection !== connection) {
+                        NativeLogger.d(TAG, "Ignoring successful start from stale SignalR connection")
+                        connection.stop().blockingAwait()
+                        return@Thread
+                    }
                     reconnectAttempt = 0
                     isConnecting = false
                     NativeLogger.d(TAG, "SignalR connected successfully")
@@ -152,6 +181,10 @@ class SignalRClientModule : Module() {
                         sendEvent("onStateChanged", mapOf("state" to "CONNECTED"))
                     }
                 } catch (e: Exception) {
+                    if (hubConnection !== connection) {
+                        NativeLogger.d(TAG, "Ignoring failure from stale SignalR connection")
+                        return@Thread
+                    }
                     isConnecting = false
                     NativeLogger.e(TAG, "SignalR connection failed", e)
                     handler.post {
@@ -196,19 +229,39 @@ class SignalRClientModule : Module() {
     }
 
     private fun scheduleReconnect() {
-        if (currentUrl == null) return
+        if (currentUrl == null) {
+            NativeLogger.d(TAG, "Skipping SignalR reconnect because the client was disconnected")
+            return
+        }
 
-        // 取消上一个定时器，但不重置计数（避免退避延迟永远不增长）
-        reconnectRunnable?.let { reconnectHandler.removeCallbacks(it) }
-        reconnectRunnable = null
+        if (!hasActiveNetwork) {
+            NativeLogger.d(TAG, "Skipping SignalR reconnect until an active network is available")
+            return
+        }
 
-        // 限制位移量防止 Long 溢出；从第 3 次起延迟固定在 10000ms
-        val attempt = minOf(reconnectAttempt, 10)
-        val delayMs = minOf(2000L * (1L shl attempt), 10000L)
-        reconnectAttempt++
-        NativeLogger.d(TAG, "Scheduling SignalR reconnect attempt $reconnectAttempt in ${delayMs}ms")
+        if (reconnectRunnable != null) {
+            NativeLogger.d(TAG, "SignalR reconnect is already scheduled")
+            return
+        }
+
+        val delayMs = ReconnectBackoffPolicy.delayMillis(reconnectAttempt)
+        val attemptNumber = if (reconnectAttempt == Int.MAX_VALUE) {
+            Int.MAX_VALUE
+        } else {
+            reconnectAttempt + 1
+        }
+        reconnectAttempt = attemptNumber
+        NativeLogger.d(
+            TAG,
+            "Scheduling SignalR reconnect attempt $attemptNumber in ${delayMs}ms (jitter +/-20%)"
+        )
 
         val runnable = Runnable {
+            reconnectRunnable = null
+            if (!hasActiveNetwork) {
+                NativeLogger.d(TAG, "Cancelling scheduled SignalR reconnect: no active network")
+                return@Runnable
+            }
             val url = currentUrl ?: return@Runnable
             val user = currentUsername ?: return@Runnable
             val pass = currentPassword ?: return@Runnable
@@ -220,11 +273,59 @@ class SignalRClientModule : Module() {
     }
 
     private fun cancelReconnect() {
+        val hadPendingReconnect = reconnectRunnable != null
         reconnectRunnable?.let {
             reconnectHandler.removeCallbacks(it)
         }
         reconnectRunnable = null
         reconnectAttempt = 0
+        if (hadPendingReconnect) {
+            NativeLogger.d(TAG, "Cancelled pending SignalR reconnect")
+        }
+    }
+
+    private fun onValidatedNetworkChanged(isAvailable: Boolean, reason: String) {
+        handler.post {
+            val wasAvailable = hasActiveNetwork
+            val action = ValidatedNetworkPolicy.transitionAction(
+                wasAvailable = wasAvailable,
+                isAvailable = isAvailable,
+                hasConnectionRequest = currentUrl != null,
+                isConnectedOrConnecting =
+                    hubConnection?.connectionState == HubConnectionState.CONNECTED || isConnecting
+            )
+            hasActiveNetwork = isAvailable
+            when (action) {
+                ValidatedNetworkAction.DISCONNECT -> {
+                    NativeLogger.d(
+                        TAG,
+                        "Active network lost ($reason); cancelling reconnect and closing SignalR"
+                    )
+                    cancelReconnect()
+                    disconnectSignalRInternal()
+                    sendEvent("onStateChanged", mapOf("state" to "DISCONNECTED"))
+                }
+                ValidatedNetworkAction.RECONNECT -> {
+                    val url = currentUrl ?: return@post
+                    val user = currentUsername ?: return@post
+                    val pass = currentPassword ?: return@post
+                    cancelReconnect()
+                    NativeLogger.d(
+                        TAG,
+                        "Active network available ($reason); reconnecting immediately"
+                    )
+                    connectSignalR(url, user, pass)
+                }
+                ValidatedNetworkAction.NONE -> {
+                    if (!wasAvailable && isAvailable && currentUrl == null) {
+                        NativeLogger.d(
+                            TAG,
+                            "Active network available ($reason); no connection requested"
+                        )
+                    }
+                }
+            }
+        }
     }
 
     private fun getJsonString(json: JsonObject, key: String, default: String): String {

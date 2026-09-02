@@ -108,3 +108,17 @@ export interface ServerInfo {
   /** 是否在线 */
   online: boolean;
 }
+
+export interface RealtimeCapabilities {
+  signalR: boolean;
+  push: {
+    fcm: boolean;
+  };
+}
+
+export interface PushDeviceRegistrationRequest {
+  platform: 'android';
+  provider: 'fcm';
+  token: string;
+  appVersion: string;
+}
