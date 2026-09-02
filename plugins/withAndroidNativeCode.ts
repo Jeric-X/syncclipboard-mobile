@@ -18,6 +18,7 @@ const withAndroidNativeCode: ConfigPlugin = (config) => {
         java.srcDirs += '${srcAndroidPath}/app/src/main/java'
         res.srcDirs += '${srcAndroidPath}/app/src/main/res'
         assets.srcDirs += '${srcAndroidPath}/app/src/main/assets'
+        resources.srcDirs += '${srcAndroidPath}/app/src/main/resources'
       }
     }
 `;

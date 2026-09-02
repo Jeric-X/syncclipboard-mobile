@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+  <string name="xposed_module_description">Optional LSPosed enhancement for exact system clipboard events</string>
+
   <!-- Foreground Service -->
   <string name="fg_channel_name">Background Service</string>
   <string name="fg_channel_desc">SyncClipboard background sync service</string>

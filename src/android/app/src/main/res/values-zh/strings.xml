@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+  <string name="xposed_module_description">用于精确系统剪贴板事件的可选 LSPosed 增强</string>
+
   <!-- Foreground Service -->
   <string name="fg_channel_name">后台任务</string>
   <string name="fg_channel_desc">SyncClipboard 后台同步服务</string>
