@@ -18,6 +18,19 @@ import * as ForegroundService from 'foreground-service';
 import { LongRunningTask } from './LongRunningTask';
 import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
+import { remoteClipboardMonitor } from '../services/sync/RemoteClipboardMonitor';
+import { clipboardSyncState } from '../services/sync/SyncState';
+import {
+  getHistoryTransferQueue,
+  type HistoryTransferQueue,
+  type TransferTask,
+} from '../services/history/HistoryTransferQueue';
+import { updateService } from '../services/update/UpdateService';
+import {
+  selectForegroundServicePolicy,
+  type ForegroundServicePolicyDecision,
+  type ForegroundServicePolicyReason,
+} from './ForegroundServicePolicy';
 
 class ForegroundServiceTask extends LongRunningTask {
   readonly name = 'foregroundService';
@@ -28,6 +41,14 @@ class ForegroundServiceTask extends LongRunningTask {
   private _serviceActive = false;
 
   private _runtimeUnsub: (() => void) | null = null;
+  private _pushStateUnsub: (() => void) | null = null;
+  private _clipboardStateUnsub: (() => void) | null = null;
+  private _updateStateUnsub: (() => void) | null = null;
+  private _historyTransferQueue: HistoryTransferQueue | null = null;
+  private readonly _activeHistoryTransfers = new Set<string>();
+  private _clipboardTransferActive = false;
+  private _updateTransferActive = false;
+  private _lastPolicyReason: ForegroundServicePolicyReason | null = null;
   private _stopSub: { remove(): void } | null = null;
   private _tempStopSub: { remove(): void } | null = null;
 
@@ -39,15 +60,14 @@ class ForegroundServiceTask extends LongRunningTask {
     // 清除可能残留的复活通知（用户未通过复活通知而是直接打开 APP 时，通知不会自动消失）
     ForegroundService.cancelRestartNotification();
 
-    // 立即应用当前配置
-    await this._refresh();
-
     // 订阅运行时状态变更
     this._runtimeUnsub = backgroundRuntimeState.subscribe(() => {
-      this._refresh().catch((e) => {
-        console.error('[ForegroundServiceTask] Failed to apply runtime state change:', e);
-      });
+      this._requestRefresh('runtime state change');
     });
+    this._attachPowerPolicyListeners();
+
+    // 立即应用当前配置和 Push/传输状态
+    await this._refresh();
   }
 
   async stop(): Promise<void> {
@@ -56,6 +76,8 @@ class ForegroundServiceTask extends LongRunningTask {
 
     this._runtimeUnsub?.();
     this._runtimeUnsub = null;
+    this._detachPowerPolicyListeners();
+    this._lastPolicyReason = null;
 
     await this._stopService();
   }
@@ -70,20 +92,33 @@ class ForegroundServiceTask extends LongRunningTask {
 
   // ─── 私有实现 ─────────────────────────────────────────────
 
-  private async _shouldRunForegroundService(): Promise<boolean> {
+  private async _selectForegroundServicePolicy(): Promise<ForegroundServicePolicyDecision> {
     const config = await configService.getConfig();
-    const tempDisabled = backgroundRuntimeState.isTempDisabled();
-    return (
-      !tempDisabled &&
-      !!config?.enableBackgroundTasks &&
-      !!(config?.enableBackgroundDownload || config?.enableBackgroundUpload) &&
-      !!config?.enableForegroundNotification
-    );
+    return selectForegroundServicePolicy({
+      temporarilyDisabled: backgroundRuntimeState.isTempDisabled(),
+      backgroundTasksEnabled: !!config?.enableBackgroundTasks,
+      backgroundTransferEnabled: !!(
+        config?.enableBackgroundDownload || config?.enableBackgroundUpload
+      ),
+      foregroundNotificationEnabled: !!config?.enableForegroundNotification,
+      pushRegistrationActive: remoteClipboardMonitor.isPushConnected(),
+      activeTransfer: this._hasActiveTransfer(),
+    });
   }
 
   /** 根据当前配置决定启动或停止服务 */
   private async _refresh(): Promise<void> {
-    if (await this._shouldRunForegroundService()) {
+    const decision = await this._selectForegroundServicePolicy();
+    if (decision.reason !== this._lastPolicyReason) {
+      this._lastPolicyReason = decision.reason;
+      console.log(
+        `[ForegroundServiceTask] Power policy changed: ${decision.reason}; service=${
+          decision.shouldRun ? 'required' : 'idle'
+        }`
+      );
+    }
+
+    if (decision.shouldRun) {
       await this._startService();
     } else {
       await this._stopService();
@@ -115,6 +150,80 @@ class ForegroundServiceTask extends LongRunningTask {
     try {
       ForegroundService.stopService();
     } catch {}
+    console.log('[ForegroundServiceTask] Foreground service stopped');
+  }
+
+  private _attachPowerPolicyListeners(): void {
+    this._pushStateUnsub = remoteClipboardMonitor.addPushRegistrationStateListener(() => {
+      this._requestRefresh('push registration state change');
+    });
+
+    const initialSyncState = clipboardSyncState.getState();
+    this._clipboardTransferActive =
+      initialSyncState.uploadingClipboard || initialSyncState.downloadingRemote;
+    this._clipboardStateUnsub = clipboardSyncState.subscribe((state) => {
+      const active = state.uploadingClipboard || state.downloadingRemote;
+      if (active === this._clipboardTransferActive) return;
+      this._clipboardTransferActive = active;
+      this._requestRefresh('clipboard transfer state change');
+    });
+
+    this._updateTransferActive = updateService.getState().isDownloading;
+    this._updateStateUnsub = updateService.subscribe((state) => {
+      if (state.isDownloading === this._updateTransferActive) return;
+      this._updateTransferActive = state.isDownloading;
+      this._requestRefresh('update transfer state change');
+    });
+
+    const queue = getHistoryTransferQueue();
+    this._historyTransferQueue = queue;
+    queue.getActiveTasks().forEach((task) => this._updateHistoryTransfer(task));
+    queue.onTaskStatusChanged(this._handleHistoryTransferStateChanged);
+  }
+
+  private _detachPowerPolicyListeners(): void {
+    this._pushStateUnsub?.();
+    this._pushStateUnsub = null;
+    this._clipboardStateUnsub?.();
+    this._clipboardStateUnsub = null;
+    this._updateStateUnsub?.();
+    this._updateStateUnsub = null;
+    this._historyTransferQueue?.offTaskStatusChanged(this._handleHistoryTransferStateChanged);
+    this._historyTransferQueue = null;
+    this._activeHistoryTransfers.clear();
+    this._clipboardTransferActive = false;
+    this._updateTransferActive = false;
+  }
+
+  private readonly _handleHistoryTransferStateChanged = (task: TransferTask): void => {
+    const wasActive = this._activeHistoryTransfers.size > 0;
+    this._updateHistoryTransfer(task);
+    if (wasActive !== this._activeHistoryTransfers.size > 0) {
+      this._requestRefresh('history transfer state change');
+    }
+  };
+
+  private _updateHistoryTransfer(task: TransferTask): void {
+    const key = `${task.type}:${task.profileId}`;
+    if (task.status === 'running') {
+      this._activeHistoryTransfers.add(key);
+    } else {
+      this._activeHistoryTransfers.delete(key);
+    }
+  }
+
+  private _hasActiveTransfer(): boolean {
+    return (
+      this._clipboardTransferActive ||
+      this._updateTransferActive ||
+      this._activeHistoryTransfers.size > 0
+    );
+  }
+
+  private _requestRefresh(reason: string): void {
+    this._refresh().catch((error) => {
+      console.error(`[ForegroundServiceTask] Failed to apply ${reason}:`, error);
+    });
   }
 
   /** 绑定通知栏操作监听 */

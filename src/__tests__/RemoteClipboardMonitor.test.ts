@@ -235,6 +235,26 @@ describe('RemoteClipboardMonitor event transport', () => {
     expect(monitor.isPushConnected()).toBe(false);
   });
 
+  it('publishes push registration state for foreground service policy', async () => {
+    const signalRSource = new FakeRemoteEventSource();
+    const pushSource = new FakeRemoteEventSource();
+    mockedGetAPIClient.mockResolvedValue({
+      getClipboard: jest.fn().mockResolvedValue(initialProfile),
+    } as never);
+    const monitor = new RemoteClipboardMonitor(
+      () => signalRSource,
+      () => pushSource
+    );
+    const states: boolean[] = [];
+    monitor.addPushRegistrationStateListener((active) => states.push(active));
+
+    await monitor.connect();
+    expect(states).toContain(true);
+
+    await monitor.disconnect();
+    expect(states.at(-1)).toBe(false);
+  });
+
   it('disconnects both transports when background remote sync is disabled', async () => {
     const signalRSource = new FakeRemoteEventSource();
     const pushSource = new FakeRemoteEventSource();

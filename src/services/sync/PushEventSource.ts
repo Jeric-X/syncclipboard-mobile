@@ -16,7 +16,11 @@ import {
   type NativePushProfileChangeHint,
 } from 'push-event-source';
 import type { EventSubscription } from 'expo-modules-core';
-import type { RemoteEventSource, RemoteProfileChangeHint } from './RemoteEventSource';
+import type {
+  RemoteEventSource,
+  RemoteEventSourceConnectionState,
+  RemoteProfileChangeHint,
+} from './RemoteEventSource';
 
 export interface PushRegistrationClient {
   getRealtimeCapabilities(signal?: AbortSignal): Promise<RealtimeCapabilities | null>;
@@ -68,6 +72,7 @@ const createPushRegistrationClient: PushRegistrationClientFactory = (server) => 
 /** Optional FCM hint transport. HTTP remains the authoritative clipboard state. */
 export class PushEventSource implements RemoteEventSource {
   private readonly callbacks = new Set<(hint: RemoteProfileChangeHint) => void>();
+  private readonly stateCallbacks = new Set<(state: RemoteEventSourceConnectionState) => void>();
   private subscriptions: EventSubscription[] = [];
   private registrationClient: PushRegistrationClient | null = null;
   private registrationDeviceId: string | null = null;
@@ -108,7 +113,7 @@ export class PushEventSource implements RemoteEventSource {
     this.subscriptions = [
       this.nativeGateway.addProfileChangedListener((hint) => this.emitProfileChanged(hint)),
       this.nativeGateway.addTokenChangedListener(() => {
-        this.connected = false;
+        this.setConnected(false);
         void this.enqueueRegistration(lifecycle);
       }),
     ];
@@ -124,7 +129,7 @@ export class PushEventSource implements RemoteEventSource {
     const client = this.registrationClient;
     this.subscriptions.forEach((subscription) => subscription.remove());
     this.subscriptions = [];
-    this.connected = false;
+    this.setConnected(false);
 
     await this.registrationQueue.catch(() => {});
     const deviceId = this.registrationDeviceId;
@@ -147,6 +152,13 @@ export class PushEventSource implements RemoteEventSource {
   onProfileChanged(callback: (hint: RemoteProfileChangeHint) => void): () => void {
     this.callbacks.add(callback);
     return () => this.callbacks.delete(callback);
+  }
+
+  onConnectionStateChanged(
+    callback: (state: RemoteEventSourceConnectionState) => void
+  ): () => void {
+    this.stateCallbacks.add(callback);
+    return () => this.stateCallbacks.delete(callback);
   }
 
   private enqueueRegistration(lifecycle: number): Promise<void> {
@@ -185,11 +197,11 @@ export class PushEventSource implements RemoteEventSource {
       });
       if (lifecycle !== this.lifecycle) return;
 
-      this.connected = true;
+      this.setConnected(true);
       console.debug('[PushEventSource] FCM push registration active');
     } catch (error) {
       if (lifecycle !== this.lifecycle) return;
-      this.connected = false;
+      this.setConnected(false);
       console.warn(
         '[PushEventSource] Push registration failed; SignalR fallback remains active:',
         errorDiagnostic(error)
@@ -204,6 +216,19 @@ export class PushEventSource implements RemoteEventSource {
         callback(remoteHint);
       } catch (error) {
         console.error('[PushEventSource] Profile hint callback failed:', error);
+      }
+    });
+  }
+
+  private setConnected(connected: boolean): void {
+    if (this.connected === connected) return;
+    this.connected = connected;
+    const state: RemoteEventSourceConnectionState = connected ? 'CONNECTED' : 'DISCONNECTED';
+    this.stateCallbacks.forEach((callback) => {
+      try {
+        callback(state);
+      } catch (error) {
+        console.error('[PushEventSource] Connection state callback failed:', error);
       }
     });
   }

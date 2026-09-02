@@ -40,6 +40,7 @@ export class RemoteClipboardMonitor {
   private _eventSourceCleanups: Array<() => void> = [];
   private _pushEventSource: RemoteEventSource | null = null;
   private _pushEventSourceCleanups: Array<() => void> = [];
+  private readonly _pushRegistrationStateListeners = new Set<(active: boolean) => void>();
   /** 上次触发回调时的内容哈希，用于过滤重复通知 */
   private _lastContentHash: string | null = null;
   /** 对 fetchLatest 进行去重：并发调用共享同一次请求；配置变更时通过 abort() 取消 */
@@ -78,6 +79,12 @@ export class RemoteClipboardMonitor {
 
   removeBackgroundRunningChecker(fn: () => boolean): void {
     this._bgRunningCheckers.delete(fn);
+  }
+
+  /** 订阅 Push 注册状态，供后台功耗策略即时响应 token 注册和失效。 */
+  addPushRegistrationStateListener(listener: (active: boolean) => void): () => void {
+    this._pushRegistrationStateListeners.add(listener);
+    return () => this._pushRegistrationStateListeners.delete(listener);
   }
 
   private _isBgRunningEnabled(): boolean {
@@ -211,6 +218,10 @@ export class RemoteClipboardMonitor {
     void this.refresh();
   };
 
+  private readonly _pushEventSourceStateCallback = (): void => {
+    this._notifyPushRegistrationState();
+  };
+
   private _startPolling(interval?: number): void {
     if (this.pollingTag) return;
     try {
@@ -329,8 +340,14 @@ export class RemoteClipboardMonitor {
       this._pushEventSourceCleanups = [
         eventSource.onProfileChanged(this._remoteProfileChangeCallback),
       ];
+      if (eventSource.onConnectionStateChanged) {
+        this._pushEventSourceCleanups.push(
+          eventSource.onConnectionStateChanged(this._pushEventSourceStateCallback)
+        );
+      }
       await eventSource.connect();
       if (this._pushEventSource !== eventSource) return;
+      this._notifyPushRegistrationState();
       console.debug(
         eventSource.isConnected()
           ? '[RemoteClipboardMonitor] Push event source registered'
@@ -342,6 +359,7 @@ export class RemoteClipboardMonitor {
         this._clearPushEventSourceSubscriptions();
       }
       await eventSource?.disconnect().catch(() => {});
+      this._notifyPushRegistrationState();
       console.warn('[RemoteClipboardMonitor] Push event source setup failed:', error);
     }
   }
@@ -351,6 +369,7 @@ export class RemoteClipboardMonitor {
     if (!eventSource) return;
     this._pushEventSource = null;
     this._clearPushEventSourceSubscriptions();
+    this._notifyPushRegistrationState();
     try {
       await eventSource.disconnect();
       console.debug('[RemoteClipboardMonitor] Push event source disconnected');
@@ -376,6 +395,17 @@ export class RemoteClipboardMonitor {
       try {
         cleanup();
       } catch {}
+    });
+  }
+
+  private _notifyPushRegistrationState(): void {
+    const active = this.isPushConnected();
+    this._pushRegistrationStateListeners.forEach((listener) => {
+      try {
+        listener(active);
+      } catch (error) {
+        console.error('[RemoteClipboardMonitor] Push state listener failed:', error);
+      }
     });
   }
 }

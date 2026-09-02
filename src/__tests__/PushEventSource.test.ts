@@ -218,6 +218,32 @@ describe('PushEventSource', () => {
     expect(source.isConnected()).toBe(true);
   });
 
+  it('publishes registration state changes for background power policy', async () => {
+    const nativeGateway = new FakeNativePushEventGateway();
+    const client = createClient();
+    const source = new PushEventSource(
+      server,
+      nativeGateway,
+      () => client,
+      async () => deviceId
+    );
+    const stateCallback = jest.fn();
+    source.onConnectionStateChanged(stateCallback);
+
+    await source.connect();
+    expect(stateCallback).toHaveBeenLastCalledWith('CONNECTED');
+
+    nativeGateway.token = 'replacement-token';
+    nativeGateway.emitTokenChanged();
+    await flushPromises();
+
+    expect(stateCallback).toHaveBeenCalledWith('DISCONNECTED');
+    expect(stateCallback).toHaveBeenLastCalledWith('CONNECTED');
+
+    await source.disconnect();
+    expect(stateCallback).toHaveBeenLastCalledWith('DISCONNECTED');
+  });
+
   it('logs sanitized registration diagnostics without the push token', async () => {
     const nativeGateway = new FakeNativePushEventGateway();
     const client = createClient();
