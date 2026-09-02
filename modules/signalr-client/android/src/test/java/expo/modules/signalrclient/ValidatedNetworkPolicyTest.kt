@@ -8,31 +8,9 @@ import org.junit.Test
 class ValidatedNetworkPolicyTest {
 
     @Test
-    fun `allows SignalR only when internet and validation capabilities are present`() {
-        assertTrue(
-            ValidatedNetworkPolicy.canConnect(
-                hasInternetCapability = true,
-                hasValidatedCapability = true
-            )
-        )
-        assertFalse(
-            ValidatedNetworkPolicy.canConnect(
-                hasInternetCapability = true,
-                hasValidatedCapability = false
-            )
-        )
-        assertFalse(
-            ValidatedNetworkPolicy.canConnect(
-                hasInternetCapability = false,
-                hasValidatedCapability = true
-            )
-        )
-        assertFalse(
-            ValidatedNetworkPolicy.canConnect(
-                hasInternetCapability = false,
-                hasValidatedCapability = false
-            )
-        )
+    fun `allows LAN-only SignalR whenever an active network exists`() {
+        assertTrue(ValidatedNetworkPolicy.canConnect(hasActiveNetwork = true))
+        assertFalse(ValidatedNetworkPolicy.canConnect(hasActiveNetwork = false))
     }
 
     @Test
@@ -40,8 +18,8 @@ class ValidatedNetworkPolicyTest {
         assertEquals(
             ValidatedNetworkAction.DISCONNECT,
             ValidatedNetworkPolicy.transitionAction(
-                wasValidated = true,
-                isValidated = false,
+                wasAvailable = true,
+                isAvailable = false,
                 hasConnectionRequest = true,
                 isConnectedOrConnecting = true
             )
@@ -53,8 +31,8 @@ class ValidatedNetworkPolicyTest {
         assertEquals(
             ValidatedNetworkAction.RECONNECT,
             ValidatedNetworkPolicy.transitionAction(
-                wasValidated = false,
-                isValidated = true,
+                wasAvailable = false,
+                isAvailable = true,
                 hasConnectionRequest = true,
                 isConnectedOrConnecting = false
             )
@@ -66,8 +44,8 @@ class ValidatedNetworkPolicyTest {
         assertEquals(
             ValidatedNetworkAction.NONE,
             ValidatedNetworkPolicy.transitionAction(
-                wasValidated = true,
-                isValidated = true,
+                wasAvailable = true,
+                isAvailable = true,
                 hasConnectionRequest = true,
                 isConnectedOrConnecting = false
             )
@@ -75,8 +53,8 @@ class ValidatedNetworkPolicyTest {
         assertEquals(
             ValidatedNetworkAction.NONE,
             ValidatedNetworkPolicy.transitionAction(
-                wasValidated = false,
-                isValidated = true,
+                wasAvailable = false,
+                isAvailable = true,
                 hasConnectionRequest = false,
                 isConnectedOrConnecting = false
             )
@@ -84,8 +62,8 @@ class ValidatedNetworkPolicyTest {
         assertEquals(
             ValidatedNetworkAction.NONE,
             ValidatedNetworkPolicy.transitionAction(
-                wasValidated = false,
-                isValidated = true,
+                wasAvailable = false,
+                isAvailable = true,
                 hasConnectionRequest = true,
                 isConnectedOrConnecting = true
             )

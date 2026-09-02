@@ -31,7 +31,7 @@ class SignalRClientModule : Module() {
     @Volatile
     private var currentPassword: String? = null
     @Volatile
-    private var hasValidatedNetwork = false
+    private var hasActiveNetwork = false
     private val validatedNetworkMonitor = ValidatedNetworkMonitor(::onValidatedNetworkChanged)
 
     companion object {
@@ -91,9 +91,9 @@ class SignalRClientModule : Module() {
         currentUsername = username
         currentPassword = password
 
-        if (!hasValidatedNetwork) {
+        if (!hasActiveNetwork) {
             cancelReconnect()
-            NativeLogger.d(TAG, "Deferring SignalR connection until the network is validated")
+            NativeLogger.d(TAG, "Deferring SignalR connection until an active network is available")
             handler.post {
                 sendEvent("onStateChanged", mapOf("state" to "DISCONNECTED"))
             }
@@ -234,8 +234,8 @@ class SignalRClientModule : Module() {
             return
         }
 
-        if (!hasValidatedNetwork) {
-            NativeLogger.d(TAG, "Skipping SignalR reconnect until the network is validated")
+        if (!hasActiveNetwork) {
+            NativeLogger.d(TAG, "Skipping SignalR reconnect until an active network is available")
             return
         }
 
@@ -258,8 +258,8 @@ class SignalRClientModule : Module() {
 
         val runnable = Runnable {
             reconnectRunnable = null
-            if (!hasValidatedNetwork) {
-                NativeLogger.d(TAG, "Cancelling scheduled SignalR reconnect: network is not validated")
+            if (!hasActiveNetwork) {
+                NativeLogger.d(TAG, "Cancelling scheduled SignalR reconnect: no active network")
                 return@Runnable
             }
             val url = currentUrl ?: return@Runnable
@@ -284,22 +284,22 @@ class SignalRClientModule : Module() {
         }
     }
 
-    private fun onValidatedNetworkChanged(isValidated: Boolean, reason: String) {
+    private fun onValidatedNetworkChanged(isAvailable: Boolean, reason: String) {
         handler.post {
-            val wasValidated = hasValidatedNetwork
+            val wasAvailable = hasActiveNetwork
             val action = ValidatedNetworkPolicy.transitionAction(
-                wasValidated = wasValidated,
-                isValidated = isValidated,
+                wasAvailable = wasAvailable,
+                isAvailable = isAvailable,
                 hasConnectionRequest = currentUrl != null,
                 isConnectedOrConnecting =
                     hubConnection?.connectionState == HubConnectionState.CONNECTED || isConnecting
             )
-            hasValidatedNetwork = isValidated
+            hasActiveNetwork = isAvailable
             when (action) {
                 ValidatedNetworkAction.DISCONNECT -> {
                     NativeLogger.d(
                         TAG,
-                        "Validated network lost ($reason); cancelling reconnect and closing SignalR"
+                        "Active network lost ($reason); cancelling reconnect and closing SignalR"
                     )
                     cancelReconnect()
                     disconnectSignalRInternal()
@@ -312,15 +312,15 @@ class SignalRClientModule : Module() {
                     cancelReconnect()
                     NativeLogger.d(
                         TAG,
-                        "Validated network available ($reason); reconnecting immediately"
+                        "Active network available ($reason); reconnecting immediately"
                     )
                     connectSignalR(url, user, pass)
                 }
                 ValidatedNetworkAction.NONE -> {
-                    if (!wasValidated && isValidated && currentUrl == null) {
+                    if (!wasAvailable && isAvailable && currentUrl == null) {
                         NativeLogger.d(
                             TAG,
-                            "Validated network available ($reason); no connection requested"
+                            "Active network available ($reason); no connection requested"
                         )
                     }
                 }

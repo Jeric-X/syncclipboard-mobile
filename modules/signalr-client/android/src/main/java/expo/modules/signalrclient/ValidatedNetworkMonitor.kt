@@ -3,12 +3,11 @@ package expo.modules.signalrclient
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
-import android.net.NetworkCapabilities
 import expo.modules.nativeutil.NativeLogger
 
-/** Observes whether the app's default network has validated Internet access. */
+/** Observes whether Android currently exposes an active default network. */
 internal class ValidatedNetworkMonitor(
-    private val onAvailabilityChanged: (isValidated: Boolean, reason: String) -> Unit
+    private val onAvailabilityChanged: (isAvailable: Boolean, reason: String) -> Unit
 ) {
     private var connectivityManager: ConnectivityManager? = null
     private var lastAvailability: Boolean? = null
@@ -25,7 +24,7 @@ internal class ValidatedNetworkMonitor(
 
         override fun onCapabilitiesChanged(
             network: Network,
-            networkCapabilities: NetworkCapabilities
+            networkCapabilities: android.net.NetworkCapabilities
         ) = refreshAvailability("onCapabilitiesChanged")
     }
 
@@ -45,7 +44,7 @@ internal class ValidatedNetworkMonitor(
         registered = true
         try {
             manager.registerDefaultNetworkCallback(callback)
-            NativeLogger.d(TAG, "Validated network callback registered")
+            NativeLogger.d(TAG, "Active network callback registered")
             refreshAvailability("initial")
         } catch (error: RuntimeException) {
             registered = false
@@ -75,25 +74,18 @@ internal class ValidatedNetworkMonitor(
     private fun refreshAvailability(reason: String) {
         if (!registered) return
         val manager = connectivityManager ?: return
-        val capabilities = try {
-            manager.activeNetwork?.let(manager::getNetworkCapabilities)
+        val hasActiveNetwork = try {
+            manager.activeNetwork?.let(manager::getNetworkCapabilities) != null
         } catch (error: SecurityException) {
             NativeLogger.w(TAG, "Unable to read active network capabilities: ${error.message}")
-            null
+            false
         }
-        val isValidated = ValidatedNetworkPolicy.canConnect(
-            hasInternetCapability = capabilities?.hasCapability(
-                NetworkCapabilities.NET_CAPABILITY_INTERNET
-            ) == true,
-            hasValidatedCapability = capabilities?.hasCapability(
-                NetworkCapabilities.NET_CAPABILITY_VALIDATED
-            ) == true
-        )
-        if (lastAvailability == isValidated) return
+        val isAvailable = ValidatedNetworkPolicy.canConnect(hasActiveNetwork)
+        if (lastAvailability == isAvailable) return
 
-        lastAvailability = isValidated
-        NativeLogger.d(TAG, "Validated network availability=$isValidated reason=$reason")
-        onAvailabilityChanged(isValidated, reason)
+        lastAvailability = isAvailable
+        NativeLogger.d(TAG, "Active network availability=$isAvailable reason=$reason")
+        onAvailabilityChanged(isAvailable, reason)
     }
 
     private companion object {
