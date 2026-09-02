@@ -16,6 +16,7 @@ import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.SystemServerStartingParam
 import java.lang.reflect.Method
+import java.util.IdentityHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 /** Optional modern libxposed entry point for exact system clipboard commit events. */
@@ -25,8 +26,11 @@ class SyncClipboardXposedModule : XposedModule() {
         private set
 
     @Volatile
-    var listenerProbeHookInstalled: Boolean = false
+    var listenerTakeoverHookInstalled: Boolean = false
         private set
+
+    private val exactListenerLock = Any()
+    private val exactListeners = IdentityHashMap<IBinder, IBinder.DeathRecipient>()
 
     override fun onModuleLoaded(param: ModuleLoadedParam) {
         log(Log.INFO, TAG, "Module loaded in ${param.processName}")
@@ -40,10 +44,10 @@ class SyncClipboardXposedModule : XposedModule() {
             log(Log.ERROR, TAG, "Exact clipboard write hook unavailable; no events intercepted", error)
         }
         try {
-            installListenerProbeHook(param.classLoader)
+            installListenerTakeoverHooks(param.classLoader)
         } catch (error: Throwable) {
-            listenerProbeHookInstalled = false
-            log(Log.WARN, TAG, "SyncClipboard listener probe unavailable; registrations unchanged", error)
+            listenerTakeoverHookInstalled = false
+            log(Log.WARN, TAG, "Exact listener takeover unavailable; registrations unchanged", error)
         }
     }
 
@@ -81,7 +85,7 @@ class SyncClipboardXposedModule : XposedModule() {
     }
 
     @SuppressLint("BlockedPrivateApi")
-    private fun installListenerProbeHook(classLoader: ClassLoader) {
+    private fun installListenerTakeoverHooks(classLoader: ClassLoader) {
         val clipboardImplClass = Class.forName(CLIPBOARD_IMPL_CLASS, false, classLoader)
         val listenerClass = Class.forName(
             SyncClipboardListenerProbeProtocol.LISTENER_DESCRIPTOR,
@@ -91,6 +95,14 @@ class SyncClipboardXposedModule : XposedModule() {
         val intType = Int::class.javaPrimitiveType ?: error("Primitive int type unavailable")
         val addListenerMethod = clipboardImplClass.getDeclaredMethod(
             ADD_LISTENER_METHOD,
+            listenerClass,
+            String::class.java,
+            String::class.java,
+            intType,
+            intType,
+        )
+        val removeListenerMethod = clipboardImplClass.getDeclaredMethod(
+            REMOVE_LISTENER_METHOD,
             listenerClass,
             String::class.java,
             String::class.java,
@@ -107,26 +119,48 @@ class SyncClipboardXposedModule : XposedModule() {
         )
 
         hook(addListenerMethod)
-            .setId(LISTENER_PROBE_HOOK_ID)
+            .setId(LISTENER_ADD_HOOK_ID)
             .intercept { chain ->
                 val listener = chain.args.firstOrNull() as? IInterface
                 val callingUid = Binder.getCallingUid()
                 if (
                     listener != null &&
-                    shouldProbeSyncClipboardListener(callingUid) &&
+                    shouldAttemptExactListenerTakeover(
+                        exactWriteHookInstalled,
+                        listenerTakeoverHookInstalled,
+                        callingUid,
+                    ) &&
                     probeSyncClipboardListener(
                         listener.asBinder(),
                         allowBlockingForCurrentThread,
                         defaultBlockingForCurrentThread,
-                    )
+                    ) &&
+                    registerExactClipboardListener(listener.asBinder())
                 ) {
-                    log(Log.INFO, TAG, "SyncClipboard listener probe matched; registration preserved")
+                    log(Log.INFO, TAG, "Exact listener takeover active; AOSP registration skipped")
+                    null
+                } else {
+                    chain.proceed()
                 }
-                chain.proceed()
             }
 
-        listenerProbeHookInstalled = true
-        log(Log.INFO, TAG, "SyncClipboard listener probe hook installed")
+        hook(removeListenerMethod)
+            .setId(LISTENER_REMOVE_HOOK_ID)
+            .intercept { chain ->
+                val listener = chain.args.firstOrNull() as? IInterface
+                if (
+                    listener != null &&
+                    unregisterExactClipboardListener(listener.asBinder())
+                ) {
+                    log(Log.INFO, TAG, "Exact listener removed; AOSP removal skipped")
+                    null
+                } else {
+                    chain.proceed()
+                }
+            }
+
+        listenerTakeoverHookInstalled = true
+        log(Log.INFO, TAG, "Exact listener takeover hooks installed")
     }
 
     private fun probeSyncClipboardListener(
@@ -177,13 +211,96 @@ class SyncClipboardXposedModule : XposedModule() {
         }
     }
 
+    private fun registerExactClipboardListener(listenerBinder: IBinder): Boolean {
+        synchronized(exactListenerLock) {
+            if (exactListeners.containsKey(listenerBinder)) return true
+            if (!listenerBinder.isBinderAlive) {
+                log(Log.WARN, TAG, "Exact listener takeover failed: listener already dead")
+                return false
+            }
+
+            val deathRecipient = object : IBinder.DeathRecipient {
+                override fun binderDied() {
+                    handleExactListenerDeath(listenerBinder, this)
+                }
+            }
+            return try {
+                listenerBinder.linkToDeath(deathRecipient, 0)
+                exactListeners[listenerBinder] = deathRecipient
+                log(Log.INFO, TAG, "Exact listener registered; listeners=${exactListeners.size}")
+                true
+            } catch (error: Throwable) {
+                log(Log.WARN, TAG, "Exact listener takeover failed; AOSP registration preserved", error)
+                false
+            }
+        }
+    }
+
+    private fun unregisterExactClipboardListener(listenerBinder: IBinder): Boolean {
+        val deathRecipient = synchronized(exactListenerLock) {
+            exactListeners.remove(listenerBinder)
+        } ?: return false
+
+        runCatching { listenerBinder.unlinkToDeath(deathRecipient, 0) }
+            .onFailure { error ->
+                log(Log.DEBUG, TAG, "Exact listener death recipient already removed", error)
+            }
+        return true
+    }
+
+    private fun handleExactListenerDeath(
+        listenerBinder: IBinder,
+        deathRecipient: IBinder.DeathRecipient,
+    ) {
+        val removed = synchronized(exactListenerLock) {
+            if (exactListeners[listenerBinder] !== deathRecipient) {
+                false
+            } else {
+                exactListeners.remove(listenerBinder)
+                true
+            }
+        }
+        if (removed) {
+            log(Log.INFO, TAG, "Exact listener binder died; registry cleaned")
+        }
+    }
+
+    private fun exactListenerSnapshot(): List<IBinder> =
+        synchronized(exactListenerLock) { exactListeners.keys.toList() }
+
     private fun dispatchExactClipboardCommit(uid: Int, sourcePackage: String?) {
         val sequence = exactCommitSequence.incrementAndGet()
+        val listeners = exactListenerSnapshot()
         log(
             Log.DEBUG,
             TAG,
-            "Exact clipboard commit #$sequence uid=$uid sourcePackage=${sourcePackage ?: "unknown"}",
+            "Exact clipboard commit #$sequence uid=$uid sourcePackage=${sourcePackage ?: "unknown"} " +
+                "listeners=${listeners.size}",
         )
+        listeners.forEach(::dispatchExactListener)
+    }
+
+    private fun dispatchExactListener(listenerBinder: IBinder) {
+        val data = Parcel.obtain()
+        try {
+            data.writeInterfaceToken(SyncClipboardListenerProbeProtocol.LISTENER_DESCRIPTOR)
+            if (
+                !listenerBinder.transact(
+                    TRANSACTION_DISPATCH_PRIMARY_CLIP_CHANGED,
+                    data,
+                    null,
+                    IBinder.FLAG_ONEWAY,
+                )
+            ) {
+                log(Log.WARN, TAG, "Exact listener dispatch rejected; removing listener")
+                unregisterExactClipboardListener(listenerBinder)
+            }
+        } catch (error: Throwable) {
+            log(Log.WARN, TAG, "Exact listener dispatch failed; removing listener", error)
+            unregisterExactClipboardListener(listenerBinder)
+        } finally {
+            data.recycle()
+        }
     }
 
     private companion object {
@@ -193,10 +310,13 @@ class SyncClipboardXposedModule : XposedModule() {
             "com.android.server.clipboard.ClipboardService\$ClipboardImpl"
         const val EXACT_COMMIT_METHOD = "setPrimaryClipInternalLocked"
         const val ADD_LISTENER_METHOD = "addPrimaryClipChangedListener"
+        const val REMOVE_LISTENER_METHOD = "removePrimaryClipChangedListener"
         const val ALLOW_BLOCKING_FOR_CURRENT_THREAD_METHOD = "allowBlockingForCurrentThread"
         const val DEFAULT_BLOCKING_FOR_CURRENT_THREAD_METHOD = "defaultBlockingForCurrentThread"
         const val EXACT_WRITE_HOOK_ID = "syncclipboard.exact-clipboard-write"
-        const val LISTENER_PROBE_HOOK_ID = "syncclipboard.listener-probe"
+        const val LISTENER_ADD_HOOK_ID = "syncclipboard.exact-listener-add"
+        const val LISTENER_REMOVE_HOOK_ID = "syncclipboard.exact-listener-remove"
+        const val TRANSACTION_DISPATCH_PRIMARY_CLIP_CHANGED = IBinder.FIRST_CALL_TRANSACTION
         const val CLIP_ARG_INDEX = 0
         const val UID_ARG_INDEX = 1
         const val DEVICE_ID_ARG_INDEX = 2
@@ -212,3 +332,12 @@ internal fun shouldDispatchExactClipboardCommit(hasClip: Boolean, deviceId: Int?
 
 internal fun shouldProbeSyncClipboardListener(callingUid: Int): Boolean =
     callingUid == Process.SHELL_UID
+
+internal fun shouldAttemptExactListenerTakeover(
+    exactWriteHookInstalled: Boolean,
+    listenerTakeoverHookInstalled: Boolean,
+    callingUid: Int,
+): Boolean =
+    exactWriteHookInstalled &&
+        listenerTakeoverHookInstalled &&
+        shouldProbeSyncClipboardListener(callingUid)
