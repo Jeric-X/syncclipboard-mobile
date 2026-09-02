@@ -53,26 +53,28 @@ class SyncClipboardXposedModule : XposedModule() {
 
     private fun installExactClipboardWriteHook(classLoader: ClassLoader) {
         val clipboardServiceClass = Class.forName(CLIPBOARD_SERVICE_CLASS, false, classLoader)
-        val intType = Int::class.javaPrimitiveType ?: error("Primitive int type unavailable")
-        val commitMethod = clipboardServiceClass.getDeclaredMethod(
-            EXACT_COMMIT_METHOD,
-            ClipData::class.java,
-            intType,
-            intType,
-            String::class.java,
-        )
+        val commitMethods = clipboardServiceClass.declaredMethods.toList()
+        val commitSelection = selectExactClipboardCommitHook(commitMethods.map(Method::signature))
+            ?: error("No supported exact clipboard commit signature found")
+        val commitMethod = commitMethods.singleOrNull { method ->
+            method.signature() == commitSelection.signature
+        } ?: error("Exact clipboard commit signature is ambiguous")
+        val commitLayout = commitSelection.layout
         val eventHandler = Handler(Looper.getMainLooper())
 
         hook(commitMethod)
             .setId(EXACT_WRITE_HOOK_ID)
             .intercept { chain ->
                 val result = chain.proceed()
-                val clip = chain.args.getOrNull(CLIP_ARG_INDEX) as? ClipData
-                val deviceId = chain.args.getOrNull(DEVICE_ID_ARG_INDEX) as? Int
+                val clip = chain.args.getOrNull(commitLayout.clipArgIndex) as? ClipData
+                val deviceId = commitLayout.deviceIdArgIndex?.let { index ->
+                    chain.args.getOrNull(index) as? Int
+                } ?: Context.DEVICE_ID_DEFAULT
 
                 if (shouldDispatchExactClipboardCommit(clip != null, deviceId)) {
-                    val uid = chain.args.getOrNull(UID_ARG_INDEX) as? Int ?: UNKNOWN_UID
-                    val sourcePackage = chain.args.getOrNull(SOURCE_PACKAGE_ARG_INDEX) as? String
+                    val uid = chain.args.getOrNull(commitLayout.uidArgIndex) as? Int ?: UNKNOWN_UID
+                    val sourcePackage =
+                        chain.args.getOrNull(commitLayout.sourcePackageArgIndex) as? String
                     if (!eventHandler.post { dispatchExactClipboardCommit(uid, sourcePackage) }) {
                         log(Log.WARN, TAG, "Exact clipboard commit event dropped: handler unavailable")
                     }
@@ -81,34 +83,32 @@ class SyncClipboardXposedModule : XposedModule() {
             }
 
         exactWriteHookInstalled = true
-        log(Log.INFO, TAG, "Exact clipboard write hook installed")
+        log(
+            Log.INFO,
+            TAG,
+            "Exact clipboard write hook installed: ${commitSelection.signature.describe()}",
+        )
     }
 
     @SuppressLint("BlockedPrivateApi")
     private fun installListenerTakeoverHooks(classLoader: ClassLoader) {
         val clipboardImplClass = Class.forName(CLIPBOARD_IMPL_CLASS, false, classLoader)
-        val listenerClass = Class.forName(
-            SyncClipboardListenerProbeProtocol.LISTENER_DESCRIPTOR,
-            false,
-            classLoader,
-        )
-        val intType = Int::class.javaPrimitiveType ?: error("Primitive int type unavailable")
-        val addListenerMethod = clipboardImplClass.getDeclaredMethod(
-            ADD_LISTENER_METHOD,
-            listenerClass,
-            String::class.java,
-            String::class.java,
-            intType,
-            intType,
-        )
-        val removeListenerMethod = clipboardImplClass.getDeclaredMethod(
-            REMOVE_LISTENER_METHOD,
-            listenerClass,
-            String::class.java,
-            String::class.java,
-            intType,
-            intType,
-        )
+        val listenerMethods = clipboardImplClass.declaredMethods.toList()
+        val listenerSignatures = listenerMethods.map(Method::signature)
+        val addSelection = selectClipboardListenerHook(listenerSignatures, ADD_LISTENER_METHOD)
+            ?: error("No supported clipboard listener add signature found")
+        val removeSelection =
+            selectClipboardListenerHook(listenerSignatures, REMOVE_LISTENER_METHOD)
+                ?: error("No supported clipboard listener remove signature found")
+        check(addSelection.layout == removeSelection.layout) {
+            "Clipboard listener add/remove signatures use different scope layouts"
+        }
+        val addListenerMethod = listenerMethods.singleOrNull { method ->
+            method.signature() == addSelection.signature
+        } ?: error("Clipboard listener add signature is ambiguous")
+        val removeListenerMethod = listenerMethods.singleOrNull { method ->
+            method.signature() == removeSelection.signature
+        } ?: error("Clipboard listener remove signature is ambiguous")
         // Keep the synchronous challenge scoped to this Binder thread; never mark an app-owned
         // BinderProxy as permanently safe for blocking calls from system_server.
         val allowBlockingForCurrentThread = Binder::class.java.getDeclaredMethod(
@@ -160,7 +160,11 @@ class SyncClipboardXposedModule : XposedModule() {
             }
 
         listenerTakeoverHookInstalled = true
-        log(Log.INFO, TAG, "Exact listener takeover hooks installed")
+        log(
+            Log.INFO,
+            TAG,
+            "Exact listener takeover hooks installed: ${addSelection.signature.describe()}",
+        )
     }
 
     private fun probeSyncClipboardListener(
@@ -308,24 +312,25 @@ class SyncClipboardXposedModule : XposedModule() {
         const val CLIPBOARD_SERVICE_CLASS = "com.android.server.clipboard.ClipboardService"
         const val CLIPBOARD_IMPL_CLASS =
             "com.android.server.clipboard.ClipboardService\$ClipboardImpl"
-        const val EXACT_COMMIT_METHOD = "setPrimaryClipInternalLocked"
-        const val ADD_LISTENER_METHOD = "addPrimaryClipChangedListener"
-        const val REMOVE_LISTENER_METHOD = "removePrimaryClipChangedListener"
         const val ALLOW_BLOCKING_FOR_CURRENT_THREAD_METHOD = "allowBlockingForCurrentThread"
         const val DEFAULT_BLOCKING_FOR_CURRENT_THREAD_METHOD = "defaultBlockingForCurrentThread"
         const val EXACT_WRITE_HOOK_ID = "syncclipboard.exact-clipboard-write"
         const val LISTENER_ADD_HOOK_ID = "syncclipboard.exact-listener-add"
         const val LISTENER_REMOVE_HOOK_ID = "syncclipboard.exact-listener-remove"
         const val TRANSACTION_DISPATCH_PRIMARY_CLIP_CHANGED = IBinder.FIRST_CALL_TRANSACTION
-        const val CLIP_ARG_INDEX = 0
-        const val UID_ARG_INDEX = 1
-        const val DEVICE_ID_ARG_INDEX = 2
-        const val SOURCE_PACKAGE_ARG_INDEX = 3
         const val UNKNOWN_UID = -1
         val exactCommitSequence = AtomicLong()
         val listenerProbeSequence = AtomicLong()
     }
 }
+
+private fun Method.signature(): ClipboardHookMethodSignature = ClipboardHookMethodSignature(
+    name = name,
+    parameterTypes = parameterTypes.map { type -> type.name },
+)
+
+private fun ClipboardHookMethodSignature.describe(): String =
+    "$name(${parameterTypes.joinToString()})"
 
 internal fun shouldDispatchExactClipboardCommit(hasClip: Boolean, deviceId: Int?): Boolean =
     hasClip && deviceId == Context.DEVICE_ID_DEFAULT
