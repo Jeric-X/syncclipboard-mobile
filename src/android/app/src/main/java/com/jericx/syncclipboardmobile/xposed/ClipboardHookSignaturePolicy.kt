@@ -58,6 +58,11 @@ internal data class ClipboardListenerHookSelection(
     val layout: ClipboardListenerHookLayout,
 )
 
+internal data class ExactClipboardListenerScope(
+    val userId: Int,
+    val deviceId: Int,
+)
+
 internal fun selectExactClipboardCommitHook(
     methods: List<ClipboardHookMethodSignature>,
 ): ExactClipboardCommitHookSelection? {
@@ -90,11 +95,39 @@ internal fun selectClipboardListenerHook(
     return null
 }
 
+internal fun buildExactClipboardListenerScope(
+    layout: ClipboardListenerHookLayout,
+    userId: Int?,
+    deviceId: Int?,
+): ExactClipboardListenerScope? {
+    if (userId == null || userId < 0) return null
+    val resolvedDeviceId = if (layout.deviceIdArgIndex == null) {
+        DEFAULT_DEVICE_ID
+    } else {
+        deviceId ?: return null
+    }
+    if (resolvedDeviceId < 0) return null
+    return ExactClipboardListenerScope(userId, resolvedDeviceId)
+}
+
+internal fun shouldDispatchToExactClipboardListener(
+    listenerScope: ExactClipboardListenerScope,
+    commitUserId: Int,
+    commitDeviceId: Int,
+): Boolean =
+    listenerScope.userId == commitUserId && listenerScope.deviceId == commitDeviceId
+
+/** Mirrors UserHandle.getUserId without calling the hidden framework API. */
+internal fun userIdFromUid(uid: Int): Int? =
+    if (uid >= 0) uid / PER_USER_RANGE else null
+
 private const val CLIP_DATA = "android.content.ClipData"
 private const val PRIMARY_CLIP_CHANGED_LISTENER =
     "android.content.IOnPrimaryClipChangedListener"
 private const val INT = "int"
 private const val STRING = "java.lang.String"
+private const val DEFAULT_DEVICE_ID = 0
+private const val PER_USER_RANGE = 100_000
 
 internal const val EXACT_COMMIT_METHOD = "setPrimaryClipInternalLocked"
 internal const val ADD_LISTENER_METHOD = "addPrimaryClipChangedListener"

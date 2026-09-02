@@ -30,7 +30,7 @@ class SyncClipboardXposedModule : XposedModule() {
         private set
 
     private val exactListenerLock = Any()
-    private val exactListeners = IdentityHashMap<IBinder, IBinder.DeathRecipient>()
+    private val exactListeners = IdentityHashMap<IBinder, ExactListenerRecord>()
 
     override fun onModuleLoaded(param: ModuleLoadedParam) {
         log(Log.INFO, TAG, "Module loaded in ${param.processName}")
@@ -72,10 +72,22 @@ class SyncClipboardXposedModule : XposedModule() {
                 } ?: Context.DEVICE_ID_DEFAULT
 
                 if (shouldDispatchExactClipboardCommit(clip != null, deviceId)) {
-                    val uid = chain.args.getOrNull(commitLayout.uidArgIndex) as? Int ?: UNKNOWN_UID
+                    val uid = chain.args.getOrNull(commitLayout.uidArgIndex) as? Int
                     val sourcePackage =
                         chain.args.getOrNull(commitLayout.sourcePackageArgIndex) as? String
-                    if (!eventHandler.post { dispatchExactClipboardCommit(uid, sourcePackage) }) {
+                    val userId = uid?.let(::userIdFromUid)
+                    if (uid == null || userId == null) {
+                        log(Log.WARN, TAG, "Exact clipboard commit event dropped: uid unavailable")
+                    } else if (
+                        !eventHandler.post {
+                            dispatchExactClipboardCommit(
+                                uid,
+                                userId,
+                                deviceId,
+                                sourcePackage,
+                            )
+                        }
+                    ) {
                         log(Log.WARN, TAG, "Exact clipboard commit event dropped: handler unavailable")
                     }
                 }
@@ -109,6 +121,7 @@ class SyncClipboardXposedModule : XposedModule() {
         val removeListenerMethod = listenerMethods.singleOrNull { method ->
             method.signature() == removeSelection.signature
         } ?: error("Clipboard listener remove signature is ambiguous")
+        val listenerLayout = addSelection.layout
         // Keep the synchronous challenge scoped to this Binder thread; never mark an app-owned
         // BinderProxy as permanently safe for blocking calls from system_server.
         val allowBlockingForCurrentThread = Binder::class.java.getDeclaredMethod(
@@ -121,10 +134,21 @@ class SyncClipboardXposedModule : XposedModule() {
         hook(addListenerMethod)
             .setId(LISTENER_ADD_HOOK_ID)
             .intercept { chain ->
-                val listener = chain.args.firstOrNull() as? IInterface
+                val listener =
+                    chain.args.getOrNull(listenerLayout.listenerArgIndex) as? IInterface
+                val userId = chain.args.getOrNull(listenerLayout.userIdArgIndex) as? Int
+                val deviceId = listenerLayout.deviceIdArgIndex?.let { index ->
+                    chain.args.getOrNull(index) as? Int
+                }
+                val listenerScope = buildExactClipboardListenerScope(
+                    listenerLayout,
+                    userId,
+                    deviceId,
+                )
                 val callingUid = Binder.getCallingUid()
                 if (
                     listener != null &&
+                    listenerScope != null &&
                     shouldAttemptExactListenerTakeover(
                         exactWriteHookInstalled,
                         listenerTakeoverHookInstalled,
@@ -135,9 +159,14 @@ class SyncClipboardXposedModule : XposedModule() {
                         allowBlockingForCurrentThread,
                         defaultBlockingForCurrentThread,
                     ) &&
-                    registerExactClipboardListener(listener.asBinder())
+                    registerExactClipboardListener(listener.asBinder(), listenerScope)
                 ) {
-                    log(Log.INFO, TAG, "Exact listener takeover active; AOSP registration skipped")
+                    log(
+                        Log.INFO,
+                        TAG,
+                        "Exact listener takeover active for user=${listenerScope.userId} " +
+                            "device=${listenerScope.deviceId}; AOSP registration skipped",
+                    )
                     null
                 } else {
                     chain.proceed()
@@ -215,9 +244,21 @@ class SyncClipboardXposedModule : XposedModule() {
         }
     }
 
-    private fun registerExactClipboardListener(listenerBinder: IBinder): Boolean {
+    private fun registerExactClipboardListener(
+        listenerBinder: IBinder,
+        scope: ExactClipboardListenerScope,
+    ): Boolean {
         synchronized(exactListenerLock) {
-            if (exactListeners.containsKey(listenerBinder)) return true
+            val existing = exactListeners[listenerBinder]
+            if (existing != null) {
+                exactListeners[listenerBinder] = existing.copy(scope = scope)
+                log(
+                    Log.INFO,
+                    TAG,
+                    "Exact listener scope updated: user=${scope.userId} device=${scope.deviceId}",
+                )
+                return true
+            }
             if (!listenerBinder.isBinderAlive) {
                 log(Log.WARN, TAG, "Exact listener takeover failed: listener already dead")
                 return false
@@ -230,8 +271,13 @@ class SyncClipboardXposedModule : XposedModule() {
             }
             return try {
                 listenerBinder.linkToDeath(deathRecipient, 0)
-                exactListeners[listenerBinder] = deathRecipient
-                log(Log.INFO, TAG, "Exact listener registered; listeners=${exactListeners.size}")
+                exactListeners[listenerBinder] = ExactListenerRecord(deathRecipient, scope)
+                log(
+                    Log.INFO,
+                    TAG,
+                    "Exact listener registered for user=${scope.userId} device=${scope.deviceId}; " +
+                        "listeners=${exactListeners.size}",
+                )
                 true
             } catch (error: Throwable) {
                 log(Log.WARN, TAG, "Exact listener takeover failed; AOSP registration preserved", error)
@@ -241,11 +287,11 @@ class SyncClipboardXposedModule : XposedModule() {
     }
 
     private fun unregisterExactClipboardListener(listenerBinder: IBinder): Boolean {
-        val deathRecipient = synchronized(exactListenerLock) {
+        val record = synchronized(exactListenerLock) {
             exactListeners.remove(listenerBinder)
         } ?: return false
 
-        runCatching { listenerBinder.unlinkToDeath(deathRecipient, 0) }
+        runCatching { listenerBinder.unlinkToDeath(record.deathRecipient, 0) }
             .onFailure { error ->
                 log(Log.DEBUG, TAG, "Exact listener death recipient already removed", error)
             }
@@ -257,7 +303,7 @@ class SyncClipboardXposedModule : XposedModule() {
         deathRecipient: IBinder.DeathRecipient,
     ) {
         val removed = synchronized(exactListenerLock) {
-            if (exactListeners[listenerBinder] !== deathRecipient) {
+            if (exactListeners[listenerBinder]?.deathRecipient !== deathRecipient) {
                 false
             } else {
                 exactListeners.remove(listenerBinder)
@@ -269,19 +315,30 @@ class SyncClipboardXposedModule : XposedModule() {
         }
     }
 
-    private fun exactListenerSnapshot(): List<IBinder> =
-        synchronized(exactListenerLock) { exactListeners.keys.toList() }
+    private fun exactListenerSnapshot(): List<Pair<IBinder, ExactClipboardListenerScope>> =
+        synchronized(exactListenerLock) {
+            exactListeners.map { (binder, record) -> binder to record.scope }
+        }
 
-    private fun dispatchExactClipboardCommit(uid: Int, sourcePackage: String?) {
+    private fun dispatchExactClipboardCommit(
+        uid: Int,
+        userId: Int,
+        deviceId: Int,
+        sourcePackage: String?,
+    ) {
         val sequence = exactCommitSequence.incrementAndGet()
         val listeners = exactListenerSnapshot()
+        val matchingListeners = listeners.filter { (_, scope) ->
+            shouldDispatchToExactClipboardListener(scope, userId, deviceId)
+        }
         log(
             Log.DEBUG,
             TAG,
-            "Exact clipboard commit #$sequence uid=$uid sourcePackage=${sourcePackage ?: "unknown"} " +
-                "listeners=${listeners.size}",
+            "Exact clipboard commit #$sequence uid=$uid user=$userId device=$deviceId " +
+                "sourcePackage=${sourcePackage ?: "unknown"} " +
+                "listeners=${matchingListeners.size}/${listeners.size}",
         )
-        listeners.forEach(::dispatchExactListener)
+        matchingListeners.forEach { (binder, _) -> dispatchExactListener(binder) }
     }
 
     private fun dispatchExactListener(listenerBinder: IBinder) {
@@ -308,6 +365,11 @@ class SyncClipboardXposedModule : XposedModule() {
     }
 
     private companion object {
+        data class ExactListenerRecord(
+            val deathRecipient: IBinder.DeathRecipient,
+            val scope: ExactClipboardListenerScope,
+        )
+
         const val TAG = "SyncClipboardXposed"
         const val CLIPBOARD_SERVICE_CLASS = "com.android.server.clipboard.ClipboardService"
         const val CLIPBOARD_IMPL_CLASS =
@@ -318,7 +380,6 @@ class SyncClipboardXposedModule : XposedModule() {
         const val LISTENER_ADD_HOOK_ID = "syncclipboard.exact-listener-add"
         const val LISTENER_REMOVE_HOOK_ID = "syncclipboard.exact-listener-remove"
         const val TRANSACTION_DISPATCH_PRIMARY_CLIP_CHANGED = IBinder.FIRST_CALL_TRANSACTION
-        const val UNKNOWN_UID = -1
         val exactCommitSequence = AtomicLong()
         val listenerProbeSequence = AtomicLong()
     }
