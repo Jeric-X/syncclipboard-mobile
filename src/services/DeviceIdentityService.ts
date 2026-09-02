@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
+import { Platform } from 'react-native';
+import { getOrCreateNoBackupDeviceId } from 'native-util';
 import { STORAGE_KEYS } from '../types/storage';
 
 export const SYNC_DEVICE_ID_HEADER = 'X-SyncClipboard-Device-Id';
@@ -11,13 +13,23 @@ export interface DeviceIdentityStorage {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const installationIdentityStorage: DeviceIdentityStorage = {
+  getItem: async (key) => {
+    if (Platform.OS !== 'android') return AsyncStorage.getItem(key);
+    return getOrCreateNoBackupDeviceId();
+  },
+  setItem: async (key, value) => {
+    if (Platform.OS !== 'android') await AsyncStorage.setItem(key, value);
+  },
+};
+
 /** Owns the stable, installation-scoped identity used by sync transport metadata. */
 export class DeviceIdentityService {
   private deviceId: string | null = null;
   private loadPromise: Promise<string> | null = null;
 
   constructor(
-    private readonly storage: DeviceIdentityStorage = AsyncStorage,
+    private readonly storage: DeviceIdentityStorage = installationIdentityStorage,
     private readonly generateUuid: () => string = () => Crypto.randomUUID()
   ) {}
 

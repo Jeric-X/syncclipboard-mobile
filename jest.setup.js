@@ -70,6 +70,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 jest.mock('native-util', () => ({
   getCurrentNetworkInfo: jest.fn(() => null),
   getElapsedRealtimeMs: jest.fn(() => 0),
+  getOrCreateNoBackupDeviceId: jest.fn(() => '123e4567-e89b-42d3-a456-426614174000'),
   addNetworkChangeListener: jest.fn(() => ({ remove: jest.fn() })),
   isLocationServicesEnabled: jest.fn(() => true),
   openLocationSettings: jest.fn(() => true),

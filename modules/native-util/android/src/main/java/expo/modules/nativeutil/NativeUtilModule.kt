@@ -121,6 +121,14 @@ class NativeUtilModule : Module() {
             SystemClock.elapsedRealtime().toDouble()
         }
 
+        Function("getOrCreateNoBackupDeviceId") {
+            val context = appContext.reactContext
+                ?: throw CodedException("Context not available")
+            DeviceIdentityFileStore.getOrCreate(
+                File(context.noBackupFilesDir, DeviceIdentityFileStore.FILE_NAME)
+            )
+        }
+
         Function("isLocationServicesEnabled") {
             NetworkSettingsHelper.isLocationServicesEnabled(appContext.reactContext)
         }

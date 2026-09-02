@@ -73,6 +73,7 @@ export interface NativeUtilModuleType {
   moveTaskToBack(): boolean;
   getCurrentNetworkInfo(): NativeCurrentNetworkInfo;
   getElapsedRealtimeMs(): number;
+  getOrCreateNoBackupDeviceId(): string;
   isLocationServicesEnabled(): boolean;
   openLocationSettings(): boolean;
   showNotification(options: NativeNotificationOptions): boolean;
@@ -135,6 +136,12 @@ export function getCurrentNetworkInfo(): NativeCurrentNetworkInfo | null {
 export function getElapsedRealtimeMs(): number | null {
   if (Platform.OS !== 'android') return null;
   return NativeUtilModule.getElapsedRealtimeMs();
+}
+
+/** Returns an installation identity stored below Android's no-backup directory. */
+export function getOrCreateNoBackupDeviceId(): string | null {
+  if (Platform.OS !== 'android') return null;
+  return NativeUtilModule.getOrCreateNoBackupDeviceId();
 }
 
 /** Subscribe to Android default-network invalidation events. */
