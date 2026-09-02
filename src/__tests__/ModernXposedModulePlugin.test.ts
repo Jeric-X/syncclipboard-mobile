@@ -1,4 +1,8 @@
-import { addLibXposedCompileOnly, addLibXposedR8Rules } from '../../plugins/withModernXposedModule';
+import {
+  addAndroidUnitTestDependency,
+  addLibXposedCompileOnly,
+  addLibXposedR8Rules,
+} from '../../plugins/withModernXposedModule';
 
 describe('modern Xposed module config plugin', () => {
   it('adds the API 102 compileOnly dependency exactly once', () => {
@@ -15,5 +19,13 @@ describe('modern Xposed module config plugin', () => {
     expect(configured).toContain('-adaptresourcefilecontents META-INF/xposed/java_init.list');
     expect(configured).toContain('extends io.github.libxposed.api.XposedModule');
     expect(addLibXposedR8Rules(configured)).toBe(configured);
+  });
+
+  it('adds the Android unit-test dependency exactly once', () => {
+    const buildGradle = 'dependencies {\n}';
+    const configured = addAndroidUnitTestDependency(buildGradle);
+
+    expect(configured).toContain('testImplementation "junit:junit:4.13.2"');
+    expect(addAndroidUnitTestDependency(configured)).toBe(configured);
   });
 });

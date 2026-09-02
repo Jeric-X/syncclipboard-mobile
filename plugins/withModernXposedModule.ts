@@ -9,6 +9,7 @@ import {
 } from 'expo/config-plugins';
 
 const LIBXPOSED_API = 'io.github.libxposed:api:102.0.0';
+const JUNIT = 'junit:junit:4.13.2';
 
 export const LIBXPOSED_R8_RULES = `# modern libxposed API
 -dontwarn io.github.libxposed.annotation.**
@@ -26,6 +27,11 @@ export function addLibXposedCompileOnly(contents: string): string {
   );
 }
 
+export function addAndroidUnitTestDependency(contents: string): string {
+  if (contents.includes(JUNIT)) return contents;
+  return contents.replace(/dependencies\s*\{/, `dependencies {\n    testImplementation "${JUNIT}"`);
+}
+
 export function addLibXposedR8Rules(contents: string): string {
   if (contents.includes('-adaptresourcefilecontents META-INF/xposed/java_init.list')) {
     return contents;
@@ -36,7 +42,9 @@ export function addLibXposedR8Rules(contents: string): string {
 /** Packages an optional modern libxposed entry point without changing non-LSPosed behavior. */
 const withModernXposedModule: ConfigPlugin = (config) => {
   config = withAppBuildGradle(config, (modConfig) => {
-    modConfig.modResults.contents = addLibXposedCompileOnly(modConfig.modResults.contents);
+    modConfig.modResults.contents = addAndroidUnitTestDependency(
+      addLibXposedCompileOnly(modConfig.modResults.contents)
+    );
     return modConfig;
   });
 

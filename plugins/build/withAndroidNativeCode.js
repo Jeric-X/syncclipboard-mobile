@@ -20,6 +20,9 @@ const withAndroidNativeCode = (config) => {
         assets.srcDirs += '${srcAndroidPath}/app/src/main/assets'
         resources.srcDirs += '${srcAndroidPath}/app/src/main/resources'
       }
+      test {
+        java.srcDirs += '${srcAndroidPath}/app/src/test/java'
+      }
     }
 `;
         // Check if sourceSets already exists

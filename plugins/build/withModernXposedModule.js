@@ -5,11 +5,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LIBXPOSED_R8_RULES = void 0;
 exports.addLibXposedCompileOnly = addLibXposedCompileOnly;
+exports.addAndroidUnitTestDependency = addAndroidUnitTestDependency;
 exports.addLibXposedR8Rules = addLibXposedR8Rules;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const config_plugins_1 = require("expo/config-plugins");
 const LIBXPOSED_API = 'io.github.libxposed:api:102.0.0';
+const JUNIT = 'junit:junit:4.13.2';
 exports.LIBXPOSED_R8_RULES = `# modern libxposed API
 -dontwarn io.github.libxposed.annotation.**
 -adaptresourcefilecontents META-INF/xposed/java_init.list
@@ -22,6 +24,11 @@ function addLibXposedCompileOnly(contents) {
         return contents;
     return contents.replace(/dependencies\s*\{/, `dependencies {\n    compileOnly "${LIBXPOSED_API}"`);
 }
+function addAndroidUnitTestDependency(contents) {
+    if (contents.includes(JUNIT))
+        return contents;
+    return contents.replace(/dependencies\s*\{/, `dependencies {\n    testImplementation "${JUNIT}"`);
+}
 function addLibXposedR8Rules(contents) {
     if (contents.includes('-adaptresourcefilecontents META-INF/xposed/java_init.list')) {
         return contents;
@@ -31,7 +38,7 @@ function addLibXposedR8Rules(contents) {
 /** Packages an optional modern libxposed entry point without changing non-LSPosed behavior. */
 const withModernXposedModule = (config) => {
     config = (0, config_plugins_1.withAppBuildGradle)(config, (modConfig) => {
-        modConfig.modResults.contents = addLibXposedCompileOnly(modConfig.modResults.contents);
+        modConfig.modResults.contents = addAndroidUnitTestDependency(addLibXposedCompileOnly(modConfig.modResults.contents));
         return modConfig;
     });
     config = (0, config_plugins_1.withAndroidManifest)(config, (modConfig) => {
