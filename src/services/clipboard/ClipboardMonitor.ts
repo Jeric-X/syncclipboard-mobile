@@ -179,6 +179,11 @@ export class ClipboardMonitor {
         },
         () => {
           void this.fallbackToPollingAfterNativeListenerLoss();
+        },
+        () => {
+          if (!this.isMonitoring || !this.nativeClipboardListenerCleanup) return;
+          this.stopPolling();
+          console.log('[ClipboardMonitor] Shizuku primary-clip event listener restored');
         }
       );
       if (!cleanup) {
@@ -206,7 +211,6 @@ export class ClipboardMonitor {
   }
 
   private async fallbackToPollingAfterNativeListenerLoss(): Promise<void> {
-    await this.stopNativeClipboardListener();
     if (this.isMonitoring && !this.pollingTimerTag) {
       console.warn('[ClipboardMonitor] Shizuku listener unavailable; falling back to polling');
       this.startPolling();

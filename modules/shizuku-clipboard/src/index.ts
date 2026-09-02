@@ -14,7 +14,10 @@ interface ShizukuClipboardModuleInterface {
   startPrimaryClipChangedListener(): Promise<boolean>;
   stopPrimaryClipChangedListener(): Promise<void>;
   addListener(
-    eventName: 'onPrimaryClipChanged' | 'onPrimaryClipListenerUnavailable',
+    eventName:
+      | 'onPrimaryClipChanged'
+      | 'onPrimaryClipListenerUnavailable'
+      | 'onPrimaryClipListenerAvailable',
     listener: () => void
   ): EventSubscription;
 }
@@ -97,7 +100,8 @@ export async function getImageUriViaShizuku(): Promise<string | null> {
  */
 export async function subscribeToPrimaryClipChanges(
   callback: () => void,
-  onUnavailable?: () => void
+  onUnavailable?: () => void,
+  onAvailable?: () => void
 ): Promise<(() => Promise<void>) | null> {
   if (!NativeModule) return null;
 
@@ -105,21 +109,27 @@ export async function subscribeToPrimaryClipChanges(
   const unavailableSubscription = onUnavailable
     ? NativeModule.addListener('onPrimaryClipListenerUnavailable', onUnavailable)
     : null;
+  const availableSubscription = onAvailable
+    ? NativeModule.addListener('onPrimaryClipListenerAvailable', onAvailable)
+    : null;
   try {
     if (!(await NativeModule.startPrimaryClipChangedListener())) {
       subscription.remove();
       unavailableSubscription?.remove();
+      availableSubscription?.remove();
       return null;
     }
   } catch (e) {
     subscription.remove();
     unavailableSubscription?.remove();
+    availableSubscription?.remove();
     throw e;
   }
 
   return async () => {
     subscription.remove();
     unavailableSubscription?.remove();
+    availableSubscription?.remove();
     await NativeModule.stopPrimaryClipChangedListener();
   };
 }

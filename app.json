@@ -37,6 +37,7 @@
       "./plugins/build/withShareActivity.js",
       "./plugins/build/withServiceRestartActivity.js",
       "./plugins/build/withAndroidNativeCode.js",
+      "./plugins/build/withModernXposedModule.js",
       "./plugins/build/withClipboardOverlayPermission.js",
       "./plugins/build/withNativeUtilPermission.js",
       "./plugins/build/withSmsPermission.js",

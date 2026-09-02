@@ -18,6 +18,10 @@ const withAndroidNativeCode = (config) => {
         java.srcDirs += '${srcAndroidPath}/app/src/main/java'
         res.srcDirs += '${srcAndroidPath}/app/src/main/res'
         assets.srcDirs += '${srcAndroidPath}/app/src/main/assets'
+        resources.srcDirs += '${srcAndroidPath}/app/src/main/resources'
+      }
+      test {
+        java.srcDirs += '${srcAndroidPath}/app/src/test/java'
       }
     }
 `;

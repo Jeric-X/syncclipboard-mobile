@@ -71,7 +71,7 @@ class ShizukuClipboardModule : Module() {
             .daemon(true)
             .processNameSuffix("clipboard")
             .debuggable(true)
-            .version(8)
+            .version(9)
     }
 
     /** Creates a callback object tied to exactly one bind attempt. */
@@ -85,6 +85,7 @@ class ShizukuClipboardModule : Module() {
                 NativeLogger.w(TAG, "UserService disconnected")
                 if (markConnectionFailed(this) && clipboardListenerRequested) {
                     sendClipboardListenerUnavailable()
+                    bindUserService()
                 }
             }
         }
@@ -380,8 +381,19 @@ class ShizukuClipboardModule : Module() {
     private fun restoreClipboardListenerAfterConnection(service: IClipboardUserService) {
         synchronized(listenerRegistrationLock) {
             if (!clipboardListenerRequested) return
-            if (!tryRegisterClipboardListener(service)) {
+            if (tryRegisterClipboardListener(service)) {
+                sendClipboardListenerAvailable()
+            } else {
                 sendClipboardListenerUnavailable()
+            }
+        }
+    }
+
+    private fun sendClipboardListenerAvailable() {
+        mainHandler.post {
+            if (clipboardListenerRequested) {
+                NativeLogger.i(TAG, "Primary-clip listener restored")
+                sendEvent("onPrimaryClipListenerAvailable", emptyMap<String, Any>())
             }
         }
     }
@@ -453,7 +465,11 @@ class ShizukuClipboardModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("ShizukuClipboardModule")
 
-        Events("onPrimaryClipChanged", "onPrimaryClipListenerUnavailable")
+        Events(
+            "onPrimaryClipChanged",
+            "onPrimaryClipListenerUnavailable",
+            "onPrimaryClipListenerAvailable"
+        )
 
         OnCreate {
             try {
