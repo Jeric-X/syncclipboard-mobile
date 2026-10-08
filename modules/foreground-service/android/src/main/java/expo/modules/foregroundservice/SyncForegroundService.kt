@@ -5,18 +5,33 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
-import expo.modules.nativeutil.NativeLogger
+import android.os.Looper
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import com.facebook.react.ReactApplication
+import com.facebook.react.ReactInstanceEventListener
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.ReactContext
+import com.facebook.react.jstasks.HeadlessJsTaskConfig
+import com.facebook.react.jstasks.HeadlessJsTaskContext
+import com.facebook.react.jstasks.HeadlessJsTaskEventListener
+import expo.modules.nativeutil.NativeLogger
+import java.util.UUID
 
-class SyncForegroundService : Service() {
-
+/** 前台服务直接持有 Headless JS 会话，不依赖 Activity 创建或恢复 JS。 */
+class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
     companion object {
         private const val TAG = "SyncForegroundService"
         private const val APP_PACKAGE = "com.jericx.syncclipboardmobile"
+        private const val STARTUP_TIMEOUT_MS = 60_000L
+        private const val PREFS = "sync_foreground_runtime"
+        private const val STOP_REASON = "stop_reason"
         const val CHANNEL_ID = "syncclipboard_foreground"
         const val NOTIFY_ID = 0x2020
         const val ACTION_START = "START"
@@ -26,14 +41,45 @@ class SyncForegroundService : Service() {
         const val EXTRA_CONTENT = "content"
         const val RESTART_NOTIFY_ID = 0x2021
         private const val RESTART_CHANNEL_ID = "syncclipboard_restart"
-
-        var isRunning = false
+        @Volatile private var instance: SyncForegroundService? = null
+        @Volatile var isRunning = false
             private set
+        @Volatile internal var stoppedByUser = false
 
-        internal var stoppedByUser = false
+        fun currentSessionId(): String? = instance?.takeIf { isRunning }?.sessionId
+        fun getStopReason(context: Context): String? =
+            context.getSharedPreferences(PREFS, MODE_PRIVATE).getString(STOP_REASON, null)
+        fun clearStopReason(context: Context) {
+            context.getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(STOP_REASON).commit()
+        }
+        fun markSessionReady(sessionId: String) {
+            val service = instance ?: return
+            service.handler.post {
+                if (isRunning && service.sessionId == sessionId) {
+                    service.handler.removeCallbacks(service.startupTimeout)
+                    service.releaseStartupWakeLock()
+                    service.notificationManager?.cancel(RESTART_NOTIFY_ID)
+                    NativeLogger.i(TAG, "Headless sync ready: $sessionId")
+                }
+            }
+        }
     }
 
+    @Volatile private var sessionId = UUID.randomUUID().toString()
+    private val handler = Handler(Looper.getMainLooper())
     private var notificationManager: NotificationManager? = null
+    private var startupWakeLock: PowerManager.WakeLock? = null
+    private var taskContext: HeadlessJsTaskContext? = null
+    private var taskReactContext: ReactContext? = null
+    private var taskId: Int? = null
+    private var contextListener: ReactInstanceEventListener? = null
+    private val reactHost get() = (application as ReactApplication).reactHost
+    private val startupTimeout = Runnable {
+        if (isRunning) {
+            NativeLogger.w(TAG, "Headless startup timed out")
+            pauseAndStop("temporary", showRecovery = true)
+        }
+    }
 
     private fun getAppString(name: String): String {
         val resId = resources.getIdentifier(name, "string", APP_PACKAGE)
@@ -42,133 +88,171 @@ class SyncForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        NativeLogger.d(TAG, "Service onCreate")
+        instance = this
+        stoppedByUser = false
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        NativeLogger.d(TAG, "onStartCommand action=${intent?.action} flags=$flags startId=$startId")
+        NativeLogger.d(TAG, "onStartCommand action=${intent?.action}, session=$sessionId")
         when (intent?.action) {
-            ACTION_START, null -> {
-                NativeLogger.d(TAG, "Starting foreground, intent action=${intent?.action}")
-
-                // 系统 START_STICKY 重启时：
-                //   - intent 为 null：系统直接重启
-                //   - intent.action == ACTION_START 但 jsInitiatedService == false：
-                //     系统重投了上次的 ACTION_START intent，JS 并未实际运行
-                // 以上两种情况：JS 不存在，不启动前台服务，仅发重启引导通知
-                if (intent == null || !ForegroundServiceModule.isJsRuntimeAlive()) {
-                    NativeLogger.w(TAG, "Service restarted by system (intent=${intent?.action}, jsAlive=${ForegroundServiceModule.isJsRuntimeAlive()}), JS not running, showing restart notification")
-                    showRestartNotification()
-                    stoppedByUser = true  // 防止 onDestroy 再次发重启通知
-                    stopSelf()
-                    return START_NOT_STICKY
-                }
-
-                val notification = createNotification(getAppString("fg_notification_running"))
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    startForeground(NOTIFY_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-                } else {
-                    startForeground(NOTIFY_ID, notification)
-                }
-                NativeLogger.d(TAG, "startForeground called successfully")
-                isRunning = true
-            }
             ACTION_STOP -> {
-                NativeLogger.d(TAG, "Stopping foreground service (permanent)")
-                stoppedByUser = true
-                if (!isRunning) {
-                    val notification = createNotification(getAppString("fg_notification_stopping"))
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        startForeground(NOTIFY_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-                    } else {
-                        startForeground(NOTIFY_ID, notification)
-                    }
-                }
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-                isRunning = false
-                ForegroundServiceModule.sendStopEvent()
+                pauseAndStop("stop")
+                return START_NOT_STICKY
             }
             ACTION_TEMP_STOP -> {
-                NativeLogger.d(TAG, "Stopping foreground service (temporary)")
-                stoppedByUser = true
-                if (!isRunning) {
-                    val notification = createNotification(getAppString("fg_notification_stopping"))
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        startForeground(NOTIFY_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-                    } else {
-                        startForeground(NOTIFY_ID, notification)
-                    }
-                }
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-                isRunning = false
-                ForegroundServiceModule.sendTempStopEvent()
+                pauseAndStop("temporary")
+                return START_NOT_STICKY
             }
             ACTION_UPDATE -> {
-                val content = intent.getStringExtra(EXTRA_CONTENT) ?: getAppString("fg_notification_running")
-                updateNotification(content)
+                if (isRunning) updateNotification(intent.getStringExtra(EXTRA_CONTENT)
+                    ?: getAppString("fg_notification_running"))
+                return if (isRunning) START_STICKY else START_NOT_STICKY
             }
-            else -> {
-                val notification = createNotification(getAppString("fg_notification_running"))
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    startForeground(NOTIFY_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-                } else {
-                    startForeground(NOTIFY_ID, notification)
+            ACTION_START, null -> {
+                try {
+                    // 必须先兑现前台服务启动时限，再等待 ReactHost/配置初始化。
+                    promoteToForeground()
+                    if (getStopReason(this) != null) {
+                        stoppedByUser = true
+                        stopSelf()
+                        return START_NOT_STICKY
+                    }
+                    isRunning = true
+                    startHeadlessSession()
+                } catch (error: Exception) {
+                    NativeLogger.e(TAG, "Cannot start headless sync", error)
+                    pauseAndStop("temporary", showRecovery = true)
+                    return START_NOT_STICKY
                 }
-                isRunning = true
             }
+            else -> return START_NOT_STICKY
         }
         return START_STICKY
     }
 
+    private fun promoteToForeground() {
+        val notification = createNotification(getAppString("fg_notification_running"))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFY_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(NOTIFY_ID, notification)
+        }
+    }
+
+    private fun startHeadlessSession() {
+        val host = checkNotNull(reactHost) { "ReactHost is unavailable" }
+        val context = host.currentReactContext
+        if (contextListener != null) return
+        if (context === taskReactContext && taskId?.let { taskContext?.isTaskRunning(it) } == true) return
+        // JS reload 时换一代会话，迟到的完成回调不能终止新任务。
+        if (taskId != null) {
+            releaseTask()
+            sessionId = UUID.randomUUID().toString()
+        }
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        startupWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:sync-startup")
+            .apply { setReferenceCounted(false); acquire(STARTUP_TIMEOUT_MS) }
+        handler.postDelayed(startupTimeout, STARTUP_TIMEOUT_MS)
+        if (context != null) {
+            launchTask(context)
+        } else {
+            val listener = object : ReactInstanceEventListener {
+                override fun onReactContextInitialized(context: ReactContext) {
+                    handler.post {
+                        host.removeReactInstanceEventListener(this)
+                        contextListener = null
+                        if (instance === this@SyncForegroundService && isRunning && !stoppedByUser) {
+                            launchTask(context)
+                        }
+                    }
+                }
+            }
+            contextListener = listener
+            host.addReactInstanceEventListener(listener)
+            host.start()
+        }
+    }
+
+    private fun launchTask(context: ReactContext) {
+        try {
+            taskReactContext = context
+            taskContext = HeadlessJsTaskContext.getInstance(context).also { tasks ->
+                tasks.addTaskEventListener(this)
+                taskId = tasks.startTask(HeadlessJsTaskConfig(
+                    "ServiceRuntimeHeadlessTask",
+                    Arguments.createMap().apply { putString("sessionId", sessionId) },
+                    0L,
+                    true
+                ))
+            }
+            NativeLogger.i(TAG, "Started Headless JS task=$taskId, session=$sessionId")
+        } catch (error: Exception) {
+            NativeLogger.e(TAG, "Cannot launch Headless JS task", error)
+            pauseAndStop("temporary", showRecovery = true)
+        }
+    }
+
+    override fun onHeadlessJsTaskStart(taskId: Int) = Unit
+
+    override fun onHeadlessJsTaskFinish(taskId: Int) {
+        // 短信上传等其他 Headless 任务完成不能停止同步服务。
+        if (this.taskId != taskId) return
+        if (isRunning && !stoppedByUser) pauseAndStop("temporary", showRecovery = true)
+    }
+
+    private fun releaseTask() {
+        taskContext?.removeTaskEventListener(this)
+        taskId?.let { taskContext?.finishTask(it) }
+        taskId = null
+        taskContext = null
+        taskReactContext = null
+    }
+
+    private fun releaseStartupWakeLock() {
+        startupWakeLock?.let { if (it.isHeld) it.release() }
+        startupWakeLock = null
+    }
+
+    private fun pauseAndStop(reason: String, showRecovery: Boolean = false) {
+        // 先持久化，确保 JS 尚未启动或进程随后死亡时也不会丢失用户的停止操作。
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(STOP_REASON, reason).commit()
+        stoppedByUser = true
+        if (reason == "stop") ForegroundServiceModule.sendStopEvent()
+        else ForegroundServiceModule.sendTempStopEvent()
+        if (showRecovery) showRestartNotification()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        isRunning = false
+        stopSelf()
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
-    /**
-     * Android 14+ 回调：dataSync 类型前台服务 6小时/24小时配额耗尽时由系统调用。
-     * 若不在此回调中及时停止，系统会强制 ANR 终止进程（不经过 onDestroy 优雅路径）。
-     * 处理同用户临时停止：通知 JS 侧重新调度，下次 App 进入前台时重启服务。
-     */
-    @androidx.annotation.RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-    override fun onTimeout(startId: Int) {
-        NativeLogger.w(TAG, "dataSync foreground service timed out (6h/24h quota exhausted), stopping gracefully")
-        stoppedByUser = true
-        showRestartNotification(contentText = getAppString("fg_timeout_content"))
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
-        isRunning = false
+    // Android 15 的 dataSync 配额使用带 fgsType 的回调；单参回调属于 shortService。
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        NativeLogger.w(TAG, "Foreground service timeout, type=$fgsType")
+        pauseAndStop("temporary", showRecovery = true)
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        val rootClassName = rootIntent?.component?.className.orEmpty()
-        val fromMainActivity = rootClassName.endsWith(".MainActivity")
-
-        if (!fromMainActivity) {
-            NativeLogger.d(TAG, "onTaskRemoved ignored: root=$rootClassName")
-            return
+        if (rootIntent?.component?.className?.endsWith(".MainActivity") == true) {
+            pauseAndStop("temporary")
         }
-
-        NativeLogger.d(TAG, "onTaskRemoved: user swiped app from recents, pausing background tasks")
-        stoppedByUser = true
-        isRunning = false
-        // 通知 JS 侧暂停所有后台任务（复用临时停止逻辑，回到前台自动恢复）
-        ForegroundServiceModule.sendTempStopEvent()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
     }
 
     override fun onDestroy() {
-        NativeLogger.d(TAG, "onDestroy called, stoppedByUser=$stoppedByUser, isRunning=$isRunning")
-        val wasRunning = isRunning
+        val endedSession = sessionId
+        val unexpected = isRunning && !stoppedByUser
         isRunning = false
-        // 非用户主动停止且之前确实在运行 → 可能被系统杀死，发通知引导重启
-        if (!stoppedByUser && wasRunning) {
-            NativeLogger.w(TAG, "Service destroyed unexpectedly, showing restart notification")
-            showRestartNotification()
-        }
-        stoppedByUser = false
+        instance = null
+        handler.removeCallbacks(startupTimeout)
+        contextListener?.let { reactHost?.removeReactInstanceEventListener(it) }
+        contextListener = null
+        releaseStartupWakeLock()
+        ForegroundServiceModule.sendSessionStopped(endedSession)
+        releaseTask()
+        if (unexpected) showRestartNotification()
         super.onDestroy()
     }
 

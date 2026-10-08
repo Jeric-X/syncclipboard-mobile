@@ -9,7 +9,14 @@ interface ForegroundServiceModuleType {
   updateNotification(content: string): boolean;
   isRunning(): boolean;
   cancelRestartNotification(): boolean;
-  addListener(eventName: string, listener: () => void): EventSubscription;
+  getSessionId(): string | null;
+  getStopReason(): string | null;
+  clearStopReason(): void;
+  markSessionReady(sessionId: string): void;
+  addListener(
+    eventName: string,
+    listener: (event: { sessionId: string }) => void
+  ): EventSubscription;
 }
 
 const NativeModule: ForegroundServiceModuleType | null =
@@ -62,4 +69,31 @@ export function addTempStopListener(listener: () => void): EventSubscription | n
     return NativeModule.addListener('onTempStopRequested', listener);
   }
   return null;
+}
+
+/** 当前原生服务会话；无服务或不支持的平台返回 null。 */
+export function getSessionId(): string | null {
+  return NativeModule?.getSessionId() ?? null;
+}
+
+/** 冷启动时补偿 JS 尚未就绪期间的通知操作。 */
+export function getStopReason(): string | null {
+  return NativeModule?.getStopReason() ?? null;
+}
+
+/** 配置落盘或用户回前台后确认已处理原生停止标记。 */
+export function clearStopReason(): void {
+  NativeModule?.clearStopReason();
+}
+
+/** 同步任务初始化完成，释放原生启动阶段的唤醒锁。 */
+export function markSessionReady(sessionId: string): void {
+  NativeModule?.markSessionReady(sessionId);
+}
+
+/** 服务销毁时结束对应的 Headless JS 任务。 */
+export function addSessionStoppedListener(
+  listener: (event: { sessionId: string }) => void
+): EventSubscription | null {
+  return NativeModule?.addListener('onSessionStopped', listener) ?? null;
 }

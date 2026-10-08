@@ -21,7 +21,7 @@ import { DirectShareReceiveScreen } from './screens/DirectShareReceiveScreen';
 import { SyncDirection } from './types/sync';
 import { useSettingsStore } from './stores';
 import { initLogger } from './utils/Logger';
-import { longRunningTaskManager } from './longRunningTask/LongRunningTaskManager';
+import { startServiceRuntime } from './services/ServiceRuntime';
 import { networkAutoSwitchService } from './services/NetworkAutoSwitchService';
 
 export interface ShareData {
@@ -59,7 +59,7 @@ export default function QuickActionApp({
   }, []);
 
   useEffect(() => {
-    if (!isLoaded) {
+    if (Platform.OS !== 'android' && !isLoaded) {
       loadConfig();
     }
   }, [isLoaded, loadConfig]);
@@ -77,7 +77,7 @@ export default function QuickActionApp({
       }
 
       if (cancelled) return;
-      longRunningTaskManager.startAll().catch(() => {});
+      startServiceRuntime().catch(() => {});
       setIsRuntimeReady(true);
     };
 

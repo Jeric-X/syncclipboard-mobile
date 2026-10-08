@@ -4,6 +4,7 @@
  */
 
 import { create } from 'zustand';
+import * as ForegroundService from 'foreground-service';
 import { AppConfig } from '../types/storage';
 import { ServerConfig } from '../types/api';
 import { ConflictResolution } from '../types/sync';
@@ -13,6 +14,7 @@ import type { NetworkAutoSwitchConfig, NetworkAutoSwitchRule } from '../types/ne
 import { createStableId } from '../utils/id';
 import { normalizeNetworkRule, validateNetworkRule } from '../utils/networkAutoSwitch';
 import { networkAutoSwitchService } from '../services/NetworkAutoSwitchService';
+import { updateBackgroundTaskPause } from '../utils/backgroundTaskPause';
 
 /**
  * 设置状态接口
@@ -130,7 +132,7 @@ interface SettingsState {
   /** 设置后台任务总开关 */
   setEnableBackgroundTasks: (enabled: boolean) => Promise<void>;
 
-  /** 是否被临时停止（不持久化，重启后自动恢复） */
+  /** 是否被临时停止（恢复时同步清理原生暂停标记） */
   isTempDisabledBackgroundTasks: boolean;
 
   /** 临时禁用/恢复后台任务（不修改持久化配置） */
@@ -415,14 +417,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setEnableBackgroundTasks: async (enabled: boolean) => {
     if (enabled) {
       // 用户主动开启时清除临时停止标志
-      backgroundRuntimeState.setTempDisabled(false);
-      set({ isTempDisabledBackgroundTasks: false });
+      get().setTempDisabledBackgroundTasks(false);
     }
     await get().updateConfig({ enableBackgroundTasks: enabled });
   },
 
   setTempDisabledBackgroundTasks: (disabled: boolean) => {
-    backgroundRuntimeState.setTempDisabled(disabled);
+    updateBackgroundTaskPause(disabled, {
+      getStopReason: ForegroundService.getStopReason,
+      clearStopReason: ForegroundService.clearStopReason,
+      setTempDisabled: (value) => backgroundRuntimeState.setTempDisabled(value),
+    });
     set({ isTempDisabledBackgroundTasks: disabled });
   },
 
