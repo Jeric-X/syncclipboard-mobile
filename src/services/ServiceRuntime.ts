@@ -2,7 +2,7 @@
  * 与 React 组件无关的服务运行时入口。
  * Activity 进入前台与原生 Headless 服务共享初始化和任务实例。
  */
-import { AppState, Platform } from 'react-native';
+import { AppState } from 'react-native';
 import * as ForegroundService from 'foreground-service';
 import { configService } from './ConfigService';
 import { backgroundRuntimeState } from './BackgroundRuntimeState';
@@ -52,7 +52,7 @@ export function startServiceRuntime(foregroundEntry = false): Promise<void> {
 
 /** 从 index 安装进程级前台入口；短信 Headless 加载 bundle 时不会误启同步。 */
 export function installServiceRuntime(): void {
-  if (installed || Platform.OS !== 'android') return;
+  if (installed) return;
   installed = true;
   const onForeground = (): void => {
     if (AppState.currentState !== 'active') return;

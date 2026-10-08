@@ -20,9 +20,13 @@ jest.mock('../stores/settingsStore', () => ({ useSettingsStore: { setState: jest
 jest.mock('../utils/Logger', () => ({ initLogger: jest.fn() }));
 jest.mock('../utils/clipboardProxy', () => ({ dismissOverlay: jest.fn() }));
 
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as ForegroundService from 'foreground-service';
-import { startServiceRuntime, stopServiceRuntimeIfIdle } from '../services/ServiceRuntime';
+import {
+  installServiceRuntime,
+  startServiceRuntime,
+  stopServiceRuntimeIfIdle,
+} from '../services/ServiceRuntime';
 import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
 import { longRunningTaskManager } from '../longRunningTask/LongRunningTaskManager';
@@ -101,5 +105,32 @@ describe('service runtime bootstrap', () => {
     await stopServiceRuntimeIfIdle();
     expect(longRunningTaskManager.stopAll).toHaveBeenCalledTimes(1);
     expect(dismissOverlay).toHaveBeenCalledTimes(1);
+  });
+
+  it('initializes shared tasks on non-Android foregrounds and installs only once', async () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'ios';
+    AppState.currentState = 'active';
+    try {
+      installServiceRuntime();
+      expect(AppState.addEventListener).toHaveBeenCalledTimes(1);
+      expect(configService.getConfig).toHaveBeenCalled();
+      await startServiceRuntime(true);
+      expect(longRunningTaskManager.startAll).toHaveBeenCalled();
+
+      installServiceRuntime();
+      expect(AppState.addEventListener).toHaveBeenCalledTimes(1);
+      const onChange = (AppState.addEventListener as jest.Mock).mock.calls[0][1];
+      (configService.getConfig as jest.Mock).mockClear();
+      AppState.currentState = 'background';
+      onChange();
+      expect(configService.getConfig).not.toHaveBeenCalled();
+      AppState.currentState = 'active';
+      onChange();
+      expect(configService.getConfig).toHaveBeenCalled();
+      await startServiceRuntime(true);
+    } finally {
+      Platform.OS = originalPlatform;
+    }
   });
 });
