@@ -204,26 +204,20 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
         )
     }
 
+    // 使用基类按本服务的 taskId 结束任务。其他 Headless 任务（持续同步）完成时，
+    // 不得提前停止尚在上传短信的服务。
     override fun onHeadlessJsTaskFinish(taskId: Int) {
-        if (isSuccessPosted) {
-            // 主路径已发送成功通知，不需要额外操作
-            NativeLogger.d(TAG, "Headless task finished, success notification already posted")
-            return
-        }
-        // 兆底：检查 pendingSuccessCode（处理桥接异步调用延迟的情况）
-        val code = pendingSuccessCode
-        if (code != null) {
-            pendingSuccessCode = null
-            NativeLogger.d(TAG, "Headless task finished, fallback: posting success notification for code=$code")
-            postSuccessNotification(code)
-        } else {
-            NativeLogger.d(TAG, "Headless task finished, no success, stopping service")
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-        }
+        NativeLogger.d(TAG, "Headless task finished: $taskId")
+        super.onHeadlessJsTaskFinish(taskId)
     }
 
     override fun onDestroy() {
+        if (!isSuccessPosted) {
+            pendingSuccessCode?.let { code ->
+                pendingSuccessCode = null
+                postSuccessNotification(code)
+            }
+        }
         instance = null
         super.onDestroy()
     }
