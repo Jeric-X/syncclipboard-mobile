@@ -7,7 +7,7 @@
  *   enableForegroundNotification + tempDisabled）决定是否运行前台服务
  * - 监听通知栏"停止"／"临时停止"操作并写回配置或运行时状态
  * - 通过 onConfigChanged 响应配置变更（由 LongRunningTaskManager 统一分发）
- * - 自行订阅 backgroundRuntimeState，运行时状态变更时动态响应
+ * - 运行时状态变化由任务管理器统一串行分发
  *
  * 注意：仅在 Android 上生效，iOS 直接 no-op。
  * 生命周期由 LongRunningTaskManager 统一管理。
@@ -24,10 +24,6 @@ class ForegroundServiceTask extends LongRunningTask {
 
   /** 任务是否已启动（订阅是否活跃） */
   private _running = false;
-  /** ForegroundService 当前是否正在运行 */
-  private _serviceActive = false;
-
-  private _runtimeUnsub: (() => void) | null = null;
   private _stopSub: { remove(): void } | null = null;
   private _tempStopSub: { remove(): void } | null = null;
 
@@ -41,21 +37,10 @@ class ForegroundServiceTask extends LongRunningTask {
 
     // 立即应用当前配置
     await this._refresh();
-
-    // 订阅运行时状态变更
-    this._runtimeUnsub = backgroundRuntimeState.subscribe(() => {
-      this._refresh().catch((e) => {
-        console.error('[ForegroundServiceTask] Failed to apply runtime state change:', e);
-      });
-    });
   }
 
   async stop(): Promise<void> {
-    if (!this._running) return;
     this._running = false;
-
-    this._runtimeUnsub?.();
-    this._runtimeUnsub = null;
 
     await this._stopService();
   }
@@ -75,6 +60,7 @@ class ForegroundServiceTask extends LongRunningTask {
     const tempDisabled = backgroundRuntimeState.isTempDisabled();
     return (
       !tempDisabled &&
+      !ForegroundService.getStopReason() &&
       !!config?.enableBackgroundTasks &&
       !!(config?.enableBackgroundDownload || config?.enableBackgroundUpload) &&
       !!config?.enableForegroundNotification
@@ -92,37 +78,29 @@ class ForegroundServiceTask extends LongRunningTask {
 
   /** 启动前台服务 */
   private async _startService(): Promise<void> {
-    if (this._serviceActive) return;
-    this._serviceActive = true;
-
-    try {
-      ForegroundService.startService();
-      this._attachServiceListeners();
-    } catch (e) {
-      console.error('[ForegroundServiceTask] Failed to start foreground service:', e);
+    this._attachServiceListeners();
+    // 原生服务负责去重，也能在 JS reload 后重新绑定 Headless 会话。
+    if (!ForegroundService.startService()) {
+      throw new Error('Foreground service could not be started');
     }
-
-    console.log('[ForegroundServiceTask] Foreground service started');
   }
 
-  /** 停止前台服务 */
+  /** 停止服务，包括由 Android 冷启动而非本 JS 实例创建的服务。 */
   private async _stopService(): Promise<void> {
-    if (!this._serviceActive) return;
-    this._serviceActive = false;
-
     this._detachServiceListeners();
-
-    try {
-      ForegroundService.stopService();
-    } catch {}
+    ForegroundService.stopService();
   }
 
   /** 绑定通知栏操作监听 */
   private _attachServiceListeners(): void {
+    if (this._stopSub || this._tempStopSub) return;
     this._stopSub = ForegroundService.addStopListener(() => {
-      configService.updateConfig({ enableBackgroundTasks: false }).catch((e) => {
-        console.error('[ForegroundServiceTask] Failed to disable background tasks:', e);
-      });
+      configService
+        .updateConfig({ enableBackgroundTasks: false })
+        .then(() => ForegroundService.clearStopReason())
+        .catch((e) => {
+          console.error('[ForegroundServiceTask] Failed to disable background tasks:', e);
+        });
     });
     this._tempStopSub = ForegroundService.addTempStopListener(() => {
       backgroundRuntimeState.setTempDisabled(true);

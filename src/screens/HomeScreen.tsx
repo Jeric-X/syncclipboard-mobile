@@ -10,7 +10,6 @@ import { useNavigation } from '@react-navigation/native';
 import * as ClipboardProxy from '@/utils/clipboardProxy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTheme } from '@/hooks/useTheme';
 import { useLocalClipboardStore } from '@/stores/localClipboardStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -33,7 +32,6 @@ import {
   refreshMonitor,
 } from '@/services/sync/ClipboardSyncActions';
 import type { ProgressInfo } from '@/types/progress';
-import { longRunningTaskManager } from '@/longRunningTask/LongRunningTaskManager';
 import { updateService } from '@/services/update';
 import { useUpdateDialog } from '@/hooks/useUpdateDialog';
 
@@ -82,13 +80,6 @@ export function HomeScreen() {
         }
       });
   }, [isLoaded, showUpdateDialog]);
-
-  // 启动所有后台任务（先加载字体，再启动后台任务，避免后台繁重任务导致导航栏图标加载缓慢）
-  useEffect(() => {
-    Ionicons.loadFont().then(() => {
-      longRunningTaskManager.startAll().catch(() => {});
-    });
-  }, []);
 
   const activeServer = getActiveServer();
 

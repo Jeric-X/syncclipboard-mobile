@@ -57,12 +57,13 @@ All code should be written with cross-platform portability in mind (see [Cross-P
 
 `index.ts` registers three separate RN roots, each serving a distinct purpose:
 
-| Registration     | Component                    | Purpose                                                                              |
-| ---------------- | ---------------------------- | ------------------------------------------------------------------------------------ |
-| `main`           | `App.tsx`                    | Full app UI with bottom tab navigation (Home / History / Settings)                   |
-| `quickAction`    | `src/QuickActionApp.tsx`     | Transparent overlay for quick-settings tiles, share menu, and text selection actions |
-| `serviceRestart` | `src/ServiceRestartApp.tsx`  | Brief "service restored" screen shown when Android restarts the process              |
-| Headless         | `src/tasks/SmsUploadTask.ts` | Background SMS verification code upload (no UI)                                      |
+| Registration     | Component                                 | Purpose                                                                              |
+| ---------------- | ----------------------------------------- | ------------------------------------------------------------------------------------ |
+| `main`           | `App.tsx`                                 | Full app UI with bottom tab navigation (Home / History / Settings)                   |
+| `quickAction`    | `src/QuickActionApp.tsx`                  | Transparent overlay for quick-settings tiles, share menu, and text selection actions |
+| `serviceRestart` | `src/ServiceRestartApp.tsx`               | Fallback recovery screen opened when headless startup fails                          |
+| Headless         | `src/tasks/SmsUploadTask.ts`              | Background SMS verification code upload (no UI)                                      |
+| Headless runtime | `src/tasks/ServiceRuntimeHeadlessTask.ts` | Persistent background services without an Activity                                   |
 
 `App.tsx` handles cold/hot start deep link routing: parses `syncclipboard://` URLs to determine whether to show the main UI or an overlay (share receive, quick upload/download).
 
@@ -92,6 +93,17 @@ Key singletons, typically accessed via `getInstance()` or module-level exports:
 - **`ClipboardSyncService`** (`src/services/sync/ClipboardSyncService.ts`) — wires together local clipboard monitoring, remote monitoring, and history sync. Subscribes to clipboard changes, remote changes, history changes, and transfer queue events.
 
 ### LongRunningTask Framework
+
+`src/services/ServiceRuntime.ts` is the shared initialization entry point for the foreground and
+Headless JS. `index.ts` installs the process-level foreground listener; screens must not start
+`LongRunningTaskManager` directly. `SyncForegroundService` starts ReactHost and the
+`ServiceRuntimeHeadlessTask` without an Activity, including after a `START_STICKY` restart.
+The JS task stays pending until its native service session ends. Lifecycle operations are
+serialized by `LongRunningTaskCoordinator`. Cold starts explicitly apply background policy,
+and native stop requests are persisted until JS can handle them. If the service ends while
+no UI is active, the runtime releases all tasks and the clipboard overlay; the independent
+static SMS receiver retains the user's saved setting. Headless JS does not bypass Android
+foreground-service launch restrictions or the Android 15+ `dataSync` time quota.
 
 `src/longRunningTask/LongRunningTaskManager.ts` is the central lifecycle manager for all background tasks. Each task implements `ILongRunningTask` (`src/longRunningTask/LongRunningTask.ts`):
 

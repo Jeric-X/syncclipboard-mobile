@@ -14,6 +14,7 @@
 import { Platform } from 'react-native';
 import { setTimer, clearTimer } from 'native-timer';
 import { LongRunningTask } from './LongRunningTask';
+import { useStatisticsStore } from '../stores/statisticsStore';
 
 class HeartbeatTask extends LongRunningTask {
   readonly name = 'heartbeat';
@@ -38,9 +39,8 @@ class HeartbeatTask extends LongRunningTask {
 
   override async onBackground(): Promise<void> {
     if (Platform.OS !== 'android') return;
-    await this.stop(); // 确保不重复启动
+    if (this.heartbeatTag) return;
     try {
-      const { useStatisticsStore } = require('../stores/statisticsStore');
       await useStatisticsStore.getState().recordBackgroundTaskStart();
       this.heartbeatTag = setTimer(() => {
         useStatisticsStore.getState().updateHeartbeat();

@@ -10,6 +10,8 @@
  */
 
 import * as Clipboard from 'expo-clipboard';
+import * as overlayModule from 'clipboard-overlay';
+import * as shizukuModule from 'shizuku-clipboard';
 import { AppState, Platform } from 'react-native';
 import { configService } from '@/services/ConfigService';
 import { setTimer, clearTimer } from 'native-timer';
@@ -19,9 +21,6 @@ import { nativeSaveClipboardImageToFile } from 'native-util';
 const OVERLAY_IDLE_TIMEOUT_MS = 10_000;
 /** 空闲计时器的固定 tag */
 const IDLE_TIMER_TAG = 'clipboard_overlay_idle';
-
-let overlayModule: typeof import('clipboard-overlay') | null = null;
-let shizukuModule: typeof import('shizuku-clipboard') | null = null;
 
 /**
  * 重置空闲计时器：每次悬浮窗被使用时调用，
@@ -52,9 +51,6 @@ function clearIdleTimer(): void {
 }
 
 if (Platform.OS === 'android') {
-  overlayModule = require('clipboard-overlay');
-  shizukuModule = require('shizuku-clipboard');
-
   // 当应用回到前台时，自动销毁常驻悬浮窗并清除空闲计时器
   AppState.addEventListener('change', (nextAppState) => {
     if (nextAppState === 'active') {
@@ -86,6 +82,7 @@ async function ensureOverlayShowing(): Promise<void> {
  * 隐藏悬浮窗
  */
 export async function dismissOverlay(): Promise<void> {
+  clearIdleTimer();
   if (!overlayModule) return;
   if (overlayModule.isOverlayShowing()) {
     try {
@@ -103,7 +100,7 @@ export async function dismissOverlay(): Promise<void> {
  */
 async function shouldUseOverlay(): Promise<boolean> {
   if (Platform.OS !== 'android' || !overlayModule) return false;
-  if (AppState.currentState !== 'background') return false;
+  if (AppState.currentState === 'active') return false;
   const config = await configService.getConfig();
   if (!(config?.enableClipboardOverlay ?? false)) return false;
   // Sync overlay visibility and retry count to native module

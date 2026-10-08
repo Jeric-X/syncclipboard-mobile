@@ -69,7 +69,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!isLoaded) {
+    if (Platform.OS !== 'android' && !isLoaded) {
       loadConfig();
     }
   }, [isLoaded, loadConfig]);
@@ -107,7 +107,7 @@ export default function App() {
         return;
       }
       const { isQuickTile, fromForeground, direction } = parseQuickTileUrl(url);
-      // 始终进入 home 模式（挂载 AppNavigator/HomeScreen 以启动后台任务）
+      // 同步运行时由进程入口管理，此处只负责显示主界面。
       setAppMode('home');
       if (isQuickTile) {
         await runOverlayNetworkPreflight();
@@ -148,7 +148,7 @@ export default function App() {
               <ShareReceiveScreen
                 onComplete={() => {
                   setShareReceiveOverlay(false);
-                  // 使用 moveTaskToBack 而非 exitApp，保持 Activity 存活以维持后台任务
+                  // 将快捷操作任务移到后台，保留返回主界面的导航状态
                   moveTaskToBack();
                 }}
               />
@@ -162,7 +162,7 @@ export default function App() {
                   const shouldExit = quickActionOverlay.exitAfterSync;
                   setQuickActionOverlay(null);
                   if (shouldExit) {
-                    // 使用 moveTaskToBack 而非 exitApp，保持 Activity 存活以维持后台任务
+                    // 将快捷操作任务移到后台，保留返回主界面的导航状态
                     moveTaskToBack();
                   }
                 }}
