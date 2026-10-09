@@ -20,6 +20,8 @@ import { updateForegroundNotification } from '../notification/ForegroundNotifica
 import { historyService } from '../history/HistoryService';
 import { calculateTextHash } from '../../utils/hash';
 import i18n from '@/i18n';
+import { ClipboardStartupBaseline } from '../../utils/clipboardStartupBaseline';
+import { localClipboard } from '../clipboard/LocalClipboard';
 
 const STARTUP_BASELINE_WINDOW_MS = 2_000;
 
@@ -29,18 +31,23 @@ function shouldUseStartupBaseline(previousHash: string | null): boolean {
   return previousHash === null && appUptimeMs >= 0 && appUptimeMs < STARTUP_BASELINE_WINDOW_MS;
 }
 
-class ClipboardChangedHandler {
+export class ClipboardChangedHandler {
   private static instance: ClipboardChangedHandler | null = null;
   private lastRemoteProfileHash: string | null = null;
   private lastLocalProfileHash: string | null = null;
 
-  private constructor() {}
+  constructor(private readonly startupBaseline = new ClipboardStartupBaseline()) {}
 
   static getInstance(): ClipboardChangedHandler {
     if (!ClipboardChangedHandler.instance) {
       ClipboardChangedHandler.instance = new ClipboardChangedHandler();
     }
     return ClipboardChangedHandler.instance;
+  }
+
+  /** 必须在启动监听器之前标记冷启动模式；同进程的后续入口不会重置基线。 */
+  initializeStartupBaseline(headless: boolean): void {
+    this.startupBaseline.initialize(headless);
   }
 
   resetLastRemoteProfileHash(): void {
@@ -65,7 +72,9 @@ class ClipboardChangedHandler {
   }
 
   async processRemoteClipboardContent(content: ClipboardContent): Promise<void> {
-    const isStartupBaseline = shouldUseStartupBaseline(this.lastRemoteProfileHash);
+    const isHeadlessBaseline = this.startupBaseline.consume('remote', this.lastRemoteProfileHash);
+    const isStartupBaseline =
+      isHeadlessBaseline || shouldUseStartupBaseline(this.lastRemoteProfileHash);
 
     if (!content.hasData && content.type === 'Text' && !content.profileHash && content.text) {
       content.profileHash = await calculateTextHash(content.text);
@@ -94,6 +103,9 @@ class ClipboardChangedHandler {
     const config = await configService.getConfig();
     if (currentHash === this.lastRemoteProfileHash) return;
     this.lastRemoteProfileHash = currentHash;
+
+    // 无界面冷启动首次快照只填充状态，不触发下载、自动复制或同步提示。
+    if (isHeadlessBaseline) return;
 
     let fileUri: string | undefined;
 
@@ -194,14 +206,15 @@ class ClipboardChangedHandler {
   }
 
   private async copyToLocalClipboard(content: ClipboardContent): Promise<void> {
-    const { localClipboard } = await import('../clipboard/LocalClipboard');
     await localClipboard.setClipboardContent(content, true);
     this.lastLocalProfileHash = content.profileHash || content.text;
     console.log('[ClipboardChangedHandler] Copied to local clipboard');
   }
 
   async handleAutoUpload(content: ClipboardContent): Promise<void> {
-    const isStartupBaseline = shouldUseStartupBaseline(this.lastLocalProfileHash);
+    const isStartupBaseline =
+      this.startupBaseline.consume('local', this.lastLocalProfileHash) ||
+      shouldUseStartupBaseline(this.lastLocalProfileHash);
     const config = await configService.getConfig();
 
     const autoSync = config?.autoSync ?? false;

@@ -19,6 +19,10 @@ jest.mock('../longRunningTask/LongRunningTaskManager', () => ({
 jest.mock('../stores/settingsStore', () => ({ useSettingsStore: { setState: jest.fn() } }));
 jest.mock('../utils/Logger', () => ({ initLogger: jest.fn() }));
 jest.mock('../utils/clipboardProxy', () => ({ dismissOverlay: jest.fn() }));
+jest.mock('../services/sync/ClipboardChangedHandler', () => {
+  const handler = { initializeStartupBaseline: jest.fn() };
+  return { getClipboardChangedHandler: () => handler };
+});
 
 import { AppState, Platform } from 'react-native';
 import * as ForegroundService from 'foreground-service';
@@ -31,6 +35,7 @@ import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
 import { longRunningTaskManager } from '../longRunningTask/LongRunningTaskManager';
 import { dismissOverlay } from '../utils/clipboardProxy';
+import { getClipboardChangedHandler } from '../services/sync/ClipboardChangedHandler';
 
 describe('service runtime bootstrap', () => {
   let stopReason: string | null;
@@ -54,6 +59,11 @@ describe('service runtime bootstrap', () => {
     expect(first).toBe(second);
     await Promise.all([first, second]);
     expect(longRunningTaskManager.startAll).toHaveBeenCalledTimes(1);
+    const initializeBaseline = getClipboardChangedHandler().initializeStartupBaseline as jest.Mock;
+    expect(initializeBaseline).toHaveBeenCalledWith(true);
+    expect(initializeBaseline.mock.invocationCallOrder[0]).toBeLessThan(
+      (longRunningTaskManager.startAll as jest.Mock).mock.invocationCallOrder[0]
+    );
   });
 
   it('persists a stop received before JS was ready before starting any tasks', async () => {
@@ -80,6 +90,7 @@ describe('service runtime bootstrap', () => {
     await startServiceRuntime(true);
     expect(stopReason).toBeNull();
     expect(backgroundRuntimeState.setTempDisabled).toHaveBeenCalledWith(false);
+    expect(getClipboardChangedHandler().initializeStartupBaseline).toHaveBeenCalledWith(false);
   });
 
   it('does not lose a foreground resume arriving during Headless initialization', async () => {
