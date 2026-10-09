@@ -10,7 +10,6 @@ import { longRunningTaskManager } from '../longRunningTask/LongRunningTaskManage
 import { useSettingsStore } from '../stores/settingsStore';
 import { initLogger } from '../utils/Logger';
 import { dismissOverlay } from '../utils/clipboardProxy';
-import { getClipboardChangedHandler } from './sync/ClipboardChangedHandler';
 
 let initializing: Promise<void> | null = null;
 let installed = false;
@@ -22,9 +21,6 @@ export function startServiceRuntime(foregroundEntry = false): Promise<void> {
     return foregroundEntry ? initializing.then(() => startServiceRuntime(true)) : initializing;
   }
   initializing = (async () => {
-    getClipboardChangedHandler().initializeStartupBaseline(
-      !foregroundEntry && AppState.currentState !== 'active'
-    );
     try {
       initLogger();
     } catch (error) {
