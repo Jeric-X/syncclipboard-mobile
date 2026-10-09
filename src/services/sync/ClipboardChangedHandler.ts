@@ -20,13 +20,26 @@ import { updateForegroundNotification } from '../notification/ForegroundNotifica
 import { historyService } from '../history/HistoryService';
 import { calculateTextHash } from '../../utils/hash';
 import i18n from '@/i18n';
+import { logStartupPoint } from '../../utils/startupTiming';
 
 const STARTUP_BASELINE_WINDOW_MS = 2_000;
 
 /** 判断下一次剪贴板内容是否应仅作为应用启动基线。 */
-function shouldUseStartupBaseline(previousHash: string | null): boolean {
+function shouldUseStartupBaseline(
+  previousHash: string | null,
+  direction: 'local' | 'remote'
+): boolean {
   const appUptimeMs = performance.now();
-  return previousHash === null && appUptimeMs >= 0 && appUptimeMs < STARTUP_BASELINE_WINDOW_MS;
+  const useBaseline =
+    previousHash === null && appUptimeMs >= 0 && appUptimeMs < STARTUP_BASELINE_WINDOW_MS;
+  logStartupPoint(`${direction}.firstBaselineDecision`, {
+    decisionUptimeMs: Math.round(appUptimeMs),
+    windowMs: STARTUP_BASELINE_WINDOW_MS,
+    hadPreviousHash: previousHash !== null,
+    useBaseline,
+    appState: AppState.currentState,
+  });
+  return useBaseline;
 }
 
 class ClipboardChangedHandler {
@@ -65,7 +78,7 @@ class ClipboardChangedHandler {
   }
 
   async processRemoteClipboardContent(content: ClipboardContent): Promise<void> {
-    const isStartupBaseline = shouldUseStartupBaseline(this.lastRemoteProfileHash);
+    const isStartupBaseline = shouldUseStartupBaseline(this.lastRemoteProfileHash, 'remote');
 
     if (!content.hasData && content.type === 'Text' && !content.profileHash && content.text) {
       content.profileHash = await calculateTextHash(content.text);
@@ -201,7 +214,7 @@ class ClipboardChangedHandler {
   }
 
   async handleAutoUpload(content: ClipboardContent): Promise<void> {
-    const isStartupBaseline = shouldUseStartupBaseline(this.lastLocalProfileHash);
+    const isStartupBaseline = shouldUseStartupBaseline(this.lastLocalProfileHash, 'local');
     const config = await configService.getConfig();
 
     const autoSync = config?.autoSync ?? false;

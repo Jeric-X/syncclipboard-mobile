@@ -9,6 +9,7 @@ import { ClipboardContent, ClipboardChangeCallback, ClipboardMonitorOptions } fr
 import { setTimer, clearTimer } from 'native-timer';
 import { subscribeToPrimaryClipChanges } from 'shizuku-clipboard';
 import { isShizukuClipboardEnabled } from '@/utils/clipboardProxy';
+import { logStartupPoint, measureStartup } from '@/utils/startupTiming';
 
 /**
  * 剪贴板监听器类
@@ -83,7 +84,10 @@ export class ClipboardMonitor {
    */
   async startMonitoring(): Promise<void> {
     // 事件监听在非 Android 平台会直接返回 false，统一回退至轮询。
-    const eventListening = await this.startNativeClipboardListener();
+    const eventListening = await measureStartup('local.installListener', () =>
+      this.startNativeClipboardListener()
+    );
+    logStartupPoint('local.listenerReady', { eventListening });
     if (!eventListening) this.startPolling();
     void this.checkClipboard();
   }
@@ -237,7 +241,9 @@ export class ClipboardMonitor {
     this.isChecking = true;
     const gen = this.checkGeneration;
     try {
-      const content = await this.clipboardManager.getClipboardContent();
+      const content = await measureStartup('local.readContent', () =>
+        this.clipboardManager.getClipboardContent()
+      );
 
       // 如果在 getClipboardContent 期间 setLastContent 被调用，丢弃本次结果
       if (gen !== this.checkGeneration) return;
@@ -249,6 +255,7 @@ export class ClipboardMonitor {
 
       // 检查内容是否发生变化
       if (this.hasContentChanged(content)) {
+        logStartupPoint('local.firstContent', { type: content.type, hasData: content.hasData });
         this.lastContent = content;
         this.notifyCallbacks(content);
       }

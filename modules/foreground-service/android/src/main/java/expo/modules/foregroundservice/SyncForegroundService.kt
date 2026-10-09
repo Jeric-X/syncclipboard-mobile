@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactInstanceEventListener
@@ -60,12 +61,25 @@ class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
                     service.releaseStartupWakeLock()
                     service.notificationManager?.cancel(RESTART_NOTIFY_ID)
                     NativeLogger.i(TAG, "Headless sync ready: $sessionId")
+                    service.logStartupTiming("jsReady")
                 }
             }
         }
     }
 
     @Volatile private var sessionId = UUID.randomUUID().toString()
+    private val createdAtMs = SystemClock.elapsedRealtime()
+    private val startupTimingStages = mutableSetOf<String>()
+
+    /** 与 JS 日志通过 sessionId/wallTimeMs 关联；原生耗时使用单调时钟。 */
+    private fun logStartupTiming(stage: String) {
+        if (!startupTimingStages.add(stage)) return
+        val now = SystemClock.elapsedRealtime()
+        NativeLogger.i(TAG, "[StartupTiming] stage=native.$stage sessionId=$sessionId " +
+            "pid=${android.os.Process.myPid()} serviceElapsedMs=${now - createdAtMs} " +
+            "processElapsedMs=${now - android.os.Process.getStartElapsedRealtime()} " +
+            "wallTimeMs=${System.currentTimeMillis()}")
+    }
     private val handler = Handler(Looper.getMainLooper())
     private var notificationManager: NotificationManager? = null
     private var startupWakeLock: PowerManager.WakeLock? = null
@@ -91,6 +105,7 @@ class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
         instance = this
         stoppedByUser = false
         createNotificationChannel()
+        logStartupTiming("serviceCreated")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -110,9 +125,11 @@ class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
                 return if (isRunning) START_STICKY else START_NOT_STICKY
             }
             ACTION_START, null -> {
+                logStartupTiming(if (intent == null) "stickyStart" else "explicitStart")
                 try {
                     // 必须先兑现前台服务启动时限，再等待 ReactHost/配置初始化。
                     promoteToForeground()
+                    logStartupTiming("foregroundReady")
                     if (getStopReason(this) != null) {
                         stoppedByUser = true
                         stopSelf()
@@ -143,6 +160,7 @@ class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
     private fun startHeadlessSession() {
         val host = checkNotNull(reactHost) { "ReactHost is unavailable" }
         val context = host.currentReactContext
+        logStartupTiming(if (context == null) "reactHostStart" else "reactContextAlreadyReady")
         if (contextListener != null) return
         if (context === taskReactContext && taskId?.let { taskContext?.isTaskRunning(it) } == true) return
         // JS reload 时换一代会话，迟到的完成回调不能终止新任务。
@@ -160,6 +178,7 @@ class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
             val listener = object : ReactInstanceEventListener {
                 override fun onReactContextInitialized(context: ReactContext) {
                     handler.post {
+                        logStartupTiming("reactContextReady")
                         host.removeReactInstanceEventListener(this)
                         contextListener = null
                         if (instance === this@SyncForegroundService && isRunning && !stoppedByUser) {
@@ -187,6 +206,7 @@ class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
                 ))
             }
             NativeLogger.i(TAG, "Started Headless JS task=$taskId, session=$sessionId")
+            logStartupTiming("headlessTaskScheduled")
         } catch (error: Exception) {
             NativeLogger.e(TAG, "Cannot launch Headless JS task", error)
             pauseAndStop("temporary", showRecovery = true)
