@@ -11,6 +11,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { initLogger } from '../utils/Logger';
 import { dismissOverlay } from '../utils/clipboardProxy';
 import { logStartupPoint, measureStartup } from '../utils/startupTiming';
+import { getStartupElapsedMs } from '../utils/startupClock';
 
 let initializing: Promise<void> | null = null;
 let installed = false;
@@ -22,7 +23,7 @@ export function startServiceRuntime(foregroundEntry = false): Promise<void> {
     return foregroundEntry ? initializing.then(() => startServiceRuntime(true)) : initializing;
   }
   initializing = (async () => {
-    const entryUptimeMs = performance.now();
+    const entryUptimeMs = getStartupElapsedMs();
     try {
       initLogger();
     } catch (error) {
@@ -30,7 +31,7 @@ export function startServiceRuntime(foregroundEntry = false): Promise<void> {
     }
     logStartupPoint('runtime.entry', {
       entryUptimeMs: Math.round(entryUptimeMs),
-      loggerInitMs: Math.round(performance.now() - entryUptimeMs),
+      loggerInitMs: Math.round(getStartupElapsedMs() - entryUptimeMs),
       foregroundEntry,
       appState: AppState.currentState,
       sessionId: ForegroundService.getSessionId(),

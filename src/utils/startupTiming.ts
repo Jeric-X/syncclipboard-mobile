@@ -1,3 +1,5 @@
+import { getStartupElapsedMs } from './startupClock';
+
 type TimingDetails = Record<string, string | number | boolean | null>;
 
 const recordedStages = new Set<string>();
@@ -8,7 +10,7 @@ function writeTiming(stage: string, details: TimingDetails): void {
     `[StartupTiming] ${JSON.stringify({
       jsRun,
       stage,
-      jsUptimeMs: Math.round(performance.now()),
+      jsUptimeMs: Math.round(getStartupElapsedMs()),
       wallTimeMs: Date.now(),
       ...details,
     })}`

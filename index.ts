@@ -1,3 +1,6 @@
+// 在加载应用模块前记录本次 JS 启动起点，UI 与 Headless 共用，前后台切换不重置。
+import './src/utils/startupClock';
+
 import { registerRootComponent } from 'expo';
 import { AppRegistry } from 'react-native';
 

@@ -21,6 +21,7 @@ import { historyService } from '../history/HistoryService';
 import { calculateTextHash } from '../../utils/hash';
 import i18n from '@/i18n';
 import { logStartupPoint } from '../../utils/startupTiming';
+import { getStartupElapsedMs } from '../../utils/startupClock';
 
 const STARTUP_BASELINE_WINDOW_MS = 2_000;
 
@@ -29,7 +30,7 @@ function shouldUseStartupBaseline(
   previousHash: string | null,
   direction: 'local' | 'remote'
 ): boolean {
-  const appUptimeMs = performance.now();
+  const appUptimeMs = getStartupElapsedMs();
   const useBaseline =
     previousHash === null && appUptimeMs >= 0 && appUptimeMs < STARTUP_BASELINE_WINDOW_MS;
   logStartupPoint(`${direction}.firstBaselineDecision`, {
