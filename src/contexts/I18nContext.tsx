@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Localization from 'expo-localization';
 import i18n, { type Language, type SupportedLanguage, SUPPORTED_LANGUAGES } from '@/i18n';
 
-const LANGUAGE_STORAGE_KEY = '@syncclipboard:language';
+import { LANGUAGE_STORAGE_KEY } from '@/utils/languagePreference';
 
 interface I18nContextValue {
   /** 用户设置的语言偏好（含 'auto'） */

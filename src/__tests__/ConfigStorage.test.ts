@@ -123,6 +123,16 @@ describe('ConfigStorage', () => {
   });
 
   describe('updateConfig', () => {
+    it('保存冷启动开关失败时拒绝更新且不保留未保存的缓存', async () => {
+      mockGetItem.mockResolvedValue(JSON.stringify(DEFAULT_APP_CONFIG));
+      mockSetItem.mockResolvedValue(undefined);
+      await configStorage.initialize();
+      const error = new Error('disk full');
+      mockSetItem.mockRejectedValueOnce(error);
+      await expect(configStorage.updateConfig({ debugColdStartToast: true })).rejects.toBe(error);
+      expect((await configStorage.getConfig()).debugColdStartToast).toBe(false);
+    });
+
     it('should update config and save', async () => {
       mockGetItem.mockResolvedValue(JSON.stringify(DEFAULT_APP_CONFIG));
       mockSetItem.mockResolvedValue(undefined);

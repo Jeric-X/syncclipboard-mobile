@@ -98,7 +98,7 @@ class RemoteClipboardMonitor {
     const config = await configService.getConfig();
     logStartupPoint('remote.connect', { serverType: server.type });
     if (server.type === 'syncclipboard') {
-      await measureStartup('remote.connectSignalR', () => this._connectSignalR(server));
+      await this._connectSignalR(server);
     } else {
       this._startPolling(config?.remotePollingInterval);
     }
@@ -253,10 +253,12 @@ class RemoteClipboardMonitor {
   private async _connectSignalR(server: ServerConfig): Promise<void> {
     if (this._signalRConnected) return;
     try {
-      const client = getSignalRClient();
-      client.onRemoteClipboardChanged(this._signalREventCallback);
-      client.onConnectionStateChanged(this._signalRStateCallback);
-      await client.connect(server);
+      await measureStartup('remote.connectSignalR', async () => {
+        const client = getSignalRClient();
+        client.onRemoteClipboardChanged(this._signalREventCallback);
+        client.onConnectionStateChanged(this._signalRStateCallback);
+        await client.connect(server);
+      });
       this._signalRConnected = true;
       console.log('[RemoteClipboardMonitor] SignalR connected');
       await this.refresh().catch((e) => {

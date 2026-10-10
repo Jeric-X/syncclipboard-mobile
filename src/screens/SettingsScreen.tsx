@@ -26,6 +26,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import type { ThemeMode } from '@/theme';
 import { useSettingsStore } from '@/stores';
+import { configService } from '@/services/ConfigService';
 import { ServerConfigModal, ServerListItem, MessageToast } from '@/components';
 import {
   SettingsSection,
@@ -985,7 +986,8 @@ export const SettingsScreen = () => {
   const handleToggleDebugColdStartToast = async (enabled: boolean) => {
     setLocalDebugColdStartToast(enabled);
     try {
-      await updateConfig({ debugColdStartToast: enabled });
+      // 通用 store 更新会吞掉保存异常；直接保存，成功后由订阅更新 store。
+      await configService.updateConfig({ debugColdStartToast: enabled });
     } catch (error: unknown) {
       setLocalDebugColdStartToast(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');

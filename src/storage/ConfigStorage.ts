@@ -109,8 +109,16 @@ export class ConfigStorage {
       await this.initialize();
     }
 
-    this.config = { ...this.config!, ...updates };
-    await this.saveConfig();
+    const previous = this.config;
+    const next = { ...this.config!, ...updates };
+    this.config = next;
+    try {
+      await this.saveConfig();
+    } catch (error) {
+      // 仅回退本次更新，避免覆盖等待期间发生的另一笔配置变更。
+      if (this.config === next) this.config = previous;
+      throw error;
+    }
   }
 
   /**
