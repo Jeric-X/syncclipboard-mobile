@@ -13,6 +13,7 @@ import { historyStorage } from '../../storage/HistoryStorage';
 import { prepareTempFilePath, CLIPBOARD_TEMP_DIR } from '@/utils/fileStorage';
 import { nativeSetClipboardImageFromFile } from 'native-util';
 import i18n from '@/i18n';
+import { measureStartup } from '@/utils/startupTiming';
 
 /**
  * 剪贴板复制生命周期回调，由外部模块（如 ClipboardMonitor）注册
@@ -48,15 +49,19 @@ export class LocalClipboard {
   async getClipboardContent(): Promise<ClipboardContent | null> {
     try {
       // Directly try getting text first (avoids extra overlay windows for type checks)
-      const text = await ClipboardProxy.getStringAsync();
+      const text = await measureStartup('local.readSystemText', () =>
+        ClipboardProxy.getStringAsync()
+      );
       if (text && text.length > 0) {
-        return await this.getTextContentFromString(text);
+        return await measureStartup('local.buildTextContent', () =>
+          this.getTextContentFromString(text)
+        );
       }
 
       // If no text, check for image
-      const hasImage = await ClipboardProxy.hasImageAsync();
+      const hasImage = await measureStartup('local.hasImage', () => ClipboardProxy.hasImageAsync());
       if (hasImage) {
-        return await this.getImageContent();
+        return await measureStartup('local.buildImageContent', () => this.getImageContent());
       }
 
       // 没有内容
@@ -71,11 +76,13 @@ export class LocalClipboard {
    * 获取文本内容（从已获取的文本字符串构建）
    */
   private async getTextContentFromString(text: string): Promise<ClipboardContent> {
-    const profileHash = await calculateTextHash(text);
+    const profileHash = await measureStartup('local.textHash', () => calculateTextHash(text));
     const timestamp = Date.now();
 
     // 步骤1: 根据 profileHash 查询历史记录
-    let historyItem = await historyStorage.getItemByLocalHash(profileHash);
+    let historyItem = await measureStartup('local.historyLookup', () =>
+      historyStorage.getItemByLocalHash(profileHash)
+    );
 
     if (historyItem && historyItem.type === 'Text') {
       // 如果历史记录有外部文件，验证文件是否存在

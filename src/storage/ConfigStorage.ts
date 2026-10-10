@@ -20,6 +20,8 @@ export class ConfigStorage {
   private static instance: ConfigStorage | null = null;
   private config: AppConfig | null = null;
   private initialized = false;
+  private initializing: Promise<void> | null = null;
+  private updates: Promise<void> = Promise.resolve();
 
   private constructor() {}
 
@@ -41,15 +43,21 @@ export class ConfigStorage {
       return;
     }
 
-    try {
-      await this.loadConfig();
-      this.initialized = true;
-    } catch (error) {
-      console.error('[ConfigStorage] Failed to initialize:', error);
-      // 使用默认配置
-      this.config = createDefaultConfig();
-      this.initialized = true;
+    if (!this.initializing) {
+      // UI、服务和冷启动 Toast 共用一次读取/迁移，避免并发生成不同的稳定 ID。
+      this.initializing = this.loadConfig()
+        .catch((error) => {
+          console.error('[ConfigStorage] Failed to initialize:', error);
+          this.config = createDefaultConfig();
+        })
+        .then(() => {
+          this.initialized = true;
+        })
+        .finally(() => {
+          this.initializing = null;
+        });
     }
+    await this.initializing;
   }
 
   /**
@@ -77,13 +85,13 @@ export class ConfigStorage {
   /**
    * 保存配置
    */
-  private async saveConfig(): Promise<void> {
-    if (!this.config) {
+  private async saveConfig(config: AppConfig | null = this.config): Promise<void> {
+    if (!config) {
       throw new Error('Config not initialized');
     }
 
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(this.config));
+      await AsyncStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(config));
     } catch (error) {
       console.error('[ConfigStorage] Failed to save config:', error);
       throw error;
@@ -105,12 +113,17 @@ export class ConfigStorage {
    * 更新配置
    */
   public async updateConfig(updates: Partial<AppConfig>): Promise<void> {
-    if (!this.initialized) {
-      await this.initialize();
-    }
-
-    this.config = { ...this.config!, ...updates };
-    await this.saveConfig();
+    // 后续更新基于已提交状态合并；失败不污染读者，也不阻塞队列。
+    const operation = this.updates
+      .catch(() => {})
+      .then(async () => {
+        await this.initialize();
+        const next = { ...this.config!, ...updates };
+        await this.saveConfig(next);
+        this.config = next;
+      });
+    this.updates = operation;
+    await operation;
   }
 
   /**

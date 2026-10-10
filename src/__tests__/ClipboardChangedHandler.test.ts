@@ -61,10 +61,12 @@ jest.mock('@/i18n', () => ({
 
 import { configService } from '../services/ConfigService';
 import { historyService } from '../services/history/HistoryService';
-import { localClipboard } from '../services/clipboard/LocalClipboard';
 import { clipboardSyncState } from '../services/sync/SyncState';
 import { uploadLocalClipboard } from '../services/sync/ClipboardSyncActions';
 import { getClipboardChangedHandler } from '../services/sync/ClipboardChangedHandler';
+import * as startupClock from '../utils/startupClock';
+
+const SYSTEM_START_TIME_MS = 2_728_733_964;
 
 const content: ClipboardContent = {
   type: 'Text',
@@ -75,10 +77,23 @@ const content: ClipboardContent = {
 
 describe('ClipboardChangedHandler 启动基线窗口', () => {
   const handler = getClipboardChangedHandler();
+  let copyToLocalClipboard: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(performance, 'now').mockReturnValue(SYSTEM_START_TIME_MS);
+    jest
+      .spyOn(startupClock, 'getStartupElapsedMs')
+      .mockImplementation(startupClock.createStartupClock(() => performance.now()));
     handler.resetHashes();
+    copyToLocalClipboard = jest
+      .spyOn(
+        handler as unknown as {
+          copyToLocalClipboard(value: ClipboardContent): Promise<void>;
+        },
+        'copyToLocalClipboard'
+      )
+      .mockResolvedValue();
     (configService.getConfig as jest.Mock).mockResolvedValue({
       autoSync: true,
       enableBackgroundTasks: false,
@@ -98,7 +113,7 @@ describe('ClipboardChangedHandler 启动基线窗口', () => {
   });
 
   it('两秒内首次本地内容仅建立基线', async () => {
-    jest.spyOn(performance, 'now').mockReturnValue(1_999);
+    jest.spyOn(performance, 'now').mockReturnValue(SYSTEM_START_TIME_MS + 1_999);
 
     await handler.handleAutoUpload(content);
 
@@ -106,7 +121,7 @@ describe('ClipboardChangedHandler 启动基线窗口', () => {
   });
 
   it('两秒后首次本地内容正常上传', async () => {
-    jest.spyOn(performance, 'now').mockReturnValue(2_000);
+    jest.spyOn(performance, 'now').mockReturnValue(SYSTEM_START_TIME_MS + 2_000);
 
     await handler.handleAutoUpload(content);
 
@@ -114,27 +129,43 @@ describe('ClipboardChangedHandler 启动基线窗口', () => {
   });
 
   it('两秒内首次远程内容仅建立基线', async () => {
-    jest.spyOn(performance, 'now').mockReturnValue(1_999);
+    jest.spyOn(performance, 'now').mockReturnValue(SYSTEM_START_TIME_MS + 1_999);
 
     await handler.processRemoteClipboardContent({ ...content });
 
-    expect(localClipboard.setClipboardContent).not.toHaveBeenCalled();
+    expect(copyToLocalClipboard).not.toHaveBeenCalled();
   });
 
   it('两秒后首次远程内容正常复制到本地', async () => {
-    jest.spyOn(performance, 'now').mockReturnValue(2_000);
-    const copyToLocalClipboard = jest
-      .spyOn(
-        handler as unknown as {
-          copyToLocalClipboard(value: ClipboardContent): Promise<void>;
-        },
-        'copyToLocalClipboard'
-      )
-      .mockResolvedValue();
+    jest.spyOn(performance, 'now').mockReturnValue(SYSTEM_START_TIME_MS + 2_000);
 
     await handler.processRemoteClipboardContent({ ...content });
 
     expect(copyToLocalClipboard).toHaveBeenCalledWith(content);
     expect(clipboardSyncState.setRemoteContent).toHaveBeenCalledWith(content);
+  });
+
+  it('两秒内建立本地基线后，新变化仍正常上传', async () => {
+    jest.spyOn(performance, 'now').mockReturnValue(SYSTEM_START_TIME_MS + 500);
+    await handler.handleAutoUpload(content);
+    const next = { ...content, text: 'new text', profileHash: 'new-hash' };
+    jest.spyOn(performance, 'now').mockReturnValue(SYSTEM_START_TIME_MS + 1_000);
+
+    await handler.handleAutoUpload(next);
+
+    expect(uploadLocalClipboard).toHaveBeenCalledTimes(1);
+    expect(uploadLocalClipboard).toHaveBeenCalledWith(next);
+  });
+
+  it('两秒内建立远端基线后，新变化仍正常复制', async () => {
+    jest.spyOn(performance, 'now').mockReturnValue(SYSTEM_START_TIME_MS + 500);
+    await handler.processRemoteClipboardContent({ ...content });
+    const next = { ...content, text: 'new text', profileHash: 'new-hash' };
+    jest.spyOn(performance, 'now').mockReturnValue(SYSTEM_START_TIME_MS + 1_000);
+
+    await handler.processRemoteClipboardContent(next);
+
+    expect(copyToLocalClipboard).toHaveBeenCalledTimes(1);
+    expect(copyToLocalClipboard).toHaveBeenCalledWith(next);
   });
 });

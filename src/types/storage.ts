@@ -111,6 +111,9 @@ export interface AppConfig {
   /** 调试时显示 URL Scheme 调用（Toast 通知） */
   debugUrlScheme: boolean;
 
+  /** 冷启动时显示 Toast，包括无界面的 Headless 启动（仅 Android）。 */
+  debugColdStartToast: boolean;
+
   /** 调试时跳过更新检查每日一次的限制，每次启动都检查 */
   debugUpdateCheckNoLimit: boolean;
 
@@ -334,6 +337,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   enableSmsForwarding: false, // 默认关闭自动上传短信验证码
   debugOverlayVisible: false, // 默认不显示悬浮窗
   debugUrlScheme: false, // 默认不显示 URL Scheme 调用
+  debugColdStartToast: false,
   debugUpdateCheckNoLimit: false, // 默认不跳过每日更新检查限制
   enableForegroundNotification: true, // 默认启用前台服务常驻通知
   syncToastEnabled: true, // 默认开启同步 Toast 通知

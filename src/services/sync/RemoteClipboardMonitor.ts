@@ -14,6 +14,7 @@ import { profileDtoToContent } from '../../utils/clipboard/convert';
 import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
 import { DedupedOperation } from '../../utils/DedupedOperation';
+import { logStartupPoint, measureStartup } from '../../utils/startupTiming';
 
 /** 远程剪贴板变化回调：仅在内容哈希变化时触发 */
 export type RemoteClipboardChangedCallback = (content: ClipboardContent) => void;
@@ -95,6 +96,7 @@ class RemoteClipboardMonitor {
     const server = await configService.getActiveServer();
     if (!server) return;
     const config = await configService.getConfig();
+    logStartupPoint('remote.connect', { serverType: server.type });
     if (server.type === 'syncclipboard') {
       await this._connectSignalR(server);
     } else {
@@ -161,6 +163,7 @@ class RemoteClipboardMonitor {
   };
 
   private readonly _signalREventCallback = (event: ProfileChangedEvent): void => {
+    logStartupPoint('remote.firstSignalREvent');
     try {
       const profile: ProfileDto = {
         type: event.type as ClipboardContentType,
@@ -184,6 +187,7 @@ class RemoteClipboardMonitor {
     if (this.pollingTag) return;
     try {
       const pollingInterval = interval ?? 3000;
+      logStartupPoint('remote.pollingScheduled', { intervalMs: pollingInterval });
       this.pollingTag = setTimer(
         () => {
           this.fetchLatest().catch(() => {});
@@ -220,10 +224,13 @@ class RemoteClipboardMonitor {
    */
   async fetchLatest(signal?: AbortSignal): Promise<ClipboardContent> {
     return this._fetchOp.execute(true, undefined, signal ?? null, async (sig) => {
-      const apiClient = await getAPIClient();
-      const profile = await apiClient.getClipboard(sig);
+      const apiClient = await measureStartup('remote.getClient', () => getAPIClient());
+      const profile = await measureStartup('remote.getClipboard', () =>
+        apiClient.getClipboard(sig)
+      );
       if (!profile) throw new Error('No clipboard data returned');
       const content: ClipboardContent = profileDtoToContent(profile);
+      logStartupPoint('remote.firstContent', { type: content.type, hasData: content.hasData });
       const hash = content.profileHash || content.text;
       if (hash !== this._lastContentHash) {
         this._lastContentHash = hash;
@@ -246,10 +253,12 @@ class RemoteClipboardMonitor {
   private async _connectSignalR(server: ServerConfig): Promise<void> {
     if (this._signalRConnected) return;
     try {
-      const client = getSignalRClient();
-      client.onRemoteClipboardChanged(this._signalREventCallback);
-      client.onConnectionStateChanged(this._signalRStateCallback);
-      await client.connect(server);
+      await measureStartup('remote.connectSignalR', async () => {
+        const client = getSignalRClient();
+        client.onRemoteClipboardChanged(this._signalREventCallback);
+        client.onConnectionStateChanged(this._signalRStateCallback);
+        await client.connect(server);
+      });
       this._signalRConnected = true;
       console.log('[RemoteClipboardMonitor] SignalR connected');
       await this.refresh().catch((e) => {
