@@ -1,4 +1,8 @@
-import { initializeRuntimeLanguage, setRuntimeLanguage } from './RuntimeLanguage';
+import {
+  initializeRuntimeLanguage,
+  refreshRuntimeSystemLanguage,
+  setRuntimeLanguage,
+} from './RuntimeLanguage';
 import type { Language } from '../i18n';
 
 let initialization: Promise<void> | null = null;
@@ -23,6 +27,12 @@ export function initializeAppFoundation(): Promise<void> {
 /** 已完成初始化的运行时再次打开 UI 时可直接显示。 */
 export function isAppFoundationReady(): boolean {
   return ready;
+}
+
+/** 服务每次进入时复用初始化并刷新系统语言，不重新读取已保存的偏好。 */
+export async function prepareAppFoundation(): Promise<void> {
+  await initializeAppFoundation();
+  await refreshRuntimeSystemLanguage();
 }
 
 /** 主动切换语言必须等待启动读取完成，防止旧偏好覆盖用户选择。 */

@@ -160,14 +160,15 @@ class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
     private fun startHeadlessSession() {
         val host = checkNotNull(reactHost) { "ReactHost is unavailable" }
         val context = host.currentReactContext
-        logStartupTiming(if (context == null) "reactHostStart" else "reactContextAlreadyReady")
         if (contextListener != null) return
         if (context === taskReactContext && taskId?.let { taskContext?.isTaskRunning(it) } == true) return
         // JS reload 时换一代会话，迟到的完成回调不能终止新任务。
         if (taskId != null) {
             releaseTask()
             sessionId = UUID.randomUUID().toString()
+            startupTimingStages.clear()
         }
+        logStartupTiming(if (context == null) "reactHostStart" else "reactContextAlreadyReady")
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         startupWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:sync-startup")
             .apply { setReferenceCounted(false); acquire(STARTUP_TIMEOUT_MS) }

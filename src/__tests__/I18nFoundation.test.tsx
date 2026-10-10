@@ -2,6 +2,7 @@ import React from 'react';
 // @ts-expect-error React Native 的 Jest 依赖提供 renderer，但未附带类型声明。
 import TestRenderer, { act } from 'react-test-renderer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from 'react-native';
 import i18n from '../i18n';
 import { I18nProvider } from '../contexts/I18nContext';
 import { useI18n } from '../hooks/useI18n';
@@ -21,8 +22,10 @@ it('UI 等待基础初始化，首次显示正确语言，多入口不重复初�
   const originalActEnvironment = testGlobal.IS_REACT_ACT_ENVIRONMENT;
   testGlobal.IS_REACT_ACT_ENVIRONMENT = true;
   const seen: string[] = [];
+  let selectLanguage!: ReturnType<typeof useI18n>['setLanguage'];
   function Content() {
-    const { resolvedLanguage } = useI18n();
+    const { resolvedLanguage, setLanguage } = useI18n();
+    selectLanguage = setLanguage;
     seen.push(resolvedLanguage);
     return React.createElement('text', null, i18n.t('common.uploaded', { preview: 'abc' }));
   }
@@ -65,6 +68,19 @@ it('UI 等待基础初始化，首次显示正确语言，多入口不重复初�
     expect(secondRoot.toJSON().children).toEqual(['已上传\nabc']);
     expect(AsyncStorage.getItem).toHaveBeenCalledTimes(1);
     expect(changeLanguage).toHaveBeenCalledTimes(1);
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const logError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      (AsyncStorage.setItem as jest.Mock).mockRejectedValueOnce(new Error('disk full'));
+      await act(async () => {
+        await selectLanguage('en');
+      });
+      expect(alert).toHaveBeenCalledWith('设置失败', '操作失败，请重试');
+      expect(root.toJSON().children).toEqual(['已上传\nabc']);
+    } finally {
+      alert.mockRestore();
+      logError.mockRestore();
+    }
     await act(async () => {
       await setAppLanguage('en');
     });

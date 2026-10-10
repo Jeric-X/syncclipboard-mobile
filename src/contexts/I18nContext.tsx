@@ -9,7 +9,8 @@ import React, {
   useSyncExternalStore,
 } from 'react';
 import { useLocales } from 'expo-localization';
-import type { Language, SupportedLanguage } from '@/i18n';
+import { Alert } from 'react-native';
+import i18n, { type Language, type SupportedLanguage } from '@/i18n';
 import {
   initializeAppFoundation,
   isAppFoundationReady,
@@ -37,14 +38,23 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     let active = true;
-    initializeAppFoundation().then(
-      () => {
-        if (active) setReady(true);
-      },
-      (error) => console.error('[I18nProvider] Foundation initialization failed:', error)
-    );
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    const initialize = () => {
+      initializeAppFoundation().then(
+        () => {
+          if (active) setReady(true);
+        },
+        (error) => {
+          console.error('[I18nProvider] Foundation initialization failed:', error);
+          // 失败会清理 Foundation 缓存；重试也能接上其他入口已完成的初始化。
+          if (active) retryTimer = setTimeout(initialize, 1000);
+        }
+      );
+    };
+    initialize();
     return () => {
       active = false;
+      if (retryTimer !== undefined) clearTimeout(retryTimer);
     };
   }, []);
 
@@ -61,6 +71,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await setAppLanguage(language);
     } catch (error) {
       console.error('Failed to save language:', error);
+      Alert.alert(i18n.t('common.setFailed'), i18n.t('common.defaultError'));
     }
   }, []);
 
