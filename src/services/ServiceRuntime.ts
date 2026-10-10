@@ -12,7 +12,7 @@ import { initLogger } from '../utils/Logger';
 import { dismissOverlay } from '../utils/clipboardProxy';
 import { logStartupPoint, measureStartup } from '../utils/startupTiming';
 import { getStartupElapsedMs } from '../utils/startupClock';
-import { initializeRuntimeLanguage } from './RuntimeLanguage';
+import { initializeAppFoundation } from './AppFoundation';
 
 let initializing: Promise<void> | null = null;
 let installed = false;
@@ -38,7 +38,7 @@ export function startServiceRuntime(foregroundEntry = false): Promise<void> {
       sessionId: ForegroundService.getSessionId(),
     });
     await measureStartup('runtime.loadConfig', () => configService.getConfig());
-    await measureStartup('runtime.loadLanguage', initializeRuntimeLanguage);
+    await measureStartup('runtime.foundation', initializeAppFoundation);
     const stopReason = ForegroundService.getStopReason();
     if (stopReason === 'stop') {
       await configService.updateConfig({ enableBackgroundTasks: false });

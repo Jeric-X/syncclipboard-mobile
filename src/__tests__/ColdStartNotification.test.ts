@@ -8,10 +8,6 @@ jest.mock('react-native', () => ({
 }));
 jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: jest.fn() }));
 jest.mock('expo-localization', () => ({ getLocales: () => [{ languageCode: 'en' }] }));
-jest.mock('../i18n', () => ({
-  __esModule: true,
-  default: { t: (_key: string, options: { lng: string }) => options.lng },
-}));
 jest.mock('../services/ConfigService', () => ({
   configService: {
     getConfig: async () => ({ debugMode: true, debugColdStartToast: true, language: 'zh-CN' }),
@@ -22,5 +18,5 @@ it('Headless Toast 使用独立存储中的中文偏好，不使用旧 AppConfig
   (AsyncStorage.getItem as jest.Mock).mockResolvedValue('zh');
   await notifyColdStart();
   expect(AsyncStorage.getItem).toHaveBeenCalledWith('@syncclipboard:language');
-  expect(ToastAndroid.show).toHaveBeenCalledWith('zh', ToastAndroid.SHORT);
+  expect(ToastAndroid.show).toHaveBeenCalledWith('SyncClipboard 已冷启动', ToastAndroid.SHORT);
 });

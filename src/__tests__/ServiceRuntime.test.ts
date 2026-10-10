@@ -19,7 +19,7 @@ jest.mock('../longRunningTask/LongRunningTaskManager', () => ({
 jest.mock('../stores/settingsStore', () => ({ useSettingsStore: { setState: jest.fn() } }));
 jest.mock('../utils/Logger', () => ({ initLogger: jest.fn() }));
 jest.mock('../utils/clipboardProxy', () => ({ dismissOverlay: jest.fn() }));
-jest.mock('../services/RuntimeLanguage', () => ({ initializeRuntimeLanguage: jest.fn() }));
+jest.mock('../services/AppFoundation', () => ({ initializeAppFoundation: jest.fn() }));
 
 import { AppState, Platform } from 'react-native';
 import * as ForegroundService from 'foreground-service';
@@ -32,14 +32,14 @@ import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
 import { longRunningTaskManager } from '../longRunningTask/LongRunningTaskManager';
 import { dismissOverlay } from '../utils/clipboardProxy';
-import { initializeRuntimeLanguage } from '../services/RuntimeLanguage';
+import { initializeAppFoundation } from '../services/AppFoundation';
 
 describe('service runtime bootstrap', () => {
   let stopReason: string | null;
   it('无 UI 的 sticky 启动在启动同步任务前初始化全局语言', async () => {
     await startServiceRuntime();
-    expect(initializeRuntimeLanguage).toHaveBeenCalledTimes(1);
-    expect((initializeRuntimeLanguage as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
+    expect(initializeAppFoundation).toHaveBeenCalledTimes(1);
+    expect((initializeAppFoundation as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
       (longRunningTaskManager.startAll as jest.Mock).mock.invocationCallOrder[0]
     );
   });
@@ -67,7 +67,7 @@ describe('service runtime bootstrap', () => {
 
   it('语言仍在读取时不能提前启动同步任务', async () => {
     let release!: () => void;
-    (initializeRuntimeLanguage as jest.Mock).mockImplementationOnce(
+    (initializeAppFoundation as jest.Mock).mockImplementationOnce(
       () =>
         new Promise<void>((resolve) => {
           release = resolve;
