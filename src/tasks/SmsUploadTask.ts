@@ -23,6 +23,7 @@ import {
 import { STORAGE_KEYS } from '../types/storage';
 import type { AppConfig } from '../types/storage';
 import { initLogger } from '../utils/Logger';
+import { initializeRuntimeLanguage } from '../services/RuntimeLanguage';
 
 /** 从短信正文中提取验证码（调用 Native 正则）。 */
 export function extractVerificationCode(body: string): string | null {
@@ -84,5 +85,6 @@ export default async function SmsUploadTask(taskData?: SmsCodeUploadRequest): Pr
     // 文件日志初始化失败时保留 Logcat 线索，但不阻止验证码上传。
     console.error('[SmsUploadTask] stage=logging logger initialization failed', error);
   }
+  await initializeRuntimeLanguage();
   await smsCodeUploader.upload(taskData);
 }
