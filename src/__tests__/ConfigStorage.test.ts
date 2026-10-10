@@ -40,6 +40,75 @@ describe('ConfigStorage', () => {
   });
 
   describe('initialize', () => {
+    it('并发冷启动只迁移保存一次，所有入口使用与存储一致的稳定 ID', async () => {
+      mockGetItem.mockResolvedValue(
+        JSON.stringify({
+          servers: [{ type: 'syncclipboard', url: 'https://saved.example.com' }],
+          activeServerIndex: 0,
+          networkAutoSwitch: { rules: [{ name: 'Home', targetServerId: '' }] },
+        })
+      );
+      mockSetItem.mockResolvedValue(undefined);
+
+      const [runtime, toast] = await Promise.all([
+        configStorage.getConfig(),
+        configStorage.getConfig(),
+        configStorage.initialize(),
+      ]);
+
+      expect(mockGetItem).toHaveBeenCalledTimes(1);
+      expect(mockSetItem).toHaveBeenCalledTimes(1);
+      const persisted = JSON.parse(mockSetItem.mock.calls[0][1]);
+      expect(runtime).toEqual(persisted);
+      expect(toast).toEqual(persisted);
+      expect(runtime.servers[0].id).toMatch(/^server_/);
+      expect(runtime.networkAutoSwitch.rules[0].id).toMatch(/^rule_/);
+    });
+
+    it('迁移保存尚未完成时，后续读取继续等待同一次初始化', async () => {
+      let finishSave!: () => void;
+      let savingStarted!: () => void;
+      const saving = new Promise<void>((resolve) => {
+        savingStarted = resolve;
+      });
+      const save = new Promise<void>((resolve) => {
+        finishSave = resolve;
+      });
+      mockGetItem.mockResolvedValue(null);
+      mockSetItem.mockImplementation(() => {
+        savingStarted();
+        return save;
+      });
+      const completed = jest.fn();
+      const first = configStorage.getConfig().then(completed);
+      await saving;
+      const second = configStorage.getConfig().then(completed);
+      await Promise.resolve();
+      const completedWhileSaving = completed.mock.calls.length;
+      finishSave();
+      await Promise.all([first, second]);
+
+      expect(completedWhileSaving).toBe(0);
+      expect(completed).toHaveBeenCalledTimes(2);
+      expect(mockGetItem).toHaveBeenCalledTimes(1);
+      expect(mockSetItem).toHaveBeenCalledTimes(1);
+    });
+
+    it('并发读取失败共同回退到默认配置，不重复初始化', async () => {
+      const logError = jest.spyOn(console, 'error').mockImplementation(() => {});
+      mockGetItem.mockRejectedValue(new Error('read failed'));
+      try {
+        const configs = await Promise.all([configStorage.getConfig(), configStorage.getConfig()]);
+        expect(configs).toEqual([DEFAULT_APP_CONFIG, DEFAULT_APP_CONFIG]);
+        expect(mockGetItem).toHaveBeenCalledTimes(1);
+        expect(logError).toHaveBeenCalledTimes(1);
+        await configStorage.getConfig();
+        expect(mockGetItem).toHaveBeenCalledTimes(1);
+      } finally {
+        logError.mockRestore();
+      }
+    });
+
     it('should load config from storage', async () => {
       const mockConfig: AppConfig = {
         ...DEFAULT_APP_CONFIG,
