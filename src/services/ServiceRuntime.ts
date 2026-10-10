@@ -10,6 +10,9 @@ import { longRunningTaskManager } from '../longRunningTask/LongRunningTaskManage
 import { useSettingsStore } from '../stores/settingsStore';
 import { initLogger } from '../utils/Logger';
 import { dismissOverlay } from '../utils/clipboardProxy';
+import { logStartupPoint, measureStartup } from '../utils/startupTiming';
+import { getStartupElapsedMs } from '../utils/startupClock';
+import { prepareAppFoundation } from './AppFoundation';
 
 let initializing: Promise<void> | null = null;
 let installed = false;
@@ -21,12 +24,21 @@ export function startServiceRuntime(foregroundEntry = false): Promise<void> {
     return foregroundEntry ? initializing.then(() => startServiceRuntime(true)) : initializing;
   }
   initializing = (async () => {
+    const entryUptimeMs = getStartupElapsedMs();
     try {
       initLogger();
     } catch (error) {
       console.error('[ServiceRuntime] Logger initialization failed:', error);
     }
-    await configService.getConfig();
+    logStartupPoint('runtime.entry', {
+      entryUptimeMs: Math.round(entryUptimeMs),
+      loggerInitMs: Math.round(getStartupElapsedMs() - entryUptimeMs),
+      foregroundEntry,
+      appState: AppState.currentState,
+      sessionId: ForegroundService.getSessionId(),
+    });
+    await measureStartup('runtime.loadConfig', () => configService.getConfig());
+    await measureStartup('runtime.foundation', prepareAppFoundation);
     const stopReason = ForegroundService.getStopReason();
     if (stopReason === 'stop') {
       await configService.updateConfig({ enableBackgroundTasks: false });
@@ -43,7 +55,9 @@ export function startServiceRuntime(foregroundEntry = false): Promise<void> {
     }
     const config = await configService.getConfig();
     useSettingsStore.setState({ config, isLoaded: true });
-    await longRunningTaskManager.startAll();
+    logStartupPoint('runtime.configApplied', { stopReason });
+    await measureStartup('runtime.startTasks', () => longRunningTaskManager.startAll());
+    logStartupPoint('runtime.ready');
   })().finally(() => {
     initializing = null;
   });

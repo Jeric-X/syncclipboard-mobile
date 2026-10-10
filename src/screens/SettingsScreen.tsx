@@ -26,6 +26,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import type { ThemeMode } from '@/theme';
 import { useSettingsStore } from '@/stores';
+import { configService } from '@/services/ConfigService';
 import { ServerConfigModal, ServerListItem, MessageToast } from '@/components';
 import {
   SettingsSection,
@@ -65,6 +66,7 @@ import { extractVerificationCode } from '@/tasks/SmsUploadTask';
 import { setStaticReceiverEnabled } from 'sms-forwarder';
 import { useTranslation } from 'react-i18next';
 import { useI18n } from '@/hooks/useI18n';
+import { useSyncedState } from '@/hooks/useSyncedState';
 import type { Language } from '@/i18n';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -174,6 +176,9 @@ export const SettingsScreen = () => {
     config?.debugOverlayVisible ?? false
   );
   const [localDebugUrlScheme, setLocalDebugUrlScheme] = useState(config?.debugUrlScheme ?? false);
+  const [localDebugColdStartToast, setLocalDebugColdStartToast] = useSyncedState(
+    config?.debugColdStartToast ?? false
+  );
   const [localDebugUpdateCheckNoLimit, setLocalDebugUpdateCheckNoLimit] = useState(
     config?.debugUpdateCheckNoLimit ?? false
   );
@@ -974,6 +979,18 @@ export const SettingsScreen = () => {
       await updateConfig({ debugUrlScheme: enabled });
     } catch (error: unknown) {
       setLocalDebugUrlScheme(!enabled);
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
+    }
+  };
+
+  // 处理切换冷启动提示，下次冷启动生效
+  const handleToggleDebugColdStartToast = async (enabled: boolean) => {
+    setLocalDebugColdStartToast(enabled);
+    try {
+      // 通用 store 更新会吞掉保存异常；直接保存，成功后由订阅更新 store。
+      await configService.updateConfig({ debugColdStartToast: enabled });
+    } catch (error: unknown) {
+      setLocalDebugColdStartToast(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
@@ -1933,6 +1950,15 @@ export const SettingsScreen = () => {
               label={t('settings.debugUrlScheme')}
               value={localDebugUrlScheme}
               onChange={handleToggleDebugUrlScheme}
+            />
+          )}
+
+          {localDebugModeEnabled && Platform.OS === 'android' && (
+            <SettingSwitch
+              label={t('settings.debugColdStartToast')}
+              description={t('settings.debugColdStartToastDesc')}
+              value={localDebugColdStartToast}
+              onChange={handleToggleDebugColdStartToast}
             />
           )}
 

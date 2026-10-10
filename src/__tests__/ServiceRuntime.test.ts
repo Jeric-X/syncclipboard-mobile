@@ -19,6 +19,7 @@ jest.mock('../longRunningTask/LongRunningTaskManager', () => ({
 jest.mock('../stores/settingsStore', () => ({ useSettingsStore: { setState: jest.fn() } }));
 jest.mock('../utils/Logger', () => ({ initLogger: jest.fn() }));
 jest.mock('../utils/clipboardProxy', () => ({ dismissOverlay: jest.fn() }));
+jest.mock('../services/AppFoundation', () => ({ prepareAppFoundation: jest.fn() }));
 
 import { AppState, Platform } from 'react-native';
 import * as ForegroundService from 'foreground-service';
@@ -31,9 +32,17 @@ import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
 import { longRunningTaskManager } from '../longRunningTask/LongRunningTaskManager';
 import { dismissOverlay } from '../utils/clipboardProxy';
+import { prepareAppFoundation } from '../services/AppFoundation';
 
 describe('service runtime bootstrap', () => {
   let stopReason: string | null;
+  it('无 UI 的 sticky 启动在启动同步任务前初始化全局语言', async () => {
+    await startServiceRuntime();
+    expect(prepareAppFoundation).toHaveBeenCalledTimes(1);
+    expect((prepareAppFoundation as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
+      (longRunningTaskManager.startAll as jest.Mock).mock.invocationCallOrder[0]
+    );
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     AppState.currentState = 'background';
@@ -53,6 +62,25 @@ describe('service runtime bootstrap', () => {
     const second = startServiceRuntime();
     expect(first).toBe(second);
     await Promise.all([first, second]);
+    expect(longRunningTaskManager.startAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('语言仍在读取时不能提前启动同步任务', async () => {
+    let release!: () => void;
+    (prepareAppFoundation as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        })
+    );
+    const started = startServiceRuntime();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    try {
+      expect(longRunningTaskManager.startAll).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await started;
+    }
     expect(longRunningTaskManager.startAll).toHaveBeenCalledTimes(1);
   });
 

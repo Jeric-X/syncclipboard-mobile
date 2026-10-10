@@ -384,6 +384,10 @@ const en: DeepString<typeof zh> = {
     debugOverlayEnabled: 'Overlay window will be visible in background',
     debugOverlayDisabled: 'Overlay window hidden',
     debugUrlScheme: 'Show URL Scheme calls',
+    debugColdStartToast: 'Cold start toast',
+    debugColdStartToastDesc:
+      'Show a toast once on the next cold start, including automatic background service recovery',
+    coldStartToast: 'SyncClipboard cold started',
     debugSmsTest: 'Test verification code SMS',
     debugUpdateCheckNoLimit: 'Unlimited update checks',
     debugUpdateCheckNoLimitDesc: 'Check for updates on every launch, not limited to once per day',

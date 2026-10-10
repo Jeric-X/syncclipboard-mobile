@@ -1,4 +1,5 @@
 import type { ILongRunningTask } from '../longRunningTask/LongRunningTask';
+import { measureStartup } from './startupTiming';
 
 /** UI 与 Headless 共用的任务策略；未知 AppState 按后台处理。 */
 export interface TaskRuntimePolicy {
@@ -91,7 +92,11 @@ export class LongRunningTaskCoordinator {
     // 注册顺序保证网络选择和同步回调先于剪贴板监听初始化。
     for (const { task, keepAlive } of this.tasks.values()) {
       if (keepAlive || policy.foreground || policy.backgroundEnabled) {
-        if (!task.isRunning()) await this.safely(task, () => task.start());
+        if (!task.isRunning()) {
+          await this.safely(task, () =>
+            measureStartup(`task.${task.name}.start`, () => task.start())
+          );
+        }
         active.push(task);
       } else {
         await this.safely(task, () => task.stop());
@@ -100,7 +105,9 @@ export class LongRunningTaskCoordinator {
     // 无 Activity 的冷启动不会收到一次 background 事件，必须主动应用状态。
     for (const task of active) {
       await this.safely(task, () =>
-        policy.foreground ? task.onForeground() : task.onBackground()
+        measureStartup(`task.${task.name}.initialPolicy`, () =>
+          policy.foreground ? task.onForeground() : task.onBackground()
+        )
       );
     }
   }

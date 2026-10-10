@@ -1,6 +1,7 @@
 jest.mock('../utils/Logger', () => ({
   initLogger: jest.fn(),
 }));
+jest.mock('../services/AppFoundation', () => ({ prepareAppFoundation: jest.fn() }));
 
 jest.mock('../services/sms/SmsCodeUploader', () => ({
   SmsCodeUploader: jest.fn().mockImplementation(() => ({
@@ -30,6 +31,7 @@ import { Platform } from 'react-native';
 import { SmsCodeUploader } from '../services/sms/SmsCodeUploader';
 import SmsUploadTask from '../tasks/SmsUploadTask';
 import { initLogger } from '../utils/Logger';
+import { prepareAppFoundation } from '../services/AppFoundation';
 
 const mockInitLogger = initLogger as jest.Mock;
 const mockUploader = (SmsCodeUploader as jest.Mock).mock.results[0].value as {
@@ -60,6 +62,10 @@ describe('SmsUploadTask', () => {
 
     expect(mockInitLogger).toHaveBeenCalledTimes(1);
     expect(mockUpload).toHaveBeenCalledWith(taskData);
+    expect(prepareAppFoundation).toHaveBeenCalledTimes(1);
+    expect((prepareAppFoundation as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
+      mockUpload.mock.invocationCallOrder[0]
+    );
     expect(mockInitLogger.mock.invocationCallOrder[0]).toBeLessThan(
       mockUpload.mock.invocationCallOrder[0]
     );
