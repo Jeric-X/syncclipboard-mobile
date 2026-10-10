@@ -21,6 +21,7 @@ export class ConfigStorage {
   private config: AppConfig | null = null;
   private initialized = false;
   private initializing: Promise<void> | null = null;
+  private updates: Promise<void> = Promise.resolve();
 
   private constructor() {}
 
@@ -84,13 +85,13 @@ export class ConfigStorage {
   /**
    * 保存配置
    */
-  private async saveConfig(): Promise<void> {
-    if (!this.config) {
+  private async saveConfig(config: AppConfig | null = this.config): Promise<void> {
+    if (!config) {
       throw new Error('Config not initialized');
     }
 
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(this.config));
+      await AsyncStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(config));
     } catch (error) {
       console.error('[ConfigStorage] Failed to save config:', error);
       throw error;
@@ -112,20 +113,17 @@ export class ConfigStorage {
    * 更新配置
    */
   public async updateConfig(updates: Partial<AppConfig>): Promise<void> {
-    if (!this.initialized) {
-      await this.initialize();
-    }
-
-    const previous = this.config;
-    const next = { ...this.config!, ...updates };
-    this.config = next;
-    try {
-      await this.saveConfig();
-    } catch (error) {
-      // 仅回退本次更新，避免覆盖等待期间发生的另一笔配置变更。
-      if (this.config === next) this.config = previous;
-      throw error;
-    }
+    // 后续更新基于已提交状态合并；失败不污染读者，也不阻塞队列。
+    const operation = this.updates
+      .catch(() => {})
+      .then(async () => {
+        await this.initialize();
+        const next = { ...this.config!, ...updates };
+        await this.saveConfig(next);
+        this.config = next;
+      });
+    this.updates = operation;
+    await operation;
   }
 
   /**

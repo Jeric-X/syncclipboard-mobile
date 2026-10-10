@@ -192,6 +192,68 @@ describe('ConfigStorage', () => {
   });
 
   describe('updateConfig', () => {
+    it('首笔保存失败不会污染并发的后续更新，读者只看到已提交配置', async () => {
+      mockGetItem.mockResolvedValue(JSON.stringify(DEFAULT_APP_CONFIG));
+      mockSetItem.mockResolvedValue(undefined);
+      await configStorage.initialize();
+      mockSetItem.mockClear();
+      let rejectFirst!: (error: Error) => void;
+      let started!: () => void;
+      const writing = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      mockSetItem.mockImplementationOnce(() => {
+        started();
+        return new Promise<void>((_resolve, reject) => {
+          rejectFirst = reject;
+        });
+      });
+      const logError = jest.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const first = configStorage.updateConfig({ debugColdStartToast: true });
+        const firstResult = first.catch((error: Error) => error);
+        await writing;
+        const second = configStorage.updateConfig({ syncInterval: 10000 });
+        const whileWriting = await configStorage.getConfig();
+        const error = new Error('disk full');
+        rejectFirst(error);
+        expect(await firstResult).toBe(error);
+        await second;
+        const committed = await configStorage.getConfig();
+        expect(whileWriting.debugColdStartToast).toBe(false);
+        expect(committed.debugColdStartToast).toBe(false);
+        expect(committed.syncInterval).toBe(10000);
+        expect(JSON.parse(mockSetItem.mock.calls[1][1])).toEqual(committed);
+      } finally {
+        logError.mockRestore();
+      }
+    });
+
+    it('并发成功更新保留各字段，后续失败也不撤销已提交字段', async () => {
+      mockGetItem.mockResolvedValue(JSON.stringify(DEFAULT_APP_CONFIG));
+      mockSetItem.mockResolvedValue(undefined);
+      await configStorage.initialize();
+      await Promise.all([
+        configStorage.updateConfig({ debugColdStartToast: true }),
+        configStorage.updateConfig({ syncInterval: 10000 }),
+      ]);
+      const committed = await configStorage.getConfig();
+      expect(committed.debugColdStartToast).toBe(true);
+      expect(committed.syncInterval).toBe(10000);
+      const logError = jest.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        mockSetItem.mockRejectedValueOnce(new Error('disk full'));
+        await expect(configStorage.updateConfig({ debugColdStartToast: false })).rejects.toThrow(
+          'disk full'
+        );
+        expect(await configStorage.getConfig()).toEqual(committed);
+        await configStorage.updateConfig({ syncInterval: 20000 });
+        expect((await configStorage.getConfig()).syncInterval).toBe(20000);
+      } finally {
+        logError.mockRestore();
+      }
+    });
+
     it('保存冷启动开关失败时拒绝更新且不保留未保存的缓存', async () => {
       mockGetItem.mockResolvedValue(JSON.stringify(DEFAULT_APP_CONFIG));
       mockSetItem.mockResolvedValue(undefined);

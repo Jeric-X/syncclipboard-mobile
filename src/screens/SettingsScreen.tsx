@@ -66,6 +66,7 @@ import { extractVerificationCode } from '@/tasks/SmsUploadTask';
 import { setStaticReceiverEnabled } from 'sms-forwarder';
 import { useTranslation } from 'react-i18next';
 import { useI18n } from '@/hooks/useI18n';
+import { useSyncedState } from '@/hooks/useSyncedState';
 import type { Language } from '@/i18n';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -175,7 +176,7 @@ export const SettingsScreen = () => {
     config?.debugOverlayVisible ?? false
   );
   const [localDebugUrlScheme, setLocalDebugUrlScheme] = useState(config?.debugUrlScheme ?? false);
-  const [localDebugColdStartToast, setLocalDebugColdStartToast] = useState(
+  const [localDebugColdStartToast, setLocalDebugColdStartToast] = useSyncedState(
     config?.debugColdStartToast ?? false
   );
   const [localDebugUpdateCheckNoLimit, setLocalDebugUpdateCheckNoLimit] = useState(
