@@ -174,6 +174,9 @@ export const SettingsScreen = () => {
     config?.debugOverlayVisible ?? false
   );
   const [localDebugUrlScheme, setLocalDebugUrlScheme] = useState(config?.debugUrlScheme ?? false);
+  const [localDebugColdStartToast, setLocalDebugColdStartToast] = useState(
+    config?.debugColdStartToast ?? false
+  );
   const [localDebugUpdateCheckNoLimit, setLocalDebugUpdateCheckNoLimit] = useState(
     config?.debugUpdateCheckNoLimit ?? false
   );
@@ -974,6 +977,17 @@ export const SettingsScreen = () => {
       await updateConfig({ debugUrlScheme: enabled });
     } catch (error: unknown) {
       setLocalDebugUrlScheme(!enabled);
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
+    }
+  };
+
+  // 处理切换冷启动提示，下次冷启动生效
+  const handleToggleDebugColdStartToast = async (enabled: boolean) => {
+    setLocalDebugColdStartToast(enabled);
+    try {
+      await updateConfig({ debugColdStartToast: enabled });
+    } catch (error: unknown) {
+      setLocalDebugColdStartToast(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
@@ -1933,6 +1947,15 @@ export const SettingsScreen = () => {
               label={t('settings.debugUrlScheme')}
               value={localDebugUrlScheme}
               onChange={handleToggleDebugUrlScheme}
+            />
+          )}
+
+          {localDebugModeEnabled && Platform.OS === 'android' && (
+            <SettingSwitch
+              label={t('settings.debugColdStartToast')}
+              description={t('settings.debugColdStartToastDesc')}
+              value={localDebugColdStartToast}
+              onChange={handleToggleDebugColdStartToast}
             />
           )}
 

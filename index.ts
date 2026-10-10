@@ -10,6 +10,7 @@ import ServiceRestartApp from './src/ServiceRestartApp';
 import SmsUploadTask from './src/tasks/SmsUploadTask';
 import ServiceRuntimeHeadlessTask from './src/tasks/ServiceRuntimeHeadlessTask';
 import { installServiceRuntime } from './src/services/ServiceRuntime';
+import { notifyColdStart } from './src/services/ColdStartNotification';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
 // It also ensures that whether you load the app in Expo Go or in a native build,
@@ -27,3 +28,4 @@ AppRegistry.registerHeadlessTask('SmsUploadTask', () => SmsUploadTask);
 AppRegistry.registerHeadlessTask('ServiceRuntimeHeadlessTask', () => ServiceRuntimeHeadlessTask);
 
 installServiceRuntime();
+notifyColdStart().catch((error) => console.error('[ColdStartNotification] Failed:', error));
