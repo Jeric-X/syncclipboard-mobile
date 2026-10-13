@@ -151,7 +151,7 @@ class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
     private fun promoteToForeground() {
         val notification = createNotification(getAppString("fg_notification_running"))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFY_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            startForeground(NOTIFY_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
             startForeground(NOTIFY_ID, notification)
         }
@@ -249,7 +249,7 @@ class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    // Android 15 的 dataSync 配额使用带 fgsType 的回调；单参回调属于 shortService。
+    // specialUse 当前没有类型专属配额，保留系统超时回调作为防御性清理。
     override fun onTimeout(startId: Int, fgsType: Int) {
         NativeLogger.w(TAG, "Foreground service timeout, type=$fgsType")
         pauseAndStop("temporary", showRecovery = true)
