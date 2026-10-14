@@ -103,7 +103,7 @@ serialized by `LongRunningTaskCoordinator`. Cold starts explicitly apply backgro
 and native stop requests are persisted until JS can handle them. If the service ends while
 no UI is active, the runtime releases all tasks and the clipboard overlay; the independent
 static SMS receiver retains the user's saved setting. Headless JS does not bypass Android
-foreground-service launch restrictions or the Android 15+ `dataSync` time quota.
+foreground-service launch restrictions.
 
 `src/longRunningTask/LongRunningTaskManager.ts` is the central lifecycle manager for all background tasks. Each task implements `ILongRunningTask` (`src/longRunningTask/LongRunningTask.ts`):
 
