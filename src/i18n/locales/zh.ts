@@ -221,7 +221,7 @@ const zh = {
     backgroundTasksEnabled: '已启用后台任务',
     backgroundTasksDisabled: '已禁用后台任务',
     foregroundNotification: '后台服务常驻通知',
-    foregroundNotificationDesc: '启用后会增加后台服务的稳定性',
+    foregroundNotificationDesc: '提高后台服务稳定性，自动恢复被系统停止的后台服务',
     disableForegroundNotifTitle: '关闭常驻通知',
     disableForegroundNotifMessage:
       '关闭常驻通知会降低后台服务稳定性，系统终止后台任务的可能性增大。',
