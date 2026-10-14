@@ -99,6 +99,9 @@ export interface AppConfig {
   /** 是否在后台时使用悬浮窗获取剪贴板（仅 Android） */
   enableClipboardOverlay: boolean;
 
+  /** 在 Headless 服务运行期间通过共享悬浮窗保活（仅 Android） */
+  enableOverlayKeepAlive: boolean;
+
   /** 是否使用 Shizuku 在后台获取剪贴板（仅 Android） */
   enableShizukuClipboard: boolean;
 
@@ -332,6 +335,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   enableBackgroundTasks: false, // 默认关闭后台任务总开关
   enableBackgroundDownload: false, // 默认关闭后台下载远程
   enableBackgroundUpload: false, // 默认关闭后台上传本地
+  enableOverlayKeepAlive: false, // 默认关闭悬浮窗保活
   enableClipboardOverlay: false, // 默认关闭悬浮窗获取剪贴板
   enableShizukuClipboard: false, // 默认关闭 Shizuku 获取剪贴板
   enableSmsForwarding: false, // 默认关闭自动上传短信验证码
