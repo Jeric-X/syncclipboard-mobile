@@ -42,6 +42,11 @@ class ClipboardOverlayModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("ClipboardOverlayModule")
 
+        OnDestroy {
+            // JS 环境重建时仍需释放旧模块创建的窗口。
+            mainHandler.post { removePersistentOverlay() }
+        }
+
         Function("setDebugMode") { enabled: Boolean ->
             debugMode = enabled
             // Update persistent overlay appearance if showing
