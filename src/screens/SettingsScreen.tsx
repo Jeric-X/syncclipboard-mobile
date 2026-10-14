@@ -645,6 +645,11 @@ export const SettingsScreen = () => {
     }
   };
 
+  const overlayKeepAliveAvailable =
+    localBackgroundTasksEnabled &&
+    localForegroundNotification &&
+    (localBackgroundDownloadEnabled || localBackgroundUploadEnabled);
+
   const handleToggleOverlayKeepAlive = async (enabled: boolean) => {
     if (enabled && !hasOverlayPermission()) {
       Alert.alert(t('settings.overlayKeepAlive'), t('settings.overlayKeepAlivePermission'), [
@@ -1582,8 +1587,9 @@ export const SettingsScreen = () => {
             <SettingSwitch
               label={t('settings.overlayKeepAlive')}
               description={t('settings.overlayKeepAliveDesc')}
-              value={localOverlayKeepAlive}
+              value={overlayKeepAliveAvailable && localOverlayKeepAlive}
               onChange={handleToggleOverlayKeepAlive}
+              disabled={!overlayKeepAliveAvailable}
             />
 
             <SettingSwitch
