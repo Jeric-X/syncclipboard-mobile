@@ -245,9 +245,8 @@ const en: DeepString<typeof zh> = {
       'You can upload text via the text selection popup without enabling this option.\n\nOn Android 10 and above, apps cannot directly access the clipboard in the background. You may need to enable the overlay window or use another tool to bypass this restriction.',
     backgroundUploadEnabled: 'Background upload enabled',
     backgroundUploadDisabled: 'Background upload disabled',
-    overlayKeepAlive: 'Keep alive via overlay window',
-    overlayKeepAliveDesc:
-      'Keeps an overlay while the background service runs to help it stay alive. Shares the clipboard overlay and closes it only when neither feature needs it.',
+    overlayKeepAlive: 'Keep running in background via overlay',
+    overlayKeepAliveDesc: 'Improves background reliability',
     overlayKeepAlivePermission:
       'Overlay permission is required. Grant it in system settings, then return to enable this option.',
     clipboardOverlay: 'Read clipboard via overlay window',
@@ -292,7 +291,7 @@ const en: DeepString<typeof zh> = {
     permissionWifiBlockedMessage:
       'The permission is blocked by the system. Allow it manually in app settings.',
     permissionOverlay: 'Overlay permission',
-    permissionOverlayDesc: 'Required for clipboard access and keep-alive via overlay window',
+    permissionOverlayDesc: 'Allow the app to display overlay windows',
     permissionSms: 'SMS permission',
     permissionSmsDesc: 'Required for auto-uploading verification codes',
     permissionShizuku: 'Shizuku permission',
@@ -385,7 +384,7 @@ const en: DeepString<typeof zh> = {
     debugModeEnabled: 'Debug mode enabled',
     debugModeDisabled: 'Debug mode disabled',
     debugOverlay: 'Show overlay window',
-    debugOverlayDesc: 'Make the overlay used for clipboard access or keep-alive visible',
+    debugOverlayDesc: 'Make the overlay visible to observe its status',
     debugOverlayEnabled: 'The overlay will be visible while in use',
     debugOverlayDisabled: 'Overlay window hidden',
     debugUrlScheme: 'Show URL Scheme calls',
