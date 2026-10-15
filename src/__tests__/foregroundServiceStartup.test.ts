@@ -116,6 +116,28 @@ test('no permission or failed creation does not retry without a window', async (
   expect(deps.sleep).toHaveBeenCalledTimes(1);
 });
 
+test('late native success is recognized even when overlay acquisition returns null', async () => {
+  const { startup, deps, setRunning } = setup();
+  deps.acquireOverlay.mockImplementationOnce(async () => {
+    setRunning(true);
+    return null;
+  });
+  expect(await startup.start()).toBe(true);
+  expect(deps.start).toHaveBeenCalledTimes(1);
+  expect(deps.sleep).toHaveBeenCalledTimes(1);
+});
+
+test('cancellation still wins over late native success with an unavailable overlay', async () => {
+  const { startup, deps, setRunning } = setup();
+  deps.acquireOverlay.mockImplementationOnce(async () => {
+    setRunning(true);
+    startup.cancel();
+    return null;
+  });
+  expect(await startup.start()).toBe(false);
+  expect(deps.start).toHaveBeenCalledTimes(1);
+});
+
 test('stop during window creation releases the eventual window without retrying', async () => {
   const { startup, deps, release } = setup();
   deps.acquireOverlay.mockImplementationOnce(async () => {

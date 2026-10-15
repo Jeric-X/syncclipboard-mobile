@@ -49,7 +49,8 @@ export class ForegroundServiceStartup {
     if (this.deps.isRunning()) return true;
 
     const release = await this.deps.acquireOverlay();
-    if (!release) return false;
+    // 等待窗口期间首次请求可能已成功；窗口不可用不能覆盖真实的服务状态。
+    if (!release) return (await allowed()) && this.deps.isRunning();
     try {
       if (!(await allowed())) return false;
       // 从原生创建函数返回后计时，不能把异步创建时间算进这一秒。
