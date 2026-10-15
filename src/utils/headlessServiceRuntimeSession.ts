@@ -1,14 +1,15 @@
-/** 原生服务会话与 JS 任务之间的可测试协议。 */
+/** 进程级原生会话与 JS 任务之间的可测试协议。 */
 export interface HeadlessServiceRuntimeSessionDependencies {
   subscribeStopped: (listener: (sessionId: string) => void) => () => void;
   isActive: (sessionId: string) => boolean;
   initialize: () => Promise<void>;
   acquireKeepAliveOverlay?: () => () => Promise<void>;
   markReady: (sessionId: string) => void;
+  finishSession: (sessionId: string) => Promise<void>;
   shutdownIfIdle: () => Promise<void>;
 }
 
-/** 保持任务有效直到原生服务停止；订阅必须先于异步初始化，避免遗漏停止事件。 */
+/** 保持任务有效直到原生会话结束；订阅必须先于异步初始化，避免遗漏停止事件。 */
 export async function runHeadlessServiceRuntimeSession(
   sessionId: string,
   deps: HeadlessServiceRuntimeSessionDependencies
@@ -31,9 +32,13 @@ export async function runHeadlessServiceRuntimeSession(
   } finally {
     unsubscribe();
     try {
-      await releaseOverlay?.();
+      await deps.finishSession(sessionId);
     } finally {
-      await deps.shutdownIfIdle();
+      try {
+        await releaseOverlay?.();
+      } finally {
+        await deps.shutdownIfIdle();
+      }
     }
   }
 }

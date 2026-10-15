@@ -23,6 +23,7 @@ export class OverlayLifecycle {
   private config: OverlayConfig | null = null;
   private foreground = false;
   private sessions = new Set<symbol>();
+  private startups = new Set<symbol>();
   private clipboardIdle = false;
   private reads = 0;
   private queue: Promise<unknown> = Promise.resolve();
@@ -39,6 +40,7 @@ export class OverlayLifecycle {
     this.deps.setDebugMode(!!this.config?.debugMode && !!this.config?.debugOverlayVisible);
     this.deps.setMaxRetries(this.config?.debugMode ? 20 : 5);
     const needed =
+      this.startups.size > 0 ||
       this.reads > 0 ||
       this.clipboardIdle ||
       (!!this.config?.enableOverlayKeepAlive && this.sessions.size > 0);
@@ -74,6 +76,31 @@ export class OverlayLifecycle {
       this.sessions.delete(token);
       return this.reconcile();
     };
+  }
+
+  /** 临时借用窗口辅助前台服务启动，必须等待原生创建完成再返回。 */
+  acquireStartup(): Promise<(() => Promise<void>) | null> {
+    return this.enqueue(async () => {
+      if (!this.deps.hasPermission()) return null;
+      const token = Symbol('foreground-startup');
+      this.startups.add(token);
+      try {
+        await this.syncWindow();
+        if (!this.deps.hasPermission() || !this.deps.isShowing()) {
+          this.startups.delete(token);
+          await this.syncWindow();
+          return null;
+        }
+      } catch (error) {
+        this.startups.delete(token);
+        await this.syncWindow();
+        throw error;
+      }
+      return () => {
+        this.startups.delete(token);
+        return this.reconcile();
+      };
+    });
   }
 
   private clearClipboardIdle(): void {

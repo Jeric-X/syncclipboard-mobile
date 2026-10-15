@@ -4,6 +4,8 @@ import { requireNativeModule, type EventSubscription } from 'expo-modules-core';
 const MODULE_NAME = 'ForegroundServiceModule';
 
 interface ForegroundServiceModuleType {
+  startHeadlessRuntime(): Promise<string | null>;
+  finishHeadlessRuntime(sessionId: string): Promise<void>;
   startService(): boolean;
   stopService(): boolean;
   updateNotification(content: string): boolean;
@@ -71,7 +73,17 @@ export function addTempStopListener(listener: () => void): EventSubscription | n
   return null;
 }
 
-/** 当前原生服务会话；无服务或不支持的平台返回 null。 */
+/** 独立确保进程内唯一的 Headless 会话；不等待 JS 初始化，也不要求前台服务已启动。 */
+export async function startHeadlessRuntime(): Promise<string | null> {
+  return NativeModule ? NativeModule.startHeadlessRuntime() : null;
+}
+
+/** JS 会话退出时确认释放原生占用；过期 ID 不影响当前会话。 */
+export async function finishHeadlessRuntime(sessionId: string): Promise<void> {
+  await NativeModule?.finishHeadlessRuntime(sessionId);
+}
+
+/** 当前进程级 Headless 会话，可能先于前台服务存在。 */
 export function getSessionId(): string | null {
   return NativeModule?.getSessionId() ?? null;
 }
@@ -91,7 +103,7 @@ export function markSessionReady(sessionId: string): void {
   NativeModule?.markSessionReady(sessionId);
 }
 
-/** 服务销毁时结束对应的 Headless JS 任务。 */
+/** 监听进程级会话结束，包括服务停止或启动失败。 */
 export function addSessionStoppedListener(
   listener: (event: { sessionId: string }) => void
 ): EventSubscription | null {

@@ -179,3 +179,48 @@ test('a failed native operation does not block later reconciliation', async () =
   expect(showing()).toBe(true);
   await stop();
 });
+
+test('startup can temporarily borrow a window with both persistent options off', async () => {
+  const { lifecycle, config, showing } = setup();
+  await lifecycle.updateConfig({
+    ...config,
+    enableClipboardOverlay: false,
+    enableOverlayKeepAlive: false,
+  });
+  const release = await lifecycle.acquireStartup();
+  expect(showing()).toBe(true);
+  expect(await lifecycle.acquireClipboard()).toBeNull();
+  await lifecycle.setForeground(true);
+  expect(showing()).toBe(true);
+  await release!();
+  expect(showing()).toBe(false);
+});
+
+test('startup release preserves clipboard and headless owners', async () => {
+  const { lifecycle, config, showing, expire } = setup();
+  await lifecycle.updateConfig(config);
+  const headless = lifecycle.acquireKeepAlive();
+  const clipboard = await lifecycle.acquireClipboard();
+  const startup = await lifecycle.acquireStartup();
+  await startup!();
+  await startup!();
+  expect(showing()).toBe(true);
+  await headless();
+  expect(showing()).toBe(true);
+  await clipboard!();
+  await expire();
+  expect(showing()).toBe(false);
+});
+
+test('failed startup acquisition leaves no window demand behind', async () => {
+  const { lifecycle, config, showing, deps } = setup();
+  await lifecycle.updateConfig(config);
+  deps.show.mockResolvedValueOnce(false);
+  expect(await lifecycle.acquireStartup()).toBeNull();
+  await lifecycle.updateConfig(config);
+  expect(showing()).toBe(false);
+  deps.show.mockRejectedValueOnce(new Error('cannot attach'));
+  await expect(lifecycle.acquireStartup()).rejects.toThrow('cannot attach');
+  await lifecycle.updateConfig(config);
+  expect(showing()).toBe(false);
+});

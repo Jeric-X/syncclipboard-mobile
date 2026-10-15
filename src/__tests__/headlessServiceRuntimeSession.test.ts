@@ -17,6 +17,9 @@ function setup() {
     initialize: jest.fn(async () => {}),
     acquireKeepAliveOverlay: jest.fn(() => releaseOverlay),
     markReady: jest.fn(),
+    finishSession: jest.fn(async (id) => {
+      if (active === id) active = '';
+    }),
     shutdownIfIdle: jest.fn(async () => {}),
   };
   return {
@@ -47,6 +50,21 @@ describe('Headless sync session', () => {
     await task;
     expect(unsubscribe).toHaveBeenCalledTimes(1);
     expect(releaseOverlay).toHaveBeenCalledTimes(1);
+    expect(deps.shutdownIfIdle).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears native ownership before checking whether failed initialization left an idle runtime', async () => {
+    const { deps } = setup();
+    deps.initialize = jest.fn(async () => {
+      throw new Error('startup failed');
+    });
+    deps.shutdownIfIdle = jest.fn(async () => {
+      expect(deps.isActive('session-1')).toBe(false);
+    });
+    await expect(runHeadlessServiceRuntimeSession('session-1', deps)).rejects.toThrow(
+      'startup failed'
+    );
+    expect(deps.finishSession).toHaveBeenCalledWith('session-1');
     expect(deps.shutdownIfIdle).toHaveBeenCalledTimes(1);
   });
 

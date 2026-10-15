@@ -73,6 +73,13 @@ export async function acquireClipboardOverlay(): Promise<(() => Promise<void>) |
   }
 }
 
+/** 启动重试临时使用窗口，不改变剪贴板或保持后台运行的用户设置。 */
+export async function acquireStartupOverlay(): Promise<(() => Promise<void>) | null> {
+  if (Platform.OS !== 'android') return null;
+  await initialize();
+  return lifecycle.acquireStartup();
+}
+
 /** Runtime 空闲时释放剪贴板占用，保活占用由 Headless 会话独立释放。 */
 export async function dismissClipboardOverlay(): Promise<void> {
   if (Platform.OS === 'android') await lifecycle.dismissClipboard();

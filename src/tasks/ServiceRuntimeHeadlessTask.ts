@@ -4,7 +4,7 @@ import * as ForegroundService from 'foreground-service';
 import { startServiceRuntime, stopServiceRuntimeIfIdle } from '../services/ServiceRuntime';
 import { runHeadlessServiceRuntimeSession } from '../utils/headlessServiceRuntimeSession';
 
-/** 无 Activity 的服务运行时入口；Promise 直到原生服务停止才结束。 */
+/** 无 Activity 的服务运行时入口；Promise 直到进程级会话结束才结束。 */
 export default async function ServiceRuntimeHeadlessTask(data: {
   sessionId: string;
 }): Promise<void> {
@@ -21,6 +21,7 @@ export default async function ServiceRuntimeHeadlessTask(data: {
     initialize: startServiceRuntime,
     acquireKeepAliveOverlay,
     markReady: ForegroundService.markSessionReady,
+    finishSession: ForegroundService.finishHeadlessRuntime,
     shutdownIfIdle: stopServiceRuntimeIfIdle,
   });
   console.info('[ServiceRuntimeHeadlessTask] Session stopped', data.sessionId);

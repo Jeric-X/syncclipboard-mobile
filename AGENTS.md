@@ -96,9 +96,16 @@ Key singletons, typically accessed via `getInstance()` or module-level exports:
 
 `src/services/ServiceRuntime.ts` is the shared initialization entry point for the foreground and
 Headless JS. `index.ts` installs the process-level foreground listener; screens must not start
-`LongRunningTaskManager` directly. `SyncForegroundService` starts ReactHost and the
-`ServiceRuntimeHeadlessTask` without an Activity, including after a `START_STICKY` restart.
-The JS task stays pending until its native service session ends. Lifecycle operations are
+`LongRunningTaskManager` directly. The process-level `ServiceRuntimeSession` owns one
+`ServiceRuntimeHeadlessTask`, independently of a foreground service instance. Both
+`startHeadlessRuntime()` and `SyncForegroundService` can ensure this session without an Activity,
+including after a `START_STICKY` restart. Headless initialization starts the foreground service
+according to configuration; concurrent starts reuse the existing session or pending request.
+Foreground service startup confirms native running state, waits one second after an unsuccessful
+request, borrows the shared overlay if permitted, waits another second after creation returns,
+and retries once. These waits use `native-timer`; stop requests cancel the attempt. Temporary
+startup overlay ownership is released without affecting clipboard or Headless ownership.
+The JS task stays pending until its native runtime session ends. Lifecycle operations are
 serialized by `LongRunningTaskCoordinator`. Cold starts explicitly apply background policy,
 and native stop requests are persisted until JS can handle them. If the service ends while
 no UI is active, the runtime releases all tasks and the clipboard overlay; the independent

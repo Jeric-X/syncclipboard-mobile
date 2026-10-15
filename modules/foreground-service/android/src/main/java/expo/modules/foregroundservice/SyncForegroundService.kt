@@ -9,28 +9,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
-import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
-import com.facebook.react.ReactApplication
-import com.facebook.react.ReactInstanceEventListener
-import com.facebook.react.bridge.Arguments
-import com.facebook.react.bridge.ReactContext
-import com.facebook.react.jstasks.HeadlessJsTaskConfig
-import com.facebook.react.jstasks.HeadlessJsTaskContext
-import com.facebook.react.jstasks.HeadlessJsTaskEventListener
 import expo.modules.nativeutil.NativeLogger
-import java.util.UUID
 
-/** 前台服务直接持有 Headless JS 会话，不依赖 Activity 创建或恢复 JS。 */
-class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
+/** 前台服务与进程级 Headless 会话相互确保启动，重复请求不会创建重复任务。 */
+class SyncForegroundService : Service() {
     companion object {
         private const val TAG = "SyncForegroundService"
         private const val APP_PACKAGE = "com.jericx.syncclipboardmobile"
-        private const val STARTUP_TIMEOUT_MS = 60_000L
         private const val PREFS = "sync_foreground_runtime"
         private const val STOP_REASON = "stop_reason"
         const val CHANNEL_ID = "syncclipboard_foreground"
@@ -47,27 +35,63 @@ class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
             private set
         @Volatile internal var stoppedByUser = false
 
-        fun currentSessionId(): String? = instance?.takeIf { isRunning }?.sessionId
+        private var startPending = false
+        private var generation = 0L
+        private const val EXTRA_GENERATION = "generation"
+
+        @Synchronized
+        fun requestStart(context: Context): Boolean {
+            if (getStopReason(context) != null) return false
+            if (isRunning || startPending) return true
+            startPending = true
+            val intent = Intent(context, SyncForegroundService::class.java).apply {
+                action = ACTION_START
+                putExtra(EXTRA_GENERATION, generation)
+            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
+                else context.startService(intent)
+            } catch (error: Exception) {
+                startPending = false
+                throw error
+            }
+            return true
+        }
+
+        @Synchronized
+        fun requestStop(context: Context) {
+            generation += 1
+            startPending = false
+            stoppedByUser = true
+            // 包括尚未执行 onStartCommand 的请求。
+            context.stopService(Intent(context, SyncForegroundService::class.java))
+            ServiceRuntimeSession.requestStop(ServiceRuntimeSession.currentSessionId())
+        }
+
+        @Synchronized
+        private fun acceptStart(intent: Intent?): Boolean {
+            if (intent != null && intent.getLongExtra(EXTRA_GENERATION, -1L) != generation) return false
+            startPending = false
+            return true
+        }
+
+        fun onRuntimeFailed() {
+            instance?.pauseAndStop("temporary", showRecovery = true)
+        }
+
+        /** 仅正在运行的服务绑定当前会话；等待销毁的旧服务不能认领新会话。 */
+        fun attachRuntime(sessionId: String) {
+            instance?.takeIf { isRunning && !stoppedByUser }?.sessionId = sessionId
+        }
+
         fun getStopReason(context: Context): String? =
             context.getSharedPreferences(PREFS, MODE_PRIVATE).getString(STOP_REASON, null)
         fun clearStopReason(context: Context) {
             context.getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(STOP_REASON).commit()
         }
-        fun markSessionReady(sessionId: String) {
-            val service = instance ?: return
-            service.handler.post {
-                if (isRunning && service.sessionId == sessionId) {
-                    service.handler.removeCallbacks(service.startupTimeout)
-                    service.releaseStartupWakeLock()
-                    service.notificationManager?.cancel(RESTART_NOTIFY_ID)
-                    NativeLogger.i(TAG, "Headless sync ready: $sessionId")
-                    service.logStartupTiming("jsReady")
-                }
-            }
-        }
     }
 
-    @Volatile private var sessionId = UUID.randomUUID().toString()
+    private var sessionId: String? = null
     private val createdAtMs = SystemClock.elapsedRealtime()
     private val startupTimingStages = mutableSetOf<String>()
 
@@ -80,21 +104,7 @@ class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
             "processElapsedMs=${now - android.os.Process.getStartElapsedRealtime()} " +
             "wallTimeMs=${System.currentTimeMillis()}")
     }
-    private val handler = Handler(Looper.getMainLooper())
     private var notificationManager: NotificationManager? = null
-    private var startupWakeLock: PowerManager.WakeLock? = null
-    private var taskContext: HeadlessJsTaskContext? = null
-    private var taskReactContext: ReactContext? = null
-    private var taskId: Int? = null
-    private var contextListener: ReactInstanceEventListener? = null
-    private val reactHost get() = (application as ReactApplication).reactHost
-    private val startupTimeout = Runnable {
-        if (isRunning) {
-            NativeLogger.w(TAG, "Headless startup timed out")
-            pauseAndStop("temporary", showRecovery = true)
-        }
-    }
-
     private fun getAppString(name: String): String {
         val resId = resources.getIdentifier(name, "string", APP_PACKAGE)
         return if (resId != 0) getString(resId) else name
@@ -103,7 +113,6 @@ class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        stoppedByUser = false
         createNotificationChannel()
         logStartupTiming("serviceCreated")
     }
@@ -130,22 +139,30 @@ class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
                     // 必须先兑现前台服务启动时限，再等待 ReactHost/配置初始化。
                     promoteToForeground()
                     logStartupTiming("foregroundReady")
-                    if (getStopReason(this) != null) {
+                    if (!acceptStart(intent) || getStopReason(this) != null) {
                         stoppedByUser = true
-                        stopSelf()
+                        stopSelfResult(startId)
                         return START_NOT_STICKY
                     }
+                    stoppedByUser = false
                     isRunning = true
-                    startHeadlessSession()
+                    sessionId = ServiceRuntimeSession.ensureStarted(this)
                 } catch (error: Exception) {
-                    NativeLogger.e(TAG, "Cannot start headless sync", error)
-                    pauseAndStop("temporary", showRecovery = true)
+                    NativeLogger.e(TAG, "Cannot start foreground sync", error)
+                    synchronized(Companion) { startPending = false }
+                    // 提升失败时保留独立启动的 Headless 会话，让 JS 完成有限的悬浮窗重试。
+                    if (isRunning) {
+                        pauseAndStop("temporary", showRecovery = true)
+                    } else {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelfResult(startId)
+                    }
                     return START_NOT_STICKY
                 }
             }
             else -> return START_NOT_STICKY
         }
-        return START_STICKY
+        return if (isRunning) START_STICKY else START_NOT_STICKY
     }
 
     private fun promoteToForeground() {
@@ -157,88 +174,15 @@ class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
         }
     }
 
-    private fun startHeadlessSession() {
-        val host = checkNotNull(reactHost) { "ReactHost is unavailable" }
-        val context = host.currentReactContext
-        if (contextListener != null) return
-        if (context === taskReactContext && taskId?.let { taskContext?.isTaskRunning(it) } == true) return
-        // JS reload 时换一代会话，迟到的完成回调不能终止新任务。
-        if (taskId != null) {
-            releaseTask()
-            sessionId = UUID.randomUUID().toString()
-            startupTimingStages.clear()
-        }
-        logStartupTiming(if (context == null) "reactHostStart" else "reactContextAlreadyReady")
-        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
-        startupWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:sync-startup")
-            .apply { setReferenceCounted(false); acquire(STARTUP_TIMEOUT_MS) }
-        handler.postDelayed(startupTimeout, STARTUP_TIMEOUT_MS)
-        if (context != null) {
-            launchTask(context)
-        } else {
-            val listener = object : ReactInstanceEventListener {
-                override fun onReactContextInitialized(context: ReactContext) {
-                    handler.post {
-                        logStartupTiming("reactContextReady")
-                        host.removeReactInstanceEventListener(this)
-                        contextListener = null
-                        if (instance === this@SyncForegroundService && isRunning && !stoppedByUser) {
-                            launchTask(context)
-                        }
-                    }
-                }
-            }
-            contextListener = listener
-            host.addReactInstanceEventListener(listener)
-            host.start()
-        }
-    }
-
-    private fun launchTask(context: ReactContext) {
-        try {
-            taskReactContext = context
-            taskContext = HeadlessJsTaskContext.getInstance(context).also { tasks ->
-                tasks.addTaskEventListener(this)
-                taskId = tasks.startTask(HeadlessJsTaskConfig(
-                    "ServiceRuntimeHeadlessTask",
-                    Arguments.createMap().apply { putString("sessionId", sessionId) },
-                    0L,
-                    true
-                ))
-            }
-            NativeLogger.i(TAG, "Started Headless JS task=$taskId, session=$sessionId")
-            logStartupTiming("headlessTaskScheduled")
-        } catch (error: Exception) {
-            NativeLogger.e(TAG, "Cannot launch Headless JS task", error)
-            pauseAndStop("temporary", showRecovery = true)
-        }
-    }
-
-    override fun onHeadlessJsTaskStart(taskId: Int) = Unit
-
-    override fun onHeadlessJsTaskFinish(taskId: Int) {
-        // 短信上传等其他 Headless 任务完成不能停止同步服务。
-        if (this.taskId != taskId) return
-        if (isRunning && !stoppedByUser) pauseAndStop("temporary", showRecovery = true)
-    }
-
-    private fun releaseTask() {
-        taskContext?.removeTaskEventListener(this)
-        taskId?.let { taskContext?.finishTask(it) }
-        taskId = null
-        taskContext = null
-        taskReactContext = null
-    }
-
-    private fun releaseStartupWakeLock() {
-        startupWakeLock?.let { if (it.isHeld) it.release() }
-        startupWakeLock = null
-    }
-
     private fun pauseAndStop(reason: String, showRecovery: Boolean = false) {
         // 先持久化，确保 JS 尚未启动或进程随后死亡时也不会丢失用户的停止操作。
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(STOP_REASON, reason).commit()
-        stoppedByUser = true
+        synchronized(Companion) {
+            generation += 1
+            startPending = false
+            stoppedByUser = true
+        }
+        ServiceRuntimeSession.currentSessionId()?.let { ServiceRuntimeSession.stop(it) }
         if (reason == "stop") ForegroundServiceModule.sendStopEvent()
         else ForegroundServiceModule.sendTempStopEvent()
         if (showRecovery) showRestartNotification()
@@ -267,12 +211,7 @@ class SyncForegroundService : Service(), HeadlessJsTaskEventListener {
         val unexpected = isRunning && !stoppedByUser
         isRunning = false
         instance = null
-        handler.removeCallbacks(startupTimeout)
-        contextListener?.let { reactHost?.removeReactInstanceEventListener(it) }
-        contextListener = null
-        releaseStartupWakeLock()
-        ForegroundServiceModule.sendSessionStopped(endedSession)
-        releaseTask()
+        endedSession?.let { ServiceRuntimeSession.stop(it) }
         if (unexpected) showRestartNotification()
         super.onDestroy()
     }

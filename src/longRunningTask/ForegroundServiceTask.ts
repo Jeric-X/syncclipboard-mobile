@@ -18,6 +18,10 @@ import * as ForegroundService from 'foreground-service';
 import { LongRunningTask } from './LongRunningTask';
 import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
+import { acquireStartupOverlay } from '../services/OverlayRuntime';
+import { ForegroundServiceStartup } from '../utils/foregroundServiceStartup';
+import { nativeSleep } from '../utils/nativeSleep';
+import type { AppConfig } from '../types/storage';
 
 class ForegroundServiceTask extends LongRunningTask {
   readonly name = 'foregroundService';
@@ -26,6 +30,13 @@ class ForegroundServiceTask extends LongRunningTask {
   private _running = false;
   private _stopSub: { remove(): void } | null = null;
   private _tempStopSub: { remove(): void } | null = null;
+  private readonly _startup = new ForegroundServiceStartup({
+    isRunning: ForegroundService.isRunning,
+    start: ForegroundService.startService,
+    shouldRun: () => this._shouldRunForegroundService(),
+    sleep: nativeSleep,
+    acquireOverlay: acquireStartupOverlay,
+  });
 
   async start(): Promise<void> {
     if (Platform.OS !== 'android') return;
@@ -41,6 +52,7 @@ class ForegroundServiceTask extends LongRunningTask {
 
   async stop(): Promise<void> {
     this._running = false;
+    this._startup.cancel();
 
     await this._stopService();
   }
@@ -57,9 +69,12 @@ class ForegroundServiceTask extends LongRunningTask {
 
   private async _shouldRunForegroundService(): Promise<boolean> {
     const config = await configService.getConfig();
-    const tempDisabled = backgroundRuntimeState.isTempDisabled();
+    return this._running && this._configAllowsService(config);
+  }
+
+  private _configAllowsService(config: AppConfig | null): boolean {
     return (
-      !tempDisabled &&
+      !backgroundRuntimeState.isTempDisabled() &&
       !ForegroundService.getStopReason() &&
       !!config?.enableBackgroundTasks &&
       !!(config?.enableBackgroundDownload || config?.enableBackgroundUpload) &&
@@ -70,7 +85,14 @@ class ForegroundServiceTask extends LongRunningTask {
   /** 根据当前配置决定启动或停止服务 */
   private async _refresh(): Promise<void> {
     if (await this._shouldRunForegroundService()) {
-      await this._startService();
+      try {
+        await this._startService();
+      } catch (error) {
+        // 失败不能留下“任务已运行”的标记，否则下一次独立入口无法再次确保服务。
+        this._running = false;
+        this._detachServiceListeners();
+        throw error;
+      }
     } else {
       await this._stopService();
     }
@@ -79,14 +101,35 @@ class ForegroundServiceTask extends LongRunningTask {
   /** 启动前台服务 */
   private async _startService(): Promise<void> {
     this._attachServiceListeners();
-    // 原生服务负责去重，也能在 JS reload 后重新绑定 Headless 会话。
-    if (!ForegroundService.startService()) {
-      throw new Error('Foreground service could not be started');
+    // 配置通知不能等任务管理器串行队列，否则关闭再开启可能漏掉取消信号。
+    const unsubscribeConfig = configService.subscribe((config) => {
+      if (!this._configAllowsService(config)) this._startup.cancel();
+    });
+    const unsubscribeState = backgroundRuntimeState.subscribe(() => {
+      if (backgroundRuntimeState.isTempDisabled()) this._startup.cancel();
+    });
+    const sessionId = ForegroundService.getSessionId();
+    const stopped = ForegroundService.addSessionStoppedListener((event) => {
+      if (event.sessionId === sessionId) this._startup.cancel();
+    });
+    try {
+      if (await this._startup.start()) {
+        // 同样覆盖 JS reload：原生前台服务可能还在，但需要重新绑定当前 ReactContext。
+        if (await this._shouldRunForegroundService())
+          await ForegroundService.startHeadlessRuntime();
+      } else if (await this._shouldRunForegroundService()) {
+        throw new Error('Foreground service did not enter the foreground after bounded retries');
+      }
+    } finally {
+      unsubscribeConfig();
+      unsubscribeState();
+      stopped?.remove();
     }
   }
 
   /** 停止服务，包括由 Android 冷启动而非本 JS 实例创建的服务。 */
   private async _stopService(): Promise<void> {
+    this._startup.cancel();
     this._detachServiceListeners();
     ForegroundService.stopService();
   }
@@ -95,6 +138,7 @@ class ForegroundServiceTask extends LongRunningTask {
   private _attachServiceListeners(): void {
     if (this._stopSub || this._tempStopSub) return;
     this._stopSub = ForegroundService.addStopListener(() => {
+      this._startup.cancel();
       configService
         .updateConfig({ enableBackgroundTasks: false })
         .then(() => ForegroundService.clearStopReason())
@@ -103,6 +147,7 @@ class ForegroundServiceTask extends LongRunningTask {
         });
     });
     this._tempStopSub = ForegroundService.addTempStopListener(() => {
+      this._startup.cancel();
       backgroundRuntimeState.setTempDisabled(true);
     });
   }
