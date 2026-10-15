@@ -1,3 +1,4 @@
+import { acquireKeepAliveOverlay } from '../services/OverlayRuntime';
 import { Platform } from 'react-native';
 import * as ForegroundService from 'foreground-service';
 import { startServiceRuntime, stopServiceRuntimeIfIdle } from '../services/ServiceRuntime';
@@ -18,6 +19,7 @@ export default async function ServiceRuntimeHeadlessTask(data: {
     },
     isActive: (sessionId) => ForegroundService.getSessionId() === sessionId,
     initialize: startServiceRuntime,
+    acquireKeepAliveOverlay,
     markReady: ForegroundService.markSessionReady,
     shutdownIfIdle: stopServiceRuntimeIfIdle,
   });

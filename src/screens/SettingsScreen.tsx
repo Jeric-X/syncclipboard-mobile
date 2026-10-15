@@ -166,6 +166,9 @@ export const SettingsScreen = () => {
   const [localSyncFileSavePath, setLocalSyncFileSavePath] = useState(
     config?.syncFileSavePath ?? ''
   );
+  const [localOverlayKeepAlive, setLocalOverlayKeepAlive] = useSyncedState(
+    config?.enableOverlayKeepAlive ?? false
+  );
   const [localForegroundNotification, setLocalForegroundNotification] = useState(
     config?.enableForegroundNotification ?? true
   );
@@ -638,6 +641,23 @@ export const SettingsScreen = () => {
       showMessage(t('settings.backgroundUploadDisabled'), 'success');
     } catch (error: unknown) {
       setLocalBackgroundUploadEnabled(true);
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
+    }
+  };
+
+  const handleToggleOverlayKeepAlive = async (enabled: boolean) => {
+    if (enabled && !hasOverlayPermission()) {
+      Alert.alert(t('settings.overlayKeepAlive'), t('settings.overlayKeepAlivePermission'), [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('common.goToSettings'), onPress: requestOverlayPermission },
+      ]);
+      return;
+    }
+    setLocalOverlayKeepAlive(enabled);
+    try {
+      await configService.updateConfig({ enableOverlayKeepAlive: enabled });
+    } catch (error: unknown) {
+      setLocalOverlayKeepAlive(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
@@ -1556,6 +1576,14 @@ export const SettingsScreen = () => {
               description={t('settings.foregroundNotificationDesc')}
               value={localBackgroundTasksEnabled && localForegroundNotification}
               onChange={handleToggleForegroundNotification}
+              disabled={!localBackgroundTasksEnabled}
+            />
+
+            <SettingSwitch
+              label={t('settings.overlayKeepAlive')}
+              description={t('settings.overlayKeepAliveDesc')}
+              value={localBackgroundTasksEnabled && localOverlayKeepAlive}
+              onChange={handleToggleOverlayKeepAlive}
               disabled={!localBackgroundTasksEnabled}
             />
 

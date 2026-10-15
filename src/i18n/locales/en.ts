@@ -229,7 +229,8 @@ const en: DeepString<typeof zh> = {
     backgroundTasksEnabled: 'Background tasks enabled',
     backgroundTasksDisabled: 'Background tasks disabled',
     foregroundNotification: 'Persistent foreground notification',
-    foregroundNotificationDesc: 'Increases background service stability when enabled',
+    foregroundNotificationDesc:
+      'Improves background reliability and automatically restores the service when stopped by the system',
     disableForegroundNotifTitle: 'Disable Persistent Notification',
     disableForegroundNotifMessage:
       'Disabling the persistent notification may reduce background service stability and increase the likelihood of the system terminating background tasks.',
@@ -245,6 +246,10 @@ const en: DeepString<typeof zh> = {
       'You can upload text via the text selection popup without enabling this option.\n\nOn Android 10 and above, apps cannot directly access the clipboard in the background. You may need to enable the overlay window or use another tool to bypass this restriction.',
     backgroundUploadEnabled: 'Background upload enabled',
     backgroundUploadDisabled: 'Background upload disabled',
+    overlayKeepAlive: 'Keep running in background via overlay',
+    overlayKeepAliveDesc: 'Improves background reliability',
+    overlayKeepAlivePermission:
+      'Overlay permission is required. Grant it in system settings, then return to enable this option.',
     clipboardOverlay: 'Read clipboard via overlay window',
     enableClipboardOverlayTitle: 'Enable Overlay Window',
     enableClipboardOverlayMessage:
@@ -287,7 +292,7 @@ const en: DeepString<typeof zh> = {
     permissionWifiBlockedMessage:
       'The permission is blocked by the system. Allow it manually in app settings.',
     permissionOverlay: 'Overlay permission',
-    permissionOverlayDesc: 'Required for reading clipboard via overlay window',
+    permissionOverlayDesc: 'Allow the app to display overlay windows',
     permissionSms: 'SMS permission',
     permissionSmsDesc: 'Required for auto-uploading verification codes',
     permissionShizuku: 'Shizuku permission',
@@ -380,8 +385,8 @@ const en: DeepString<typeof zh> = {
     debugModeEnabled: 'Debug mode enabled',
     debugModeDisabled: 'Debug mode disabled',
     debugOverlay: 'Show overlay window',
-    debugOverlayDesc: 'Show a visible overlay window when reading clipboard in background',
-    debugOverlayEnabled: 'Overlay window will be visible in background',
+    debugOverlayDesc: 'Make the overlay visible to observe its status',
+    debugOverlayEnabled: 'The overlay will be visible while in use',
     debugOverlayDisabled: 'Overlay window hidden',
     debugUrlScheme: 'Show URL Scheme calls',
     debugColdStartToast: 'Cold start toast',

@@ -42,6 +42,11 @@ class ClipboardOverlayModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("ClipboardOverlayModule")
 
+        OnDestroy {
+            // JS 环境重建时仍需释放旧模块创建的窗口。
+            mainHandler.post { removePersistentOverlay() }
+        }
+
         Function("setDebugMode") { enabled: Boolean ->
             debugMode = enabled
             // Update persistent overlay appearance if showing
@@ -111,7 +116,7 @@ class ClipboardOverlayModule : Module() {
                         WindowManager.LayoutParams.TYPE_PHONE
                     }
 
-                    val overlaySize = if (debugMode) 200 else 1
+                    val overlaySize = if (debugMode) 50 else 1
 
                     if (debugMode) {
                         view.setBackgroundColor(0xFFFF0000.toInt())
@@ -124,7 +129,7 @@ class ClipboardOverlayModule : Module() {
                             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                         PixelFormat.TRANSLUCENT
                     ).apply {
-                        alpha = if (debugMode) 0.7f else 0f
+                        alpha = if (debugMode) 0.4f else 0f
                         gravity = Gravity.START or Gravity.TOP
                         x = 0
                         y = 0
@@ -323,10 +328,10 @@ class ClipboardOverlayModule : Module() {
         val wm = persistentWindowManager ?: return
         val params = persistentParams ?: return
 
-        val overlaySize = if (debugMode) 200 else 1
+        val overlaySize = if (debugMode) 50 else 1
         params.width = overlaySize
         params.height = overlaySize
-        params.alpha = if (debugMode) 0.7f else 0f
+        params.alpha = if (debugMode) 0.4f else 0f
 
         if (debugMode) {
             view.setBackgroundColor(0xFFFF0000.toInt())
@@ -461,7 +466,7 @@ class ClipboardOverlayModule : Module() {
                         WindowManager.LayoutParams.TYPE_PHONE
                     }
 
-                    val overlaySize = if (debugMode) 200 else 1
+                    val overlaySize = if (debugMode) 50 else 1
                     if (debugMode) {
                         overlayView.setBackgroundColor(0xFFFF0000.toInt())
                     }
@@ -473,7 +478,7 @@ class ClipboardOverlayModule : Module() {
                             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                         PixelFormat.TRANSLUCENT
                     ).apply {
-                        alpha = if (debugMode) 0.7f else 0f
+                        alpha = if (debugMode) 0.4f else 0f
                         gravity = Gravity.START or Gravity.TOP
                         x = 0
                         y = 0
