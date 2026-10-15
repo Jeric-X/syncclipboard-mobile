@@ -3,6 +3,8 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'android' },
 }));
 jest.mock('foreground-service', () => ({
+  startHeadlessRuntime: jest.fn(),
+  addSessionStoppedListener: jest.fn(),
   getStopReason: jest.fn(),
   clearStopReason: jest.fn(),
   getSessionId: jest.fn(),
@@ -21,11 +23,13 @@ jest.mock('../utils/Logger', () => ({ initLogger: jest.fn() }));
 jest.mock('../utils/clipboardProxy', () => ({ dismissOverlay: jest.fn() }));
 jest.mock('../services/AppFoundation', () => ({ prepareAppFoundation: jest.fn() }));
 
+import { runtimeReadiness } from '../utils/runtimeReadiness';
 import { AppState, Platform } from 'react-native';
 import * as ForegroundService from 'foreground-service';
 import {
   installServiceRuntime,
   startServiceRuntime,
+  requestServiceRuntime,
   stopServiceRuntimeIfIdle,
 } from '../services/ServiceRuntime';
 import { configService } from '../services/ConfigService';
@@ -51,7 +55,12 @@ describe('service runtime bootstrap', () => {
     (ForegroundService.clearStopReason as jest.Mock).mockImplementation(() => {
       stopReason = null;
     });
-    (ForegroundService.getSessionId as jest.Mock).mockReturnValue(null);
+    runtimeReadiness.end('runtime-1');
+    (ForegroundService.getSessionId as jest.Mock).mockReturnValue('runtime-1');
+    (ForegroundService.startHeadlessRuntime as jest.Mock).mockImplementation(async () => {
+      void runtimeReadiness.initialize('runtime-1', startServiceRuntime).catch(() => {});
+      return 'runtime-1';
+    });
     (configService.getConfig as jest.Mock).mockResolvedValue({ enableBackgroundTasks: true });
     (configService.updateConfig as jest.Mock).mockResolvedValue({ enableBackgroundTasks: false });
     (longRunningTaskManager.startAll as jest.Mock).mockResolvedValue(undefined);
@@ -105,19 +114,56 @@ describe('service runtime bootstrap', () => {
   it('resumes temporary pause on an explicit foreground entry', async () => {
     AppState.currentState = 'active';
     stopReason = 'temporary';
-    await startServiceRuntime(true);
+    await requestServiceRuntime(true);
     expect(stopReason).toBeNull();
     expect(backgroundRuntimeState.setTempDisabled).toHaveBeenCalledWith(false);
   });
 
   it('does not lose a foreground resume arriving during Headless initialization', async () => {
     stopReason = 'temporary';
-    const headless = startServiceRuntime();
+    const headless = runtimeReadiness.initialize('runtime-1', startServiceRuntime);
     AppState.currentState = 'active';
-    const foreground = startServiceRuntime(true);
+    const foreground = requestServiceRuntime(true);
     await Promise.all([headless, foreground]);
     expect(stopReason).toBeNull();
     expect(backgroundRuntimeState.setTempDisabled).toHaveBeenLastCalledWith(false);
+    expect(longRunningTaskManager.startAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('Android UI waits for Headless initialization without initializing tasks itself', async () => {
+    (ForegroundService.startHeadlessRuntime as jest.Mock).mockResolvedValue('runtime-1');
+    const first = requestServiceRuntime();
+    const second = requestServiceRuntime();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(longRunningTaskManager.startAll).not.toHaveBeenCalled();
+    expect(ForegroundService.startHeadlessRuntime).toHaveBeenCalledTimes(1);
+    await runtimeReadiness.initialize('runtime-1', startServiceRuntime);
+    await Promise.all([first, second]);
+    await requestServiceRuntime();
+    expect(longRunningTaskManager.startAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects UI waiting when the native session ends before Headless starts', async () => {
+    let stopped!: (event: { sessionId: string }) => void;
+    const remove = jest.fn();
+    (ForegroundService.addSessionStoppedListener as jest.Mock).mockImplementation((listener) => {
+      stopped = listener;
+      return { remove };
+    });
+    (ForegroundService.startHeadlessRuntime as jest.Mock).mockResolvedValue('runtime-1');
+    const pending = requestServiceRuntime();
+    const failure = expect(pending).rejects.toThrow('ended before initialization');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    stopped({ sessionId: 'runtime-1' });
+    await failure;
+    expect(remove).toHaveBeenCalled();
+    expect(longRunningTaskManager.startAll).not.toHaveBeenCalled();
+  });
+
+  it('does not wait indefinitely when native session creation is refused', async () => {
+    (ForegroundService.startHeadlessRuntime as jest.Mock).mockResolvedValue(null);
+    await expect(requestServiceRuntime()).rejects.toThrow('could not be started');
+    expect(longRunningTaskManager.startAll).not.toHaveBeenCalled();
   });
 
   it('does not dispose a runtime still owned by a newer native session or the foreground', async () => {
@@ -130,6 +176,7 @@ describe('service runtime bootstrap', () => {
   });
 
   it('disposes background tasks and overlay when the last service owner disappears', async () => {
+    (ForegroundService.getSessionId as jest.Mock).mockReturnValue(null);
     await stopServiceRuntimeIfIdle();
     expect(longRunningTaskManager.stopAll).toHaveBeenCalledTimes(1);
     expect(dismissOverlay).toHaveBeenCalledTimes(1);
@@ -142,8 +189,7 @@ describe('service runtime bootstrap', () => {
     try {
       installServiceRuntime();
       expect(AppState.addEventListener).toHaveBeenCalledTimes(1);
-      expect(configService.getConfig).toHaveBeenCalled();
-      await startServiceRuntime(true);
+      await requestServiceRuntime(true);
       expect(longRunningTaskManager.startAll).toHaveBeenCalled();
 
       installServiceRuntime();
@@ -155,8 +201,7 @@ describe('service runtime bootstrap', () => {
       expect(configService.getConfig).not.toHaveBeenCalled();
       AppState.currentState = 'active';
       onChange();
-      expect(configService.getConfig).toHaveBeenCalled();
-      await startServiceRuntime(true);
+      await requestServiceRuntime(true);
     } finally {
       Platform.OS = originalPlatform;
     }

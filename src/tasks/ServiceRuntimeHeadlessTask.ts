@@ -1,3 +1,4 @@
+import { runtimeReadiness } from '../utils/runtimeReadiness';
 import { acquireKeepAliveOverlay } from '../services/OverlayRuntime';
 import { Platform } from 'react-native';
 import * as ForegroundService from 'foreground-service';
@@ -10,19 +11,23 @@ export default async function ServiceRuntimeHeadlessTask(data: {
 }): Promise<void> {
   if (Platform.OS !== 'android') return;
   console.info('[ServiceRuntimeHeadlessTask] Starting session', data.sessionId);
-  await runHeadlessServiceRuntimeSession(data.sessionId, {
-    subscribeStopped: (listener) => {
-      const subscription = ForegroundService.addSessionStoppedListener(({ sessionId }) =>
-        listener(sessionId)
-      );
-      return () => subscription?.remove();
-    },
-    isActive: (sessionId) => ForegroundService.getSessionId() === sessionId,
-    initialize: startServiceRuntime,
-    acquireKeepAliveOverlay,
-    markReady: ForegroundService.markSessionReady,
-    finishSession: ForegroundService.finishHeadlessRuntime,
-    shutdownIfIdle: stopServiceRuntimeIfIdle,
-  });
+  try {
+    await runHeadlessServiceRuntimeSession(data.sessionId, {
+      subscribeStopped: (listener) => {
+        const subscription = ForegroundService.addSessionStoppedListener(({ sessionId }) =>
+          listener(sessionId)
+        );
+        return () => subscription?.remove();
+      },
+      isActive: (sessionId) => ForegroundService.getSessionId() === sessionId,
+      initialize: () => runtimeReadiness.initialize(data.sessionId, startServiceRuntime),
+      acquireKeepAliveOverlay,
+      markReady: ForegroundService.markSessionReady,
+      finishSession: ForegroundService.finishHeadlessRuntime,
+      shutdownIfIdle: stopServiceRuntimeIfIdle,
+    });
+  } finally {
+    runtimeReadiness.end(data.sessionId);
+  }
   console.info('[ServiceRuntimeHeadlessTask] Session stopped', data.sessionId);
 }

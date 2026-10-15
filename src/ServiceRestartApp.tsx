@@ -12,7 +12,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { I18nProvider } from './contexts/I18nContext';
 import { useSettingsStore } from './stores';
 import { initLogger } from './utils/Logger';
-import { startServiceRuntime } from './services/ServiceRuntime';
+import { requestServiceRuntime } from './services/ServiceRuntime';
 import { useTranslation } from 'react-i18next';
 
 interface ServiceRestartAppProps {
@@ -39,7 +39,11 @@ function ServiceRestartContent({ systemTheme }: ServiceRestartAppProps) {
   useEffect(() => {
     if (!isLoaded || Platform.OS !== 'android') return;
 
-    startServiceRuntime().finally(() => setReady(true));
+    requestServiceRuntime()
+      .catch((error) => {
+        console.error('[ServiceRestartApp] Runtime initialization failed:', error);
+      })
+      .finally(() => setReady(true));
   }, [isLoaded]);
 
   // 自动关闭：短暂展示"服务已恢复"后退出，后台服务持续运行（JS 运行时由前台服务保持存活）

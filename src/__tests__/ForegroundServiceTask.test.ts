@@ -52,13 +52,13 @@ beforeEach(async () => {
   jest.mocked(acquireStartupOverlay).mockResolvedValue(null);
 });
 
-test('a running foreground service ensures the headless session without requesting another service', async () => {
+test('a running foreground service is reused without requesting a headless session', async () => {
   jest.mocked(ForegroundService.isRunning).mockReturnValue(true);
   await foregroundServiceTask.start();
   expect(ForegroundService.startService).not.toHaveBeenCalled();
-  expect(ForegroundService.startHeadlessRuntime).toHaveBeenCalledTimes(1);
+  expect(ForegroundService.startHeadlessRuntime).not.toHaveBeenCalled();
   await foregroundServiceTask.start();
-  expect(ForegroundService.startHeadlessRuntime).toHaveBeenCalledTimes(1);
+  expect(ForegroundService.startHeadlessRuntime).not.toHaveBeenCalled();
 });
 
 test('failed startup does not block a later independent headless entry from retrying', async () => {
@@ -72,7 +72,7 @@ test('failed startup does not block a later independent headless entry from retr
   });
   await foregroundServiceTask.start();
   expect(foregroundServiceTask.isRunning()).toBe(true);
-  expect(ForegroundService.startHeadlessRuntime).toHaveBeenCalledTimes(1);
+  expect(ForegroundService.startHeadlessRuntime).not.toHaveBeenCalled();
 });
 
 test('a stop while waiting prevents both the retry and a headless start', async () => {
@@ -96,30 +96,7 @@ test('turning the notification option off does not start either side', async () 
   await foregroundServiceTask.start();
   expect(ForegroundService.startService).not.toHaveBeenCalled();
   expect(ForegroundService.startHeadlessRuntime).not.toHaveBeenCalled();
-  expect(ForegroundService.stopService).toHaveBeenCalledTimes(1);
-});
-
-test('a rejected headless ensure stops the native service and permits a later independent start', async () => {
-  jest.mocked(ForegroundService.isRunning).mockReturnValue(true);
-  jest
-    .mocked(ForegroundService.startHeadlessRuntime)
-    .mockRejectedValueOnce(new Error('ReactHost unavailable'));
-  jest.mocked(ForegroundService.stopService).mockImplementation(() => {
-    jest.mocked(ForegroundService.isRunning).mockReturnValue(false);
-    return true;
-  });
-  await expect(foregroundServiceTask.start()).rejects.toThrow('ReactHost unavailable');
-  expect(ForegroundService.stopService).toHaveBeenCalledTimes(1);
-  expect(ForegroundService.isRunning()).toBe(false);
-  expect(foregroundServiceTask.isRunning()).toBe(false);
-
-  jest.mocked(ForegroundService.startService).mockImplementation(() => {
-    jest.mocked(ForegroundService.isRunning).mockReturnValue(true);
-    return true;
-  });
-  await foregroundServiceTask.start();
-  expect(ForegroundService.startService).toHaveBeenCalledTimes(1);
-  expect(foregroundServiceTask.isRunning()).toBe(true);
+  expect(ForegroundService.stopService).not.toHaveBeenCalled();
 });
 
 test.each([false, true])(
@@ -150,38 +127,35 @@ test.each([false, true])(
   }
 );
 
-test.each(['config', 'headless'] as const)(
-  'service destruction during %s does not leave an owned headless task',
-  async (phase) => {
-    let running = true;
-    jest.mocked(ForegroundService.isRunning).mockImplementation(() => running);
-    if (phase === 'config') {
-      const config = await configService.getConfig();
-      let reads = 0;
-      jest.mocked(configService.getConfig).mockImplementation(async () => {
-        reads += 1;
-        // _refresh、startup.allowed、启动确认后的配置检查。
-        if (reads === 3) running = false;
-        return config;
-      });
-    } else {
-      jest.mocked(ForegroundService.startHeadlessRuntime).mockImplementationOnce(async () => {
-        running = false;
-        return 'replacement';
-      });
-    }
-    await expect(foregroundServiceTask.start()).rejects.toThrow('Foreground service stopped');
-    expect(ForegroundService.startHeadlessRuntime).toHaveBeenCalledTimes(
-      phase === 'config' ? 0 : 1
-    );
-    expect(ForegroundService.stopService).toHaveBeenCalledTimes(1);
-    expect(foregroundServiceTask.isRunning()).toBe(false);
-    jest.mocked(ForegroundService.startService).mockImplementation(() => {
-      running = true;
-      return true;
-    });
-    await foregroundServiceTask.start();
-    expect(ForegroundService.startService).toHaveBeenCalledTimes(1);
-    expect(foregroundServiceTask.isRunning()).toBe(true);
-  }
-);
+test('service destruction during config reading fails without creating another Headless session', async () => {
+  let running = true;
+  jest.mocked(ForegroundService.isRunning).mockImplementation(() => running);
+  const config = await configService.getConfig();
+  let reads = 0;
+  jest.mocked(configService.getConfig).mockImplementation(async () => {
+    if (++reads === 3) running = false;
+    return config;
+  });
+  await expect(foregroundServiceTask.start()).rejects.toThrow('Foreground service stopped');
+  expect(ForegroundService.startHeadlessRuntime).not.toHaveBeenCalled();
+  expect(foregroundServiceTask.isRunning()).toBe(false);
+  jest.mocked(ForegroundService.startService).mockImplementation(() => {
+    running = true;
+    return true;
+  });
+  await foregroundServiceTask.start();
+  expect(ForegroundService.startService).toHaveBeenCalledTimes(1);
+  expect(foregroundServiceTask.isRunning()).toBe(true);
+});
+
+test('disabling notifications stops an existing service but never creates a Headless session', async () => {
+  jest.mocked(ForegroundService.isRunning).mockReturnValue(true);
+  jest.mocked(configService.getConfig).mockResolvedValue({
+    enableBackgroundTasks: true,
+    enableForegroundNotification: false,
+    enableBackgroundUpload: true,
+  } as AppConfig);
+  await foregroundServiceTask.start();
+  expect(ForegroundService.stopService).toHaveBeenCalledTimes(1);
+  expect(ForegroundService.startHeadlessRuntime).not.toHaveBeenCalled();
+});

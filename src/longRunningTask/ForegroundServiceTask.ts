@@ -28,11 +28,15 @@ class ForegroundServiceTask extends LongRunningTask {
 
   /** 任务是否已启动（订阅是否活跃） */
   private _running = false;
+  private _serviceRequested = false;
   private _stopSub: { remove(): void } | null = null;
   private _tempStopSub: { remove(): void } | null = null;
   private readonly _startup = new ForegroundServiceStartup({
     isRunning: ForegroundService.isRunning,
-    start: ForegroundService.startService,
+    start: () => {
+      this._serviceRequested = true;
+      return ForegroundService.startService();
+    },
     shouldRun: () => this._shouldRunForegroundService(),
     sleep: nativeSleep,
     acquireOverlay: acquireStartupOverlay,
@@ -114,22 +118,10 @@ class ForegroundServiceTask extends LongRunningTask {
     });
     try {
       if (await this._startup.start()) {
-        // 同样覆盖 JS reload：原生前台服务可能还在，但需要重新绑定当前 ReactContext。
-        if (await this._shouldRunForegroundService()) {
-          try {
-            // 配置读取和确保会话均为异步操作，期间原生服务可能已经销毁。
-            if (!ForegroundService.isRunning()) {
-              throw new Error('Foreground service stopped before ensuring Headless runtime');
-            }
-            await ForegroundService.startHeadlessRuntime();
-            if (!ForegroundService.isRunning()) {
-              throw new Error('Foreground service stopped while ensuring Headless runtime');
-            }
-          } catch (error) {
-            // 服务已进入前台，Headless 失败时必须配对停止，不能留下无人监听的通知。
-            await this._stopService();
-            throw error;
-          }
+        // Headless 是任务初始化的唯一入口；这里不再反向创建会话。
+        if ((await this._shouldRunForegroundService()) && !ForegroundService.isRunning()) {
+          await this._stopService();
+          throw new Error('Foreground service stopped during startup confirmation');
         }
       } else if (await this._shouldRunForegroundService()) {
         // 观察超时不代表原生请求已失效，退出前取消仍可能迟到的启动。
@@ -147,7 +139,10 @@ class ForegroundServiceTask extends LongRunningTask {
   private async _stopService(): Promise<void> {
     this._startup.cancel();
     this._detachServiceListeners();
-    ForegroundService.stopService();
+    if (this._serviceRequested || ForegroundService.isRunning()) {
+      ForegroundService.stopService();
+    }
+    this._serviceRequested = false;
   }
 
   /** 绑定通知栏操作监听 */

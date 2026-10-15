@@ -21,7 +21,7 @@ import { DirectShareReceiveScreen } from './screens/DirectShareReceiveScreen';
 import { SyncDirection } from './types/sync';
 import { useSettingsStore } from './stores';
 import { initLogger } from './utils/Logger';
-import { startServiceRuntime } from './services/ServiceRuntime';
+import { requestServiceRuntime } from './services/ServiceRuntime';
 import { networkAutoSwitchService } from './services/NetworkAutoSwitchService';
 
 export interface ShareData {
@@ -77,7 +77,8 @@ export default function QuickActionApp({
       }
 
       if (cancelled) return;
-      startServiceRuntime().catch(() => {});
+      await requestServiceRuntime().catch(() => {});
+      if (cancelled) return;
       setIsRuntimeReady(true);
     };
 
