@@ -48,7 +48,8 @@ export class ForegroundServiceStartup {
     if (!(await allowed())) return false;
     if (this.deps.isRunning()) return true;
 
-    const release = await this.deps.acquireOverlay();
+    // 原生创建异常同样表示窗口不可用，仍需确认首次请求是否已经成功。
+    const release = await this.deps.acquireOverlay().catch(() => null);
     // 等待窗口期间首次请求可能已成功；窗口不可用不能覆盖真实的服务状态。
     if (!release) return (await allowed()) && this.deps.isRunning();
     try {

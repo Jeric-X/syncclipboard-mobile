@@ -184,3 +184,19 @@ test('a subsequent independent request can succeed after an earlier cancellation
   expect(await startup.start()).toBe(true);
   expect(deps.start).toHaveBeenCalledTimes(2);
 });
+
+test.each(['running', 'cancelled', 'disabled', 'stopped'] as const)(
+  'overlay acquisition rejection rechecks native state and policy: %s',
+  async (state) => {
+    const { startup, deps, setRunning, setAllowed } = setup();
+    deps.acquireOverlay.mockImplementationOnce(async () => {
+      setRunning(state !== 'stopped');
+      if (state === 'cancelled') startup.cancel();
+      if (state === 'disabled') setAllowed(false);
+      throw new Error('native overlay show failed');
+    });
+    await expect(startup.start()).resolves.toBe(state === 'running');
+    expect(deps.start).toHaveBeenCalledTimes(1);
+    expect(deps.sleep).toHaveBeenCalledTimes(1);
+  }
+);
