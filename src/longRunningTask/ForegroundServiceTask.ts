@@ -117,7 +117,14 @@ class ForegroundServiceTask extends LongRunningTask {
         // 同样覆盖 JS reload：原生前台服务可能还在，但需要重新绑定当前 ReactContext。
         if (await this._shouldRunForegroundService()) {
           try {
+            // 配置读取和确保会话均为异步操作，期间原生服务可能已经销毁。
+            if (!ForegroundService.isRunning()) {
+              throw new Error('Foreground service stopped before ensuring Headless runtime');
+            }
             await ForegroundService.startHeadlessRuntime();
+            if (!ForegroundService.isRunning()) {
+              throw new Error('Foreground service stopped while ensuring Headless runtime');
+            }
           } catch (error) {
             // 服务已进入前台，Headless 失败时必须配对停止，不能留下无人监听的通知。
             await this._stopService();

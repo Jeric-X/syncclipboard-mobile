@@ -149,3 +149,39 @@ test.each([false, true])(
     expect(foregroundServiceTask.isRunning()).toBe(false);
   }
 );
+
+test.each(['config', 'headless'] as const)(
+  'service destruction during %s does not leave an owned headless task',
+  async (phase) => {
+    let running = true;
+    jest.mocked(ForegroundService.isRunning).mockImplementation(() => running);
+    if (phase === 'config') {
+      const config = await configService.getConfig();
+      let reads = 0;
+      jest.mocked(configService.getConfig).mockImplementation(async () => {
+        reads += 1;
+        // _refresh、startup.allowed、启动确认后的配置检查。
+        if (reads === 3) running = false;
+        return config;
+      });
+    } else {
+      jest.mocked(ForegroundService.startHeadlessRuntime).mockImplementationOnce(async () => {
+        running = false;
+        return 'replacement';
+      });
+    }
+    await expect(foregroundServiceTask.start()).rejects.toThrow('Foreground service stopped');
+    expect(ForegroundService.startHeadlessRuntime).toHaveBeenCalledTimes(
+      phase === 'config' ? 0 : 1
+    );
+    expect(ForegroundService.stopService).toHaveBeenCalledTimes(1);
+    expect(foregroundServiceTask.isRunning()).toBe(false);
+    jest.mocked(ForegroundService.startService).mockImplementation(() => {
+      running = true;
+      return true;
+    });
+    await foregroundServiceTask.start();
+    expect(ForegroundService.startService).toHaveBeenCalledTimes(1);
+    expect(foregroundServiceTask.isRunning()).toBe(true);
+  }
+);
