@@ -94,33 +94,6 @@ Key singletons, typically accessed via `getInstance()` or module-level exports:
 
 ### LongRunningTask Framework
 
-`src/services/ServiceRuntime.ts` separates UI requests from task initialization. On Android,
-`requestServiceRuntime()` requests/reuses the native Headless session and waits for its JS
-initialization through `RuntimeReadiness`; only `ServiceRuntimeHeadlessTask` calls
-`startServiceRuntime()` to initialize background tasks. `index.ts` installs the process-level
-foreground listener, which handles foreground resume policy before requesting the session.
-Quick-action and recovery screens use the same request API and must not initialize tasks directly.
-Non-Android foregrounds retain direct initialization without a native Headless dependency. The process-level `ServiceRuntimeSession` owns one
-`ServiceRuntimeHeadlessTask`, independently of a foreground service instance. Both
-`startHeadlessRuntime()` and `SyncForegroundService` can ensure this session without an Activity,
-including after a `START_STICKY` restart. Headless initialization starts the foreground service
-according to configuration; concurrent starts reuse the existing session or pending request.
-The JS foreground-service task does not call back into `startHeadlessRuntime()`. Native
-`SyncForegroundService` still ensures the session, including after `START_STICKY`; an existing
-session is reused. Disabling the foreground notification before any service request must not
-stop the independent Headless session. UI readiness waits are rejected if the session ends
-before initialization, and native session creation never waits for JS task initialization.
-Foreground service startup confirms native running state, waits one second after an unsuccessful
-request, borrows the shared overlay if permitted, waits another second after creation returns,
-and retries once. These waits use `native-timer`; stop requests cancel the attempt. Temporary
-startup overlay ownership is released without affecting clipboard or Headless ownership.
-The JS task stays pending until its native runtime session ends. Lifecycle operations are
-serialized by `LongRunningTaskCoordinator`. Cold starts explicitly apply background policy,
-and native stop requests are persisted until JS can handle them. If the service ends while
-no UI is active, the runtime releases all tasks and the clipboard overlay; the independent
-static SMS receiver retains the user's saved setting. Headless JS does not bypass Android
-foreground-service launch restrictions.
-
 `src/longRunningTask/LongRunningTaskManager.ts` is the central lifecycle manager for all background tasks. Each task implements `ILongRunningTask` (`src/longRunningTask/LongRunningTask.ts`):
 
 - `start()` / `stop()` — idempotent
