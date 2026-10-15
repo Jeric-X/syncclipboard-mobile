@@ -146,7 +146,13 @@ class SyncForegroundService : Service() {
                     if (isRunning) {
                         pauseAndStop("temporary", showRecovery = true)
                     } else {
-                        synchronized(Companion) { launchState.requestStop(hasInstance = true) }
+                        val showRecovery = synchronized(Companion) {
+                            launchState.promotionFailed(
+                                hasRuntimeSession = ServiceRuntimeSession.currentSessionId() != null,
+                                stoppedByPolicy = getStopReason(this) != null
+                            )
+                        }
+                        if (showRecovery) showRestartNotification()
                         stopForeground(STOP_FOREGROUND_REMOVE)
                         stopSelfResult(startId)
                     }

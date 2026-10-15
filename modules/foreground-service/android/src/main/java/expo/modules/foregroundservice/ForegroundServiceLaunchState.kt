@@ -30,6 +30,13 @@ internal class ForegroundServiceLaunchState {
         restartRequested = false
     }
 
+    /** 提升前台失败时结束旧实例；返回是否需要向用户提供恢复入口。 */
+    @Synchronized
+    fun promotionFailed(hasRuntimeSession: Boolean, stoppedByPolicy: Boolean): Boolean {
+        requestStop(hasInstance = true)
+        return !hasRuntimeSession && !stoppedByPolicy
+    }
+
     /** null 是系统 START_STICKY 重启；显式请求必须属于当前代。 */
     @Synchronized
     fun acceptStart(token: Long?): Boolean {

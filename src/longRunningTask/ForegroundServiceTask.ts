@@ -125,6 +125,8 @@ class ForegroundServiceTask extends LongRunningTask {
           }
         }
       } else if (await this._shouldRunForegroundService()) {
+        // 观察超时不代表原生请求已失效，退出前取消仍可能迟到的启动。
+        await this._stopService();
         throw new Error('Foreground service did not enter the foreground after bounded retries');
       }
     } finally {

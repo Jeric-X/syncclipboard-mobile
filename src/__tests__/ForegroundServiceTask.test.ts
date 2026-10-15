@@ -121,3 +121,31 @@ test('a rejected headless ensure stops the native service and permits a later in
   expect(ForegroundService.startService).toHaveBeenCalledTimes(1);
   expect(foregroundServiceTask.isRunning()).toBe(true);
 });
+
+test.each([false, true])(
+  'failed startup invalidates late native requests (overlay: %s)',
+  async (overlayAvailable) => {
+    let pending = false;
+    let running = false;
+    jest.mocked(ForegroundService.isRunning).mockImplementation(() => running);
+    jest.mocked(ForegroundService.startService).mockImplementation(() => {
+      pending = true;
+      return true;
+    });
+    jest.mocked(ForegroundService.stopService).mockImplementation(() => {
+      pending = false;
+      running = false;
+      return true;
+    });
+    const release = jest.fn(async () => {});
+    jest.mocked(acquireStartupOverlay).mockResolvedValue(overlayAvailable ? release : null);
+    await expect(foregroundServiceTask.start()).rejects.toThrow('bounded retries');
+    // 模拟在最后一次 JS 状态观察后才到达的原生启动。
+    if (pending) running = true;
+    expect(running).toBe(false);
+    expect(ForegroundService.stopService).toHaveBeenCalledTimes(1);
+    expect(ForegroundService.startService).toHaveBeenCalledTimes(overlayAvailable ? 2 : 1);
+    expect(release).toHaveBeenCalledTimes(overlayAvailable ? 1 : 0);
+    expect(foregroundServiceTask.isRunning()).toBe(false);
+  }
+);
