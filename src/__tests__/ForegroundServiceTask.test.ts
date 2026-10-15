@@ -176,3 +176,30 @@ test('a replacement JS task cancels a delayed native start when notifications ar
   expect(pendingNativeIntent).toBe(false);
   expect(ForegroundService.startService).not.toHaveBeenCalled();
 });
+
+test.each(['sleep', 'config'])(
+  'startup rejection cancels a queued native request (%s)',
+  async (failure) => {
+    let pending = false;
+    jest.mocked(ForegroundService.isRunning).mockReturnValue(false);
+    jest.mocked(ForegroundService.startService).mockImplementation(() => {
+      pending = true;
+      return true;
+    });
+    jest.mocked(ForegroundService.stopService).mockImplementation(() => {
+      pending = false;
+      return true;
+    });
+    jest.mocked(nativeSleep).mockImplementationOnce(async () => {
+      if (failure === 'sleep') throw new Error('startup dependency failed');
+      jest
+        .mocked(configService.getConfig)
+        .mockRejectedValueOnce(new Error('startup dependency failed'));
+    });
+    await expect(foregroundServiceTask.start()).rejects.toThrow('startup dependency failed');
+    expect(pending).toBe(false);
+    expect(ForegroundService.stopService).toHaveBeenCalledTimes(1);
+    expect(foregroundServiceTask.isRunning()).toBe(false);
+    expect(ForegroundService.startService).toHaveBeenCalledTimes(1);
+  }
+);

@@ -23,6 +23,7 @@ jest.mock('../utils/Logger', () => ({ initLogger: jest.fn() }));
 jest.mock('../utils/clipboardProxy', () => ({ dismissOverlay: jest.fn() }));
 jest.mock('../services/AppFoundation', () => ({ prepareAppFoundation: jest.fn() }));
 
+import { requestRuntimeRecovery } from '../utils/requestRuntimeRecovery';
 import { runtimeReadiness } from '../utils/runtimeReadiness';
 import { AppState, Platform } from 'react-native';
 import * as ForegroundService from 'foreground-service';
@@ -209,6 +210,60 @@ describe('service runtime bootstrap', () => {
     expect(longRunningTaskManager.stopAll).toHaveBeenCalledTimes(1);
     expect(dismissOverlay).toHaveBeenCalledTimes(1);
   });
+
+  it('recovery resumes a temporary stop even when the process is already active', async () => {
+    AppState.currentState = 'active';
+    stopReason = 'temporary';
+    (ForegroundService.startHeadlessRuntime as jest.Mock).mockImplementation(async () => {
+      if (stopReason) return null;
+      void runtimeReadiness.initialize('runtime-1', startServiceRuntime).catch(() => {});
+      return 'runtime-1';
+    });
+    await requestRuntimeRecovery(requestServiceRuntime);
+    expect(stopReason).toBeNull();
+    expect(backgroundRuntimeState.setTempDisabled).toHaveBeenCalledWith(false);
+    expect(longRunningTaskManager.startAll).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['idle', 'new-session', 'foreground', 'rejected'])(
+    'cleanup waits for in-flight initialization and rechecks ownership (%s)',
+    async (owner) => {
+      let release!: () => void;
+      (prepareAppFoundation as jest.Mock).mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            release = resolve;
+          })
+      );
+      const starting = startServiceRuntime();
+      const result = starting.catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      (ForegroundService.getSessionId as jest.Mock).mockReturnValue(null);
+      const cleanup = stopServiceRuntimeIfIdle();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const earlyStops = (longRunningTaskManager.stopAll as jest.Mock).mock.calls.length;
+      if (owner === 'new-session')
+        (ForegroundService.getSessionId as jest.Mock).mockReturnValue('new');
+      if (owner === 'foreground') AppState.currentState = 'active';
+      if (owner === 'rejected')
+        (longRunningTaskManager.startAll as jest.Mock).mockRejectedValueOnce(
+          new Error('init failed')
+        );
+      release();
+      await Promise.all([result, cleanup]);
+      expect(earlyStops).toBe(0);
+      if (owner === 'idle' || owner === 'rejected') {
+        expect(longRunningTaskManager.stopAll).toHaveBeenCalledTimes(1);
+        expect(
+          (longRunningTaskManager.stopAll as jest.Mock).mock.invocationCallOrder[0]
+        ).toBeGreaterThan(
+          (longRunningTaskManager.startAll as jest.Mock).mock.invocationCallOrder[0]
+        );
+      } else {
+        expect(longRunningTaskManager.stopAll).not.toHaveBeenCalled();
+      }
+    }
+  );
 
   it('initializes shared tasks on non-Android foregrounds and installs only once', async () => {
     const originalPlatform = Platform.OS;

@@ -116,14 +116,16 @@ class ForegroundServiceTask extends LongRunningTask {
       if (await this._startup.start()) {
         // Headless 是任务初始化的唯一入口；这里不再反向创建会话。
         if ((await this._shouldRunForegroundService()) && !ForegroundService.isRunning()) {
-          await this._stopService();
           throw new Error('Foreground service stopped during startup confirmation');
         }
       } else if (await this._shouldRunForegroundService()) {
         // 观察超时不代表原生请求已失效，退出前取消仍可能迟到的启动。
-        await this._stopService();
         throw new Error('Foreground service did not enter the foreground after bounded retries');
       }
+    } catch (error) {
+      // 配置读取或原生等待拒绝也必须取消仍可能迟到的启动请求。
+      await this._stopService();
+      throw error;
     } finally {
       unsubscribeConfig();
       unsubscribeState();

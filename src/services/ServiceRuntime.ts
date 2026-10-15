@@ -122,6 +122,8 @@ export function installServiceRuntime(): void {
 
 /** 无界面也无原生服务持有运行时后，释放所有 JS 监听、连接与悬浮窗。 */
 export async function stopServiceRuntimeIfIdle(): Promise<void> {
+  // 就绪等待结束不代表底层初始化已结束；失败也需清理可能已启动的任务。
+  await initializing?.catch(() => {});
   if (AppState.currentState === 'active' || ForegroundService.getSessionId()) return;
   await longRunningTaskManager.stopAll();
   await dismissOverlay();
