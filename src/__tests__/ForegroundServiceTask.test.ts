@@ -98,3 +98,26 @@ test('turning the notification option off does not start either side', async () 
   expect(ForegroundService.startHeadlessRuntime).not.toHaveBeenCalled();
   expect(ForegroundService.stopService).toHaveBeenCalledTimes(1);
 });
+
+test('a rejected headless ensure stops the native service and permits a later independent start', async () => {
+  jest.mocked(ForegroundService.isRunning).mockReturnValue(true);
+  jest
+    .mocked(ForegroundService.startHeadlessRuntime)
+    .mockRejectedValueOnce(new Error('ReactHost unavailable'));
+  jest.mocked(ForegroundService.stopService).mockImplementation(() => {
+    jest.mocked(ForegroundService.isRunning).mockReturnValue(false);
+    return true;
+  });
+  await expect(foregroundServiceTask.start()).rejects.toThrow('ReactHost unavailable');
+  expect(ForegroundService.stopService).toHaveBeenCalledTimes(1);
+  expect(ForegroundService.isRunning()).toBe(false);
+  expect(foregroundServiceTask.isRunning()).toBe(false);
+
+  jest.mocked(ForegroundService.startService).mockImplementation(() => {
+    jest.mocked(ForegroundService.isRunning).mockReturnValue(true);
+    return true;
+  });
+  await foregroundServiceTask.start();
+  expect(ForegroundService.startService).toHaveBeenCalledTimes(1);
+  expect(foregroundServiceTask.isRunning()).toBe(true);
+});

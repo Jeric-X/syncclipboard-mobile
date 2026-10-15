@@ -31,38 +31,36 @@ class SyncForegroundService : Service() {
         const val RESTART_NOTIFY_ID = 0x2021
         private const val RESTART_CHANNEL_ID = "syncclipboard_restart"
         @Volatile private var instance: SyncForegroundService? = null
-        @Volatile var isRunning = false
-            private set
-        @Volatile internal var stoppedByUser = false
-
-        private var startPending = false
-        private var generation = 0L
+        private val launchState = ForegroundServiceLaunchState()
+        val isRunning get() = launchState.isRunning
         private const val EXTRA_GENERATION = "generation"
 
         @Synchronized
         fun requestStart(context: Context): Boolean {
             if (getStopReason(context) != null) return false
-            if (isRunning || startPending) return true
-            startPending = true
+            val token = launchState.requestStart() ?: return true
+            dispatchStart(context, token)
+            return true
+        }
+
+        /** 调用方持有 Companion 锁，停止请求不能穿过代号检查与 Intent 发送。 */
+        private fun dispatchStart(context: Context, token: Long) {
             val intent = Intent(context, SyncForegroundService::class.java).apply {
                 action = ACTION_START
-                putExtra(EXTRA_GENERATION, generation)
+                putExtra(EXTRA_GENERATION, token)
             }
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
                 else context.startService(intent)
             } catch (error: Exception) {
-                startPending = false
+                launchState.rejectStart(token)
                 throw error
             }
-            return true
         }
 
         @Synchronized
         fun requestStop(context: Context) {
-            generation += 1
-            startPending = false
-            stoppedByUser = true
+            launchState.requestStop(hasInstance = instance != null)
             // 包括尚未执行 onStartCommand 的请求。
             context.stopService(Intent(context, SyncForegroundService::class.java))
             ServiceRuntimeSession.requestStop(ServiceRuntimeSession.currentSessionId())
@@ -70,9 +68,7 @@ class SyncForegroundService : Service() {
 
         @Synchronized
         private fun acceptStart(intent: Intent?): Boolean {
-            if (intent != null && intent.getLongExtra(EXTRA_GENERATION, -1L) != generation) return false
-            startPending = false
-            return true
+            return launchState.acceptStart(intent?.getLongExtra(EXTRA_GENERATION, -1L))
         }
 
         fun onRuntimeFailed() {
@@ -81,7 +77,7 @@ class SyncForegroundService : Service() {
 
         /** 仅正在运行的服务绑定当前会话；等待销毁的旧服务不能认领新会话。 */
         fun attachRuntime(sessionId: String) {
-            instance?.takeIf { isRunning && !stoppedByUser }?.sessionId = sessionId
+            instance?.takeIf { isRunning }?.sessionId = sessionId
         }
 
         fun getStopReason(context: Context): String? =
@@ -139,21 +135,18 @@ class SyncForegroundService : Service() {
                     // 必须先兑现前台服务启动时限，再等待 ReactHost/配置初始化。
                     promoteToForeground()
                     logStartupTiming("foregroundReady")
-                    if (!acceptStart(intent) || getStopReason(this) != null) {
-                        stoppedByUser = true
+                    if (getStopReason(this) != null || !acceptStart(intent)) {
                         stopSelfResult(startId)
                         return START_NOT_STICKY
                     }
-                    stoppedByUser = false
-                    isRunning = true
                     sessionId = ServiceRuntimeSession.ensureStarted(this)
                 } catch (error: Exception) {
                     NativeLogger.e(TAG, "Cannot start foreground sync", error)
-                    synchronized(Companion) { startPending = false }
                     // 提升失败时保留独立启动的 Headless 会话，让 JS 完成有限的悬浮窗重试。
                     if (isRunning) {
                         pauseAndStop("temporary", showRecovery = true)
                     } else {
+                        synchronized(Companion) { launchState.requestStop(hasInstance = true) }
                         stopForeground(STOP_FOREGROUND_REMOVE)
                         stopSelfResult(startId)
                     }
@@ -178,16 +171,13 @@ class SyncForegroundService : Service() {
         // 先持久化，确保 JS 尚未启动或进程随后死亡时也不会丢失用户的停止操作。
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(STOP_REASON, reason).commit()
         synchronized(Companion) {
-            generation += 1
-            startPending = false
-            stoppedByUser = true
+            launchState.requestStop(hasInstance = true)
         }
         ServiceRuntimeSession.currentSessionId()?.let { ServiceRuntimeSession.stop(it) }
         if (reason == "stop") ForegroundServiceModule.sendStopEvent()
         else ForegroundServiceModule.sendTempStopEvent()
         if (showRecovery) showRestartNotification()
         stopForeground(STOP_FOREGROUND_REMOVE)
-        isRunning = false
         stopSelf()
     }
 
@@ -208,11 +198,27 @@ class SyncForegroundService : Service() {
 
     override fun onDestroy() {
         val endedSession = sessionId
-        val unexpected = isRunning && !stoppedByUser
-        isRunning = false
-        instance = null
-        endedSession?.let { ServiceRuntimeSession.stop(it) }
-        if (unexpected) showRestartNotification()
+        synchronized(Companion) {
+            if (instance === this) {
+                val unexpected = isRunning
+                instance = null
+                endedSession?.let { ServiceRuntimeSession.stop(it) }
+                val restart = launchState.onDestroyed()
+                if (unexpected) showRestartNotification()
+                if (restart != null) {
+                    if (getStopReason(this) == null) {
+                        try {
+                            // 只兑现等待销毁期间的显式请求，不因意外销毁循环拉起。
+                            dispatchStart(applicationContext, restart)
+                        } catch (error: Exception) {
+                            NativeLogger.e(TAG, "Cannot dispatch queued foreground start", error)
+                        }
+                    } else {
+                        launchState.rejectStart(restart)
+                    }
+                }
+            }
+        }
         super.onDestroy()
     }
 
