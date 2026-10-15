@@ -87,7 +87,7 @@ test('a stop while waiting prevents both the retry and a headless start', async 
   expect(ForegroundService.stopService).toHaveBeenCalledTimes(1);
 });
 
-test('turning the notification option off does not start either side', async () => {
+test('turning the notification option off cancels native requests without starting either side', async () => {
   jest.mocked(configService.getConfig).mockResolvedValue({
     enableBackgroundTasks: true,
     enableForegroundNotification: false,
@@ -96,7 +96,7 @@ test('turning the notification option off does not start either side', async () 
   await foregroundServiceTask.start();
   expect(ForegroundService.startService).not.toHaveBeenCalled();
   expect(ForegroundService.startHeadlessRuntime).not.toHaveBeenCalled();
-  expect(ForegroundService.stopService).not.toHaveBeenCalled();
+  expect(ForegroundService.stopService).toHaveBeenCalledTimes(1);
 });
 
 test.each([false, true])(
@@ -158,4 +158,21 @@ test('disabling notifications stops an existing service but never creates a Head
   await foregroundServiceTask.start();
   expect(ForegroundService.stopService).toHaveBeenCalledTimes(1);
   expect(ForegroundService.startHeadlessRuntime).not.toHaveBeenCalled();
+});
+
+test('a replacement JS task cancels a delayed native start when notifications are disabled', async () => {
+  let pendingNativeIntent = true;
+  jest.mocked(ForegroundService.isRunning).mockReturnValue(false);
+  jest.mocked(ForegroundService.stopService).mockImplementation(() => {
+    pendingNativeIntent = false;
+    return true;
+  });
+  jest.mocked(configService.getConfig).mockResolvedValue({
+    enableBackgroundTasks: true,
+    enableForegroundNotification: false,
+    enableBackgroundUpload: true,
+  } as AppConfig);
+  await foregroundServiceTask.start();
+  expect(pendingNativeIntent).toBe(false);
+  expect(ForegroundService.startService).not.toHaveBeenCalled();
 });

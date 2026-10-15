@@ -166,6 +166,34 @@ describe('service runtime bootstrap', () => {
     expect(longRunningTaskManager.startAll).not.toHaveBeenCalled();
   });
 
+  it('quick-action requests wait for pending foreground resume before native creation', async () => {
+    stopReason = 'temporary';
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    (configService.getConfig as jest.Mock).mockImplementationOnce(async () => {
+      await blocked;
+      return { enableBackgroundTasks: true };
+    });
+    (ForegroundService.startHeadlessRuntime as jest.Mock).mockImplementation(async () => {
+      if (stopReason) return null;
+      void runtimeReadiness.initialize('runtime-1', startServiceRuntime).catch(() => {});
+      return 'runtime-1';
+    });
+    const foreground = requestServiceRuntime(true);
+    const quickAction = requestServiceRuntime();
+    const results = Promise.allSettled([foreground, quickAction]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const earlyRequests = (ForegroundService.startHeadlessRuntime as jest.Mock).mock.calls.length;
+    release();
+    const completed = await results;
+    expect(earlyRequests).toBe(0);
+    expect(completed.map((result) => result.status)).toEqual(['fulfilled', 'fulfilled']);
+    expect(ForegroundService.startHeadlessRuntime).toHaveBeenCalledTimes(1);
+    expect(longRunningTaskManager.startAll).toHaveBeenCalledTimes(1);
+  });
+
   it('does not dispose a runtime still owned by a newer native session or the foreground', async () => {
     (ForegroundService.getSessionId as jest.Mock).mockReturnValue('new-session');
     await stopServiceRuntimeIfIdle();

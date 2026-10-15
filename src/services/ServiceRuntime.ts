@@ -81,8 +81,9 @@ export async function requestServiceRuntime(foregroundEntry = false): Promise<vo
         resuming = null;
       });
     }
-    await resuming;
   }
+  // 快捷页等无参数请求也必须等待同一轮前台恢复，不能抢先读取旧的停止策略。
+  if (resuming) await resuming;
   if (Platform.OS !== 'android') return startServiceRuntime();
   if (!requesting) {
     requesting = (async () => {

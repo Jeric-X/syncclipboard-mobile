@@ -28,15 +28,11 @@ class ForegroundServiceTask extends LongRunningTask {
 
   /** 任务是否已启动（订阅是否活跃） */
   private _running = false;
-  private _serviceRequested = false;
   private _stopSub: { remove(): void } | null = null;
   private _tempStopSub: { remove(): void } | null = null;
   private readonly _startup = new ForegroundServiceStartup({
     isRunning: ForegroundService.isRunning,
-    start: () => {
-      this._serviceRequested = true;
-      return ForegroundService.startService();
-    },
+    start: ForegroundService.startService,
     shouldRun: () => this._shouldRunForegroundService(),
     sleep: nativeSleep,
     acquireOverlay: acquireStartupOverlay,
@@ -139,10 +135,8 @@ class ForegroundServiceTask extends LongRunningTask {
   private async _stopService(): Promise<void> {
     this._startup.cancel();
     this._detachServiceListeners();
-    if (this._serviceRequested || ForegroundService.isRunning()) {
-      ForegroundService.stopService();
-    }
-    this._serviceRequested = false;
+    // 原生请求可能来自重载前的 JS；由原生取消代号并判断会话归属。
+    ForegroundService.stopService();
   }
 
   /** 绑定通知栏操作监听 */

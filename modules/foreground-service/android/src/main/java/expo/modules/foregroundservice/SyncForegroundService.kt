@@ -60,10 +60,13 @@ class SyncForegroundService : Service() {
 
         @Synchronized
         fun requestStop(context: Context) {
-            launchState.requestStop(hasInstance = instance != null)
-            // 包括尚未执行 onStartCommand 的请求。
-            context.stopService(Intent(context, SyncForegroundService::class.java))
-            ServiceRuntimeSession.requestStop(ServiceRuntimeSession.currentSessionId())
+            stopForegroundService(
+                launchState,
+                hasInstance = instance != null,
+                attachedSessionId = instance?.sessionId,
+                stopNative = { context.stopService(Intent(context, SyncForegroundService::class.java)) },
+                stopSession = ServiceRuntimeSession::requestStop
+            )
         }
 
         @Synchronized
@@ -87,7 +90,7 @@ class SyncForegroundService : Service() {
         }
     }
 
-    private var sessionId: String? = null
+    @Volatile private var sessionId: String? = null
     private val createdAtMs = SystemClock.elapsedRealtime()
     private val startupTimingStages = mutableSetOf<String>()
 
