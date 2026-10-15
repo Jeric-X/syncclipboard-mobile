@@ -3,6 +3,7 @@ export interface HeadlessServiceRuntimeSessionDependencies {
   subscribeStopped: (listener: (sessionId: string) => void) => () => void;
   isActive: (sessionId: string) => boolean;
   initialize: () => Promise<void>;
+  acquireKeepAliveOverlay?: () => () => Promise<void>;
   markReady: (sessionId: string) => void;
   shutdownIfIdle: () => Promise<void>;
 }
@@ -19,14 +20,20 @@ export async function runHeadlessServiceRuntimeSession(
   const unsubscribe = deps.subscribeStopped((id) => {
     if (id === sessionId) finish();
   });
+  let releaseOverlay: (() => Promise<void>) | undefined;
   try {
     if (!deps.isActive(sessionId)) return;
+    releaseOverlay = deps.acquireKeepAliveOverlay?.();
     await deps.initialize();
     if (!deps.isActive(sessionId)) return;
     deps.markReady(sessionId);
     await stopped;
   } finally {
     unsubscribe();
-    await deps.shutdownIfIdle();
+    try {
+      await releaseOverlay?.();
+    } finally {
+      await deps.shutdownIfIdle();
+    }
   }
 }
