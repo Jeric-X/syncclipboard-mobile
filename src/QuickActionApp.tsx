@@ -52,14 +52,16 @@ export default function QuickActionApp({
 }: QuickActionAppProps) {
   const syncDirection = direction === 'upload' ? SyncDirection.Upload : SyncDirection.Download;
   const { loadConfig, isLoaded } = useSettingsStore();
-  const [isRuntimeReady, setIsRuntimeReady] = useState(Platform.OS !== 'android');
+  const [isServerSelectionComplete, setIsServerSelectionComplete] = useState(
+    Platform.OS !== 'android'
+  );
 
   useEffect(() => {
     initLogger();
   }, []);
 
   useEffect(() => {
-    if (Platform.OS !== 'android' && !isLoaded) {
+    if (!isLoaded) {
       loadConfig();
     }
   }, [isLoaded, loadConfig]);
@@ -69,7 +71,7 @@ export default function QuickActionApp({
     if (!isLoaded || Platform.OS !== 'android') return;
 
     let cancelled = false;
-    const initializeRuntime = async (): Promise<void> => {
+    const prepareQuickAction = async (): Promise<void> => {
       try {
         await networkAutoSwitchService.ensureCurrentServer();
       } catch (error) {
@@ -77,13 +79,15 @@ export default function QuickActionApp({
       }
 
       if (cancelled) return;
-      await requestServiceRuntime().catch(() => {});
-      if (cancelled) return;
-      setIsRuntimeReady(true);
+      // 后台任务由 Headless 初始化；请求失败或未就绪不阻塞用户操作界面。
+      void requestServiceRuntime().catch((error) => {
+        console.error('[QuickActionApp] Runtime initialization failed:', error);
+      });
+      setIsServerSelectionComplete(true);
     };
 
-    initializeRuntime().catch(() => {
-      if (!cancelled) setIsRuntimeReady(true);
+    prepareQuickAction().catch(() => {
+      if (!cancelled) setIsServerSelectionComplete(true);
     });
 
     return () => {
@@ -95,7 +99,7 @@ export default function QuickActionApp({
     BackHandler.exitApp();
   }, []);
 
-  if (!isLoaded || !isRuntimeReady) return null;
+  if (!isLoaded || !isServerSelectionComplete) return null;
 
   // Share mode: receive shared content from other apps (direct data, not via expo-sharing)
   if (shareMode && shareData) {

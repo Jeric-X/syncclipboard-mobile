@@ -30,7 +30,7 @@ function ServiceRestartContent({ systemTheme }: ServiceRestartAppProps) {
   }, []);
 
   useEffect(() => {
-    if (Platform.OS !== 'android' && !isLoaded) {
+    if (!isLoaded) {
       loadConfig();
     }
   }, [isLoaded, loadConfig]);
