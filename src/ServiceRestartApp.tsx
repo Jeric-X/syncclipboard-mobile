@@ -13,7 +13,6 @@ import { I18nProvider } from './contexts/I18nContext';
 import { useSettingsStore } from './stores';
 import { initLogger } from './utils/Logger';
 import { requestServiceRuntime } from './services/ServiceRuntime';
-import { requestRuntimeRecovery } from './utils/requestRuntimeRecovery';
 import { useTranslation } from 'react-i18next';
 
 interface ServiceRestartAppProps {
@@ -40,7 +39,7 @@ function ServiceRestartContent({ systemTheme }: ServiceRestartAppProps) {
   useEffect(() => {
     if (!isLoaded || Platform.OS !== 'android') return;
 
-    requestRuntimeRecovery(requestServiceRuntime)
+    requestServiceRuntime(true)
       .catch((error) => {
         console.error('[ServiceRestartApp] Runtime initialization failed:', error);
       })

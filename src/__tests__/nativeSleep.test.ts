@@ -1,35 +1,50 @@
-import { nativeSleep } from '../utils/nativeSleep';
-import { clearTimer, setTimer } from 'native-timer';
+import { nativeSleep, clearAllTimers } from 'native-timer';
+import { requireNativeModule } from 'expo-modules-core';
 
-jest.mock('native-timer', () => ({ setTimer: jest.fn(), clearTimer: jest.fn() }));
+jest.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+jest.mock('expo-modules-core', () => ({ requireNativeModule: jest.fn() }));
 
-beforeEach(() => jest.clearAllMocks());
+const nativeModule = {
+  startTimer: jest.fn(),
+  stopTimer: jest.fn(),
+  stopAllTimers: jest.fn(),
+  addListener: jest.fn(),
+};
+let onTick: (event: { tag: string }) => void;
+jest.mocked(requireNativeModule).mockReturnValue(nativeModule);
+nativeModule.addListener.mockImplementation((_event, listener) => {
+  onTick = listener;
+  return { remove: jest.fn() };
+});
+
+beforeEach(() => {
+  clearAllTimers();
+  jest.clearAllMocks();
+});
 
 test('one native tick resolves the delay and clears its repeating timer', async () => {
-  let tick!: () => void;
-  jest.mocked(setTimer).mockImplementation((callback) => {
-    tick = callback;
-    return 'native-wait';
-  });
   const waiting = nativeSleep(1000, new AbortController().signal);
-  expect(setTimer).toHaveBeenCalledWith(expect.any(Function), 1000);
-  tick();
+  expect(nativeModule.startTimer).toHaveBeenCalledWith(expect.any(String), 1000);
+  const tag = nativeModule.startTimer.mock.calls[0][0];
+  nativeModule.stopTimer.mockClear();
+  onTick({ tag });
   await waiting;
-  expect(clearTimer).toHaveBeenCalledWith('native-wait');
+  expect(nativeModule.stopTimer).toHaveBeenCalledWith(tag);
 });
 
 test('cancellation resolves immediately and unregisters the timer', async () => {
-  jest.mocked(setTimer).mockReturnValue('cancelled-wait');
   const controller = new AbortController();
   const waiting = nativeSleep(1000, controller.signal);
+  const tag = nativeModule.startTimer.mock.calls[0][0];
+  nativeModule.stopTimer.mockClear();
   controller.abort();
   await waiting;
-  expect(clearTimer).toHaveBeenCalledWith('cancelled-wait');
+  expect(nativeModule.stopTimer).toHaveBeenCalledWith(tag);
 });
 
 test('an already cancelled wait does not allocate a timer', async () => {
   const controller = new AbortController();
   controller.abort();
   await nativeSleep(1000, controller.signal);
-  expect(setTimer).not.toHaveBeenCalled();
+  expect(nativeModule.startTimer).not.toHaveBeenCalled();
 });

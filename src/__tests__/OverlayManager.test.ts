@@ -22,7 +22,7 @@ import {
   acquireKeepAliveOverlay,
   acquireClipboardOverlay,
   dismissClipboardOverlay,
-} from '../services/OverlayRuntime';
+} from '../services/overlay/OverlayManager';
 import { DEFAULT_APP_CONFIG } from '../types/storage';
 
 /** 等待配置订阅提交的窗口更新，不触发任何剪贴板读取。 */

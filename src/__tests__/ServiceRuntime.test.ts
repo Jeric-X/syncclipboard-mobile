@@ -23,8 +23,7 @@ jest.mock('../utils/Logger', () => ({ initLogger: jest.fn() }));
 jest.mock('../utils/clipboardProxy', () => ({ dismissOverlay: jest.fn() }));
 jest.mock('../services/AppFoundation', () => ({ prepareAppFoundation: jest.fn() }));
 
-import { requestRuntimeRecovery } from '../utils/requestRuntimeRecovery';
-import { runtimeReadiness } from '../utils/runtimeReadiness';
+import { headlessRuntimeInitialization } from '../services/headless/headlessRuntimeInitialization';
 import { AppState, Platform } from 'react-native';
 import * as ForegroundService from 'foreground-service';
 import {
@@ -56,10 +55,12 @@ describe('service runtime bootstrap', () => {
     (ForegroundService.clearStopReason as jest.Mock).mockImplementation(() => {
       stopReason = null;
     });
-    runtimeReadiness.end('runtime-1');
+    headlessRuntimeInitialization.end('runtime-1');
     (ForegroundService.getSessionId as jest.Mock).mockReturnValue('runtime-1');
     (ForegroundService.startHeadlessRuntime as jest.Mock).mockImplementation(async () => {
-      void runtimeReadiness.initialize('runtime-1', startServiceRuntime).catch(() => {});
+      void headlessRuntimeInitialization
+        .initialize('runtime-1', startServiceRuntime)
+        .catch(() => {});
       return 'runtime-1';
     });
     (configService.getConfig as jest.Mock).mockResolvedValue({ enableBackgroundTasks: true });
@@ -122,7 +123,7 @@ describe('service runtime bootstrap', () => {
 
   it('does not lose a foreground resume arriving during Headless initialization', async () => {
     stopReason = 'temporary';
-    const headless = runtimeReadiness.initialize('runtime-1', startServiceRuntime);
+    const headless = headlessRuntimeInitialization.initialize('runtime-1', startServiceRuntime);
     AppState.currentState = 'active';
     const foreground = requestServiceRuntime(true);
     await Promise.all([headless, foreground]);
@@ -138,7 +139,7 @@ describe('service runtime bootstrap', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(longRunningTaskManager.startAll).not.toHaveBeenCalled();
     expect(ForegroundService.startHeadlessRuntime).toHaveBeenCalledTimes(1);
-    await runtimeReadiness.initialize('runtime-1', startServiceRuntime);
+    await headlessRuntimeInitialization.initialize('runtime-1', startServiceRuntime);
     await Promise.all([first, second]);
     await requestServiceRuntime();
     expect(longRunningTaskManager.startAll).toHaveBeenCalledTimes(1);
@@ -179,7 +180,9 @@ describe('service runtime bootstrap', () => {
     });
     (ForegroundService.startHeadlessRuntime as jest.Mock).mockImplementation(async () => {
       if (stopReason) return null;
-      void runtimeReadiness.initialize('runtime-1', startServiceRuntime).catch(() => {});
+      void headlessRuntimeInitialization
+        .initialize('runtime-1', startServiceRuntime)
+        .catch(() => {});
       return 'runtime-1';
     });
     const foreground = requestServiceRuntime(true);
@@ -216,10 +219,12 @@ describe('service runtime bootstrap', () => {
     stopReason = 'temporary';
     (ForegroundService.startHeadlessRuntime as jest.Mock).mockImplementation(async () => {
       if (stopReason) return null;
-      void runtimeReadiness.initialize('runtime-1', startServiceRuntime).catch(() => {});
+      void headlessRuntimeInitialization
+        .initialize('runtime-1', startServiceRuntime)
+        .catch(() => {});
       return 'runtime-1';
     });
-    await requestRuntimeRecovery(requestServiceRuntime);
+    await requestServiceRuntime(true);
     expect(stopReason).toBeNull();
     expect(backgroundRuntimeState.setTempDisabled).toHaveBeenCalledWith(false);
     expect(longRunningTaskManager.startAll).toHaveBeenCalledTimes(1);

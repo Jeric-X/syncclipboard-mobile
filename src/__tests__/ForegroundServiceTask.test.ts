@@ -2,8 +2,8 @@ import { foregroundServiceTask } from '../longRunningTask/ForegroundServiceTask'
 import * as ForegroundService from 'foreground-service';
 import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
-import { acquireStartupOverlay } from '../services/OverlayRuntime';
-import { nativeSleep } from '../utils/nativeSleep';
+import { acquireStartupOverlay } from '../services/overlay/OverlayManager';
+import { nativeSleep } from 'native-timer';
 import type { AppConfig } from '../types/storage';
 
 jest.mock('react-native', () => ({ Platform: { OS: 'android' } }));
@@ -34,8 +34,8 @@ jest.mock('../services/BackgroundRuntimeState', () => ({
     setTempDisabled: jest.fn(),
   },
 }));
-jest.mock('../services/OverlayRuntime', () => ({ acquireStartupOverlay: jest.fn() }));
-jest.mock('../utils/nativeSleep', () => ({ nativeSleep: jest.fn() }));
+jest.mock('../services/overlay/OverlayManager', () => ({ acquireStartupOverlay: jest.fn() }));
+jest.mock('native-timer', () => ({ nativeSleep: jest.fn() }));
 
 beforeEach(async () => {
   await foregroundServiceTask.stop();

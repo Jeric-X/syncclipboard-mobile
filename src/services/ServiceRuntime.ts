@@ -3,7 +3,7 @@
  * Android Activity 只请求 Headless 会话，由 Headless 统一初始化任务。
  */
 import { AppState, Platform } from 'react-native';
-import { runtimeReadiness } from '../utils/runtimeReadiness';
+import { headlessRuntimeInitialization } from './headless/headlessRuntimeInitialization';
 import * as ForegroundService from 'foreground-service';
 import { configService } from './ConfigService';
 import { backgroundRuntimeState } from './BackgroundRuntimeState';
@@ -88,14 +88,14 @@ export async function requestServiceRuntime(foregroundEntry = false): Promise<vo
   if (!requesting) {
     requesting = (async () => {
       const subscription = ForegroundService.addSessionStoppedListener(({ sessionId }) =>
-        runtimeReadiness.end(sessionId)
+        headlessRuntimeInitialization.end(sessionId)
       );
       try {
         const sessionId = await ForegroundService.startHeadlessRuntime();
         if (!sessionId || ForegroundService.getSessionId() !== sessionId) {
           throw new Error('Headless runtime could not be started');
         }
-        await runtimeReadiness.wait(sessionId);
+        await headlessRuntimeInitialization.wait(sessionId);
       } finally {
         subscription?.remove();
       }

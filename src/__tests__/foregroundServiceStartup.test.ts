@@ -1,4 +1,35 @@
-import { ForegroundServiceStartup } from '../utils/foregroundServiceStartup';
+jest.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+jest.mock('foreground-service', () => ({
+  isRunning: jest.fn(),
+  startService: jest.fn(),
+  stopService: jest.fn(),
+  startHeadlessRuntime: jest.fn(),
+  getSessionId: jest.fn(),
+  getStopReason: jest.fn(),
+  cancelRestartNotification: jest.fn(),
+  clearStopReason: jest.fn(),
+  addStopListener: jest.fn(),
+  addTempStopListener: jest.fn(),
+  addSessionStoppedListener: jest.fn(),
+}));
+jest.mock('../services/ConfigService', () => ({
+  configService: {
+    getConfig: jest.fn(),
+    subscribe: jest.fn(),
+    updateConfig: jest.fn(),
+  },
+}));
+jest.mock('../services/BackgroundRuntimeState', () => ({
+  backgroundRuntimeState: {
+    isTempDisabled: jest.fn(),
+    subscribe: jest.fn(),
+    setTempDisabled: jest.fn(),
+  },
+}));
+jest.mock('../services/overlay/OverlayManager', () => ({ acquireStartupOverlay: jest.fn() }));
+jest.mock('native-timer', () => ({ nativeSleep: jest.fn() }));
+
+import { ForegroundServiceStartup } from '../longRunningTask/ForegroundServiceTask';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

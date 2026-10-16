@@ -1,4 +1,4 @@
-import { OverlayLifecycle, type OverlayConfig } from '../utils/overlayLifecycle';
+import { OverlayLifecycle, type OverlayConfig } from '../services/overlay/overlayLifecycle';
 
 function setup() {
   let showing = false;

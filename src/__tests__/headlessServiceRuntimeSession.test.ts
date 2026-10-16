@@ -1,7 +1,7 @@
 import {
   runHeadlessServiceRuntimeSession,
   type HeadlessServiceRuntimeSessionDependencies,
-} from '../utils/headlessServiceRuntimeSession';
+} from '../services/headless/headlessServiceRuntimeSession';
 
 function setup() {
   let active = 'session-1';

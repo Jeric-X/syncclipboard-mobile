@@ -1,7 +1,7 @@
-import { RuntimeReadiness } from '../utils/runtimeReadiness';
+import { HeadlessRuntimeInitialization } from '../services/headless/headlessRuntimeInitialization';
 
 test('UI waiters share one Headless initialization, including late waiters', async () => {
-  const readiness = new RuntimeReadiness();
+  const readiness = new HeadlessRuntimeInitialization();
   const initialize = jest.fn(async () => {});
   const waiting = readiness.wait('one');
   expect(initialize).not.toHaveBeenCalled();
@@ -13,7 +13,7 @@ test('UI waiters share one Headless initialization, including late waiters', asy
 });
 
 test('initialization failure reaches both the task and UI', async () => {
-  const readiness = new RuntimeReadiness();
+  const readiness = new HeadlessRuntimeInitialization();
   const waiting = readiness.wait('one');
   const failure = new Error('config failed');
   const task = readiness.initialize('one', async () => {
@@ -24,7 +24,7 @@ test('initialization failure reaches both the task and UI', async () => {
 });
 
 test('ending a session cancels its waiters without ending the next session', async () => {
-  const readiness = new RuntimeReadiness();
+  const readiness = new HeadlessRuntimeInitialization();
   const old = readiness.wait('old');
   const next = readiness.initialize('new', async () => {});
   readiness.end('old');
@@ -33,7 +33,7 @@ test('ending a session cancels its waiters without ending the next session', asy
 });
 
 test('session ending before initialization is dispatched does not start tasks', async () => {
-  const readiness = new RuntimeReadiness();
+  const readiness = new HeadlessRuntimeInitialization();
   const initialize = jest.fn(async () => {});
   const task = readiness.initialize('old', initialize);
   readiness.end('old');

@@ -6,7 +6,7 @@ interface Initialization {
 }
 
 /** UI 仅等待会话初始化；初始化操作只由对应的 Headless 入口执行。 */
-export class RuntimeReadiness {
+export class HeadlessRuntimeInitialization {
   private sessions = new Map<string, Initialization>();
 
   private get(sessionId: string): Initialization {
@@ -52,4 +52,4 @@ export class RuntimeReadiness {
   }
 }
 
-export const runtimeReadiness = new RuntimeReadiness();
+export const headlessRuntimeInitialization = new HeadlessRuntimeInitialization();

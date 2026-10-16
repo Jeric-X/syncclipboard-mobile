@@ -1,9 +1,9 @@
-import { runtimeReadiness } from '../utils/runtimeReadiness';
-import { acquireKeepAliveOverlay } from '../services/OverlayRuntime';
+import { headlessRuntimeInitialization } from './headlessRuntimeInitialization';
+import { acquireKeepAliveOverlay } from '../overlay/OverlayManager';
 import { Platform } from 'react-native';
 import * as ForegroundService from 'foreground-service';
-import { startServiceRuntime, stopServiceRuntimeIfIdle } from '../services/ServiceRuntime';
-import { runHeadlessServiceRuntimeSession } from '../utils/headlessServiceRuntimeSession';
+import { startServiceRuntime, stopServiceRuntimeIfIdle } from '../ServiceRuntime';
+import { runHeadlessServiceRuntimeSession } from './headlessServiceRuntimeSession';
 
 /** 无 Activity 的服务运行时入口；Promise 直到进程级会话结束才结束。 */
 export default async function ServiceRuntimeHeadlessTask(data: {
@@ -20,14 +20,15 @@ export default async function ServiceRuntimeHeadlessTask(data: {
         return () => subscription?.remove();
       },
       isActive: (sessionId) => ForegroundService.getSessionId() === sessionId,
-      initialize: () => runtimeReadiness.initialize(data.sessionId, startServiceRuntime),
+      initialize: () =>
+        headlessRuntimeInitialization.initialize(data.sessionId, startServiceRuntime),
       acquireKeepAliveOverlay,
       markReady: ForegroundService.markSessionReady,
       finishSession: ForegroundService.finishHeadlessRuntime,
       shutdownIfIdle: stopServiceRuntimeIfIdle,
     });
   } finally {
-    runtimeReadiness.end(data.sessionId);
+    headlessRuntimeInitialization.end(data.sessionId);
   }
   console.info('[ServiceRuntimeHeadlessTask] Session stopped', data.sessionId);
 }

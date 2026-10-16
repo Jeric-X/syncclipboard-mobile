@@ -8,7 +8,7 @@ import App from './App';
 import QuickActionApp from './src/QuickActionApp';
 import ServiceRestartApp from './src/ServiceRestartApp';
 import SmsUploadTask from './src/tasks/SmsUploadTask';
-import ServiceRuntimeHeadlessTask from './src/tasks/ServiceRuntimeHeadlessTask';
+import ServiceRuntimeHeadlessTask from './src/services/headless/ServiceRuntimeHeadlessTask';
 import { installServiceRuntime } from './src/services/ServiceRuntime';
 import { notifyColdStart } from './src/services/ColdStartNotification';
 

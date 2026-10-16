@@ -57,13 +57,13 @@ All code should be written with cross-platform portability in mind (see [Cross-P
 
 `index.ts` registers three separate RN roots, each serving a distinct purpose:
 
-| Registration     | Component                                 | Purpose                                                                              |
-| ---------------- | ----------------------------------------- | ------------------------------------------------------------------------------------ |
-| `main`           | `App.tsx`                                 | Full app UI with bottom tab navigation (Home / History / Settings)                   |
-| `quickAction`    | `src/QuickActionApp.tsx`                  | Transparent overlay for quick-settings tiles, share menu, and text selection actions |
-| `serviceRestart` | `src/ServiceRestartApp.tsx`               | Fallback recovery screen opened when headless startup fails                          |
-| Headless         | `src/tasks/SmsUploadTask.ts`              | Background SMS verification code upload (no UI)                                      |
-| Headless runtime | `src/tasks/ServiceRuntimeHeadlessTask.ts` | Persistent background services without an Activity                                   |
+| Registration     | Component                                             | Purpose                                                                              |
+| ---------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `main`           | `App.tsx`                                             | Full app UI with bottom tab navigation (Home / History / Settings)                   |
+| `quickAction`    | `src/QuickActionApp.tsx`                              | Transparent overlay for quick-settings tiles, share menu, and text selection actions |
+| `serviceRestart` | `src/ServiceRestartApp.tsx`                           | Fallback recovery screen opened when headless startup fails                          |
+| Headless         | `src/tasks/SmsUploadTask.ts`                          | Background SMS verification code upload (no UI)                                      |
+| Headless runtime | `src/services/headless/ServiceRuntimeHeadlessTask.ts` | Persistent background services without an Activity                                   |
 
 `App.tsx` handles cold/hot start deep link routing: parses `syncclipboard://` URLs to determine whether to show the main UI or an overlay (share receive, quick upload/download).
 
