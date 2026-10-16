@@ -14,5 +14,6 @@ interface IClipboardUserService {
     void watchRecovery(IBinder callerToken, in PendingIntent recovery) = 9;
     void clearRecoveryWatch(IBinder callerToken) = 10;
     void acknowledgeRecoveryReady(IBinder callerToken) = 11;
+    void reportRecoveryStartupFailed(IBinder callerToken) = 12;
     void destroy() = 16777114;
 }

@@ -12,4 +12,11 @@ class ShizukuRecoveryTest {
         assertFalse(recoveryTicketMatches("new", null, false))
         assertFalse(recoveryTicketMatches(null, null, false))
     }
+
+    @Test fun initializationFailureRetainsRecoveryButUserStopsNeverDo() {
+        assertTrue(shouldRetryHeadlessStartup(wasReady = false, stopped = false))
+        assertFalse(shouldRetryHeadlessStartup(wasReady = false, stopped = true))
+        assertFalse(shouldRetryHeadlessStartup(wasReady = true, stopped = false))
+        assertFalse(shouldRetryHeadlessStartup(wasReady = true, stopped = true))
+    }
 }

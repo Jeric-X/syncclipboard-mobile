@@ -54,7 +54,17 @@ class ShizukuClipboardModule : Module() {
     private val recoveryToken = Binder()
     private val recoveryOwner = UUID.randomUUID().toString()
     private val recoveryLock = Any()
-    private var recoveryRequested = false
+    @Volatile private var recoveryRequested = false
+    private val recoveryRebind = RecoveryRebind(
+        schedule = { callback ->
+            val runnable = Runnable { callback() }
+            mainHandler.postDelayed(runnable, 2_000L)
+            val cancel: () -> Unit = { mainHandler.removeCallbacks(runnable) }
+            cancel
+        },
+        canBind = { recoveryRequested && hasPermission() && !serviceConnected && !isBinding },
+        bind = { bindUserService(); Unit }
+    )
 
     private val clipboardChangedCallback = object : IClipboardChangedCallback.Stub() {
         override fun onPrimaryClipChanged() {
@@ -78,7 +88,7 @@ class ShizukuClipboardModule : Module() {
             .daemon(true)
             .processNameSuffix("clipboard")
             .debuggable(true)
-            .version(11)
+            .version(12)
     }
 
     /** Creates a callback object tied to exactly one bind attempt. */
@@ -90,8 +100,9 @@ class ShizukuClipboardModule : Module() {
 
             override fun onServiceDisconnected(name: ComponentName?) {
                 NativeLogger.w(TAG, "UserService disconnected")
-                if (markConnectionFailed(this) && clipboardListenerRequested) {
-                    sendClipboardListenerUnavailable()
+                if (markConnectionFailed(this)) {
+                    recoveryRebind.disconnected()
+                    if (clipboardListenerRequested) sendClipboardListenerUnavailable()
                 }
             }
         }
@@ -160,6 +171,7 @@ class ShizukuClipboardModule : Module() {
         val publishedService = connectedService
         if (publishedService != null) {
             NativeLogger.i(TAG, "UserService bound successfully")
+            recoveryRebind.cancel()
             restoreRecoveryWatch(publishedService)
             if (clipboardListenerRequested) {
                 restoreClipboardListenerAfterConnection(publishedService)
@@ -189,6 +201,7 @@ class ShizukuClipboardModule : Module() {
     private val binderDeadListener = Shizuku.OnBinderDeadListener {
         NativeLogger.w(TAG, "Shizuku binder dead")
         markConnectionFailed()
+        recoveryRebind.cancel()
         if (clipboardListenerRequested) sendClipboardListenerUnavailable()
     }
 
@@ -464,23 +477,31 @@ class ShizukuClipboardModule : Module() {
             if (!recoveryRequested || !hasPermission()) return
             val context = appContext.reactContext ?: return
             try {
-                val recovery = ShizukuRecovery.enable(context, recoveryOwner) {
-                    acknowledgeRecoveryReady()
-                } ?: return
+                val recovery = ShizukuRecovery.enable(
+                    context, recoveryOwner,
+                    onReady = { acknowledgeRecoveryReady() },
+                    onFailed = { reportRecoveryStartupFailed() }
+                ) ?: return
                 service.watchRecovery(recoveryToken, recovery)
                 // Shizuku 连接可能晚于 Headless 就绪，补发当前会话的成功确认。
                 if (ServiceRuntimeSession.isReady()) acknowledgeRecoveryReady()
+                else if (ServiceRuntimeSession.hasFailedStartup()) reportRecoveryStartupFailed()
             } catch (error: Exception) {
                 NativeLogger.e(TAG, "Cannot register Shizuku recovery", error)
             }
         }
     }
 
-    private fun setRecoveryEnabled(enabled: Boolean, disposing: Boolean = false) {
+    private fun setRecoveryEnabled(
+        enabled: Boolean, disposing: Boolean = false, preserveStartupFailure: Boolean = false
+    ) {
         synchronized(recoveryLock) {
             val context = appContext.reactContext ?: return
+            // 仅失败清理可保留已有授权；设置关闭和用户停止永远走撤销路径。
+            if (!enabled && preserveStartupFailure && ServiceRuntimeSession.hasFailedStartup()) return
             recoveryRequested = enabled
             if (!enabled) {
+                recoveryRebind.cancel()
                 ShizukuRecovery.disable(context, if (disposing) recoveryOwner else null)
                 try {
                     clipboardService?.clearRecoveryWatch(recoveryToken)
@@ -493,6 +514,17 @@ class ShizukuClipboardModule : Module() {
             val service = clipboardService
             if (service != null && isServiceAlive(service)) restoreRecoveryWatch(service)
             else bindUserService()
+        }
+    }
+
+    private fun reportRecoveryStartupFailed() {
+        synchronized(recoveryLock) {
+            if (!recoveryRequested || !ServiceRuntimeSession.hasFailedStartup()) return
+            try {
+                clipboardService?.reportRecoveryStartupFailed(recoveryToken)
+            } catch (error: Exception) {
+                NativeLogger.w(TAG, "Cannot report failed Headless startup: ${error.message}")
+            }
         }
     }
 
@@ -523,6 +555,8 @@ class ShizukuClipboardModule : Module() {
         }
 
         OnDestroy {
+            recoveryRequested = false
+            recoveryRebind.cancel()
             try {
                 setRecoveryEnabled(false, disposing = true)
                 clipboardListenerRequested = false
@@ -535,8 +569,8 @@ class ShizukuClipboardModule : Module() {
             }
         }
 
-        Function("setRecoveryEnabled") { enabled: Boolean ->
-            setRecoveryEnabled(enabled)
+        Function("setRecoveryEnabled") { enabled: Boolean, preserveStartupFailure: Boolean ->
+            setRecoveryEnabled(enabled, preserveStartupFailure = preserveStartupFailure)
         }
 
         Function("isShizukuAvailable") {

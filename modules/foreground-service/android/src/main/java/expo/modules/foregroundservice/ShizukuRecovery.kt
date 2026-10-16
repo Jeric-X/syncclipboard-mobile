@@ -14,11 +14,13 @@ object ShizukuRecovery {
     private var pendingIntent: PendingIntent? = null
     private var currentOwner: String? = null
     private var readyListener: (() -> Unit)? = null
+    private var failureListener: (() -> Unit)? = null
 
     @Synchronized
-    fun enable(context: Context, owner: String, onReady: () -> Unit): PendingIntent? {
+    fun enable(context: Context, owner: String, onReady: () -> Unit, onFailed: () -> Unit): PendingIntent? {
         if (SyncForegroundService.getStopReason(context) != null) return null
         readyListener = onReady
+        failureListener = onFailed
         if (currentOwner == owner) pendingIntent?.let { return it }
         pendingIntent?.cancel()
         pendingIntent = null
@@ -48,6 +50,7 @@ object ShizukuRecovery {
         existing?.cancel()
         pendingIntent = null
         readyListener = null
+        failureListener = null
         if (!context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit().remove(TICKET).commit()) {
             NativeLogger.w("ShizukuRecovery", "Cannot persist revoked recovery permission")
@@ -62,6 +65,11 @@ object ShizukuRecovery {
     )
 
     /** 回调不持有恢复凭证锁，避免与模块订阅锁形成反向锁顺序。 */
+    fun notifyRuntimeFailed() {
+        val listener = synchronized(this) { failureListener }
+        listener?.invoke()
+    }
+
     fun notifyRuntimeReady() {
         val listener = synchronized(this) { readyListener }
         listener?.invoke()

@@ -436,6 +436,10 @@ class ClipboardUserService : IClipboardUserService.Stub() {
         recoveryWatch.clear(callerToken)
     }
 
+    override fun reportRecoveryStartupFailed(callerToken: IBinder) {
+        recoveryWatch.startupFailed(callerToken)
+    }
+
     override fun acknowledgeRecoveryReady(callerToken: IBinder) {
         recoveryWatch.ready(callerToken)
     }

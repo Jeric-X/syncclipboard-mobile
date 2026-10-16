@@ -38,6 +38,24 @@ export class ShizukuRecoveryTask extends LongRunningTask {
   }
 
   async stop(): Promise<void> {
+    // 初始化可能在任务启动前失败；仅已知的停用配置才能撤销上一进程留下的凭证。
+    if (!this.running) {
+      const revision = this.revision;
+      const config = await configService.getConfig().catch(() => null);
+      if (this.running || revision !== this.revision) return;
+      if (
+        (config && !this.isConfigEnabled(config)) ||
+        backgroundRuntimeState.isTempDisabled() ||
+        getStopReason()
+      ) {
+        setRecoveryEnabled(false);
+      }
+      return;
+    }
+    const preserveStartupFailure =
+      (!this.config || this.isConfigEnabled(this.config)) &&
+      !backgroundRuntimeState.isTempDisabled() &&
+      !getStopReason();
     this.running = false;
     this.revision++;
     this.config = null;
@@ -45,20 +63,27 @@ export class ShizukuRecoveryTask extends LongRunningTask {
     this.unsubscribeState?.();
     this.unsubscribeConfig = null;
     this.unsubscribeState = null;
-    setRecoveryEnabled(false);
+    setRecoveryEnabled(false, preserveStartupFailure);
   }
 
   isRunning(): boolean {
     return this.running;
   }
 
+  private isConfigEnabled(config: AppConfig): boolean {
+    return (
+      config.enableShizukuRecovery === true &&
+      config.enableBackgroundTasks &&
+      (config.enableBackgroundUpload || config.enableBackgroundDownload)
+    );
+  }
+
   private apply(): void {
     const config = this.config;
     setRecoveryEnabled(
       this.running &&
-        config?.enableShizukuRecovery === true &&
-        config.enableBackgroundTasks &&
-        (config.enableBackgroundUpload || config.enableBackgroundDownload) &&
+        config !== null &&
+        this.isConfigEnabled(config) &&
         !backgroundRuntimeState.isTempDisabled() &&
         !getStopReason()
     );

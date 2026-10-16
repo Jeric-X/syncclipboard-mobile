@@ -107,7 +107,7 @@ it('does not rearm when the initial read finishes after shutdown', async () => {
   resolve(enabledConfig);
   await starting;
   expect(setRecoveryEnabled).toHaveBeenCalledTimes(1);
-  expect(setRecoveryEnabled).toHaveBeenLastCalledWith(false);
+  expect(setRecoveryEnabled).toHaveBeenLastCalledWith(false, true);
   expect(unsubscribe).toHaveBeenCalledTimes(2);
 });
 
@@ -120,4 +120,51 @@ it('does not overwrite a newer saved setting with an old initial read', async ()
   await starting;
   expect(setRecoveryEnabled).toHaveBeenCalledTimes(1);
   expect(setRecoveryEnabled).toHaveBeenLastCalledWith(false);
+});
+
+it('does not revoke recovery during cleanup before the task ever started', async () => {
+  await task.stop();
+  expect(setRecoveryEnabled).not.toHaveBeenCalled();
+});
+
+it('allows only failed-startup cleanup to preserve an otherwise enabled watch', async () => {
+  await task.start();
+  await task.stop();
+  expect(setRecoveryEnabled).toHaveBeenLastCalledWith(false, true);
+});
+
+it('master switch off always revokes, including subsequent cleanup', async () => {
+  await task.start();
+  changed({ ...enabledConfig, enableBackgroundTasks: false });
+  expect(setRecoveryEnabled).toHaveBeenLastCalledWith(false);
+  await task.stop();
+  expect(setRecoveryEnabled).toHaveBeenLastCalledWith(false, false);
+});
+
+it('revokes a persisted capability when the master switch was off before task startup', async () => {
+  (configService.getConfig as jest.Mock).mockResolvedValue({
+    ...enabledConfig,
+    enableBackgroundTasks: false,
+  });
+  await task.stop();
+  expect(setRecoveryEnabled).toHaveBeenLastCalledWith(false);
+});
+
+it('does not revoke an old capability when initialization could not load configuration', async () => {
+  (configService.getConfig as jest.Mock).mockRejectedValue(new Error('storage unavailable'));
+  await task.stop();
+  expect(setRecoveryEnabled).not.toHaveBeenCalled();
+});
+
+it('old idle cleanup cannot revoke a newly started watch', async () => {
+  let resolve!: (config: AppConfig) => void;
+  (configService.getConfig as jest.Mock).mockReturnValueOnce(
+    new Promise((done) => (resolve = done))
+  );
+  const cleanup = task.stop();
+  await task.start();
+  resolve({ ...enabledConfig, enableBackgroundTasks: false });
+  await cleanup;
+  expect(setRecoveryEnabled).toHaveBeenCalledTimes(1);
+  expect(setRecoveryEnabled).toHaveBeenLastCalledWith(true);
 });

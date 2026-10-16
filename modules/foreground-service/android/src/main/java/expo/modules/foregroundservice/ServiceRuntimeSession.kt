@@ -23,6 +23,10 @@ object ServiceRuntimeSession {
     private val handler = Handler(Looper.getMainLooper())
     @Volatile private var current: Session? = null
 
+    @Volatile private var startupFailed = false
+
+    fun hasFailedStartup(): Boolean = startupFailed
+
     fun currentSessionId(): String? = current?.id
     fun isReady(): Boolean = current?.ready == true
 
@@ -56,12 +60,13 @@ object ServiceRuntimeSession {
             // React reload 后使用新一代会话，旧任务的回调不能结束新任务。
             stop(session.id)
         }
+        startupFailed = false
         val session = Session(application, host)
         current = session
         try {
             session.start()
         } catch (error: Exception) {
-            stop(session.id)
+            session.fail("Headless startup failed")
             throw error
         }
         return session.id.takeIf { current === session }
@@ -71,6 +76,7 @@ object ServiceRuntimeSession {
         handler.post {
             current?.takeIf { it.id == id }?.let {
                 it.ready = true
+                startupFailed = false
                 it.releaseStartupResources()
                 ShizukuRecovery.notifyRuntimeReady()
                 NativeLogger.i(TAG, "Headless sync ready: $id")
@@ -83,10 +89,13 @@ object ServiceRuntimeSession {
     fun finishFromJs(id: String) {
         check(Looper.myLooper() == Looper.getMainLooper())
         if (current?.id != id) return
-        val context = current!!.context
-        ShizukuRecovery.disable(context)
+        val session = current!!
+        val context = session.context
+        startupFailed = shouldRetryHeadlessStartup(session.ready, SyncForegroundService.getStopReason(context) != null)
+        if (!startupFailed) ShizukuRecovery.disable(context)
         SyncForegroundService.requestStop(context)
         stop(id)
+        if (startupFailed) ShizukuRecovery.notifyRuntimeFailed()
     }
 
     fun stop(id: String) {
@@ -173,12 +182,14 @@ object ServiceRuntimeSession {
             }
         }
 
-        private fun fail(reason: String) {
+        fun fail(reason: String) {
             if (current !== this) return
             NativeLogger.w(TAG, "$reason, session=$id")
-            ShizukuRecovery.disable(context)
+            startupFailed = shouldRetryHeadlessStartup(ready, SyncForegroundService.getStopReason(context) != null)
+            if (!startupFailed) ShizukuRecovery.disable(context)
             stop(id)
             SyncForegroundService.requestStop(context)
+            if (startupFailed) ShizukuRecovery.notifyRuntimeFailed()
         }
 
         fun releaseStartupResources() {
@@ -199,3 +210,7 @@ object ServiceRuntimeSession {
         }
     }
 }
+
+/** 初始化失败保留恢复预算；用户停止以及已就绪会话结束仍撤销恢复能力。 */
+internal fun shouldRetryHeadlessStartup(wasReady: Boolean, stopped: Boolean): Boolean =
+    !wasReady && !stopped

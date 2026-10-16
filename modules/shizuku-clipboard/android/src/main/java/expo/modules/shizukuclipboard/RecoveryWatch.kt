@@ -48,6 +48,8 @@ internal class RecoveryWatch {
 
     fun clear(token: IBinder) = guard.clear(token)
 
+    fun startupFailed(token: IBinder) = guard.startupFailed(token)
+
     fun ready(token: IBinder) = guard.ready(token)
 
     fun close() {

@@ -165,4 +165,40 @@ class ProcessRecoveryGuardTest {
         queued.last()()
         assertEquals(4, recovered)
     }
+    @Test fun failedInitializationRetriesEvenWhenTheProcessIsStillAlive() {
+        guard.watch("alive") { recovered++ }
+        guard.startupFailed("alive")
+        assertEquals(listOf(60_000L), delays)
+        repeat(3) { queued.last()() }
+        assertEquals(3, recovered)
+        queued.last()()
+        assertEquals(3, recovered)
+    }
+
+    @Test fun readyCancelsFailedInitializationRetryAndStaleFailuresAreIgnored() {
+        guard.watch("current") { recovered++ }
+        guard.startupFailed("old")
+        assertTrue(queued.isEmpty())
+        guard.startupFailed("current")
+        guard.startupFailed("current")
+        assertEquals(1, queued.size)
+        guard.ready("current")
+        queued[0]()
+        assertEquals(0, recovered)
+        deaths.getValue("current")()
+        repeat(3) { queued.last()() }
+        assertEquals(3, recovered)
+    }
+
+    @Test fun successOfTheLastAttemptStillResetsTheBudgetForTheSameProcess() {
+        guard.watch("alive") { recovered++ }
+        guard.startupFailed("alive")
+        repeat(3) { queued.last()() }
+        assertEquals(3, recovered)
+        guard.ready("alive")
+        deaths.getValue("alive")()
+        queued.last()()
+        assertEquals(4, recovered)
+    }
+
 }
