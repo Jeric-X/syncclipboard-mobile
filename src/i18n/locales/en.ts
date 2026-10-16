@@ -248,7 +248,7 @@ const en: DeepString<typeof zh> = {
     backgroundUploadDisabled: 'Background upload disabled',
     tileRecovery: 'Restore background tasks via Quick Settings tiles',
     tileRecoveryDesc:
-      'Attempts to restore background tasks as soon as a tile is shown. No tap required.',
+      'No tap required. Expanding the Quick Settings panel to show the quick action buttons triggers an attempt to restore background tasks.',
     overlayKeepAlive: 'Keep running in background via overlay',
     overlayKeepAliveDesc: 'Improves background reliability',
     overlayKeepAlivePermission:

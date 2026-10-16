@@ -238,7 +238,7 @@ const zh = {
     backgroundUploadEnabled: '已启用后台上传本地',
     backgroundUploadDisabled: '已禁用后台上传本地',
     tileRecovery: '通过快捷操作磁贴恢复后台任务',
-    tileRecoveryDesc: '无需点击，磁贴显示时即会尝试恢复后台任务。',
+    tileRecoveryDesc: '无需点击，展开下拉菜单显示快捷操作按钮时即会尝试恢复后台任务',
     overlayKeepAlive: '通过悬浮窗保持后台运行',
     overlayKeepAliveDesc: '提高后台运行的稳定性',
     overlayKeepAlivePermission: '需要悬浮窗权限。请先授权，再回来启用此选项。',
