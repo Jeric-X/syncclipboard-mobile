@@ -11,9 +11,12 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.Promise
 import expo.modules.nativeutil.NativeLogger
+import expo.modules.foregroundservice.ShizukuRecovery
+import expo.modules.foregroundservice.ServiceRuntimeSession
 import rikka.shizuku.Shizuku
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.UUID
 
 /**
  * ShizukuClipboardModule
@@ -48,6 +51,10 @@ class ShizukuClipboardModule : Module() {
 
     // UserService 使用此 token 监听 App 进程死亡，只清理该客户端的回调资源。
     private val callerToken = Binder()
+    private val recoveryToken = Binder()
+    private val recoveryOwner = UUID.randomUUID().toString()
+    private val recoveryLock = Any()
+    private var recoveryRequested = false
 
     private val clipboardChangedCallback = object : IClipboardChangedCallback.Stub() {
         override fun onPrimaryClipChanged() {
@@ -71,7 +78,7 @@ class ShizukuClipboardModule : Module() {
             .daemon(true)
             .processNameSuffix("clipboard")
             .debuggable(true)
-            .version(8)
+            .version(9)
     }
 
     /** Creates a callback object tied to exactly one bind attempt. */
@@ -153,6 +160,7 @@ class ShizukuClipboardModule : Module() {
         val publishedService = connectedService
         if (publishedService != null) {
             NativeLogger.i(TAG, "UserService bound successfully")
+            restoreRecoveryWatch(publishedService)
             if (clipboardListenerRequested) {
                 restoreClipboardListenerAfterConnection(publishedService)
             }
@@ -450,6 +458,55 @@ class ShizukuClipboardModule : Module() {
         return fallback
     }
 
+    /** 守护订阅独立于剪贴板；权限稍后授予或 Shizuku 重连后重新注册。 */
+    private fun restoreRecoveryWatch(service: IClipboardUserService) {
+        synchronized(recoveryLock) {
+            if (!recoveryRequested || !hasPermission()) return
+            val context = appContext.reactContext ?: return
+            try {
+                val recovery = ShizukuRecovery.enable(context, recoveryOwner) {
+                    acknowledgeRecoveryReady()
+                } ?: return
+                service.watchRecovery(recoveryToken, recovery)
+                // Shizuku 连接可能晚于 Headless 就绪，补发当前会话的成功确认。
+                if (ServiceRuntimeSession.isReady()) acknowledgeRecoveryReady()
+            } catch (error: Exception) {
+                NativeLogger.e(TAG, "Cannot register Shizuku recovery", error)
+            }
+        }
+    }
+
+    private fun setRecoveryEnabled(enabled: Boolean, disposing: Boolean = false) {
+        synchronized(recoveryLock) {
+            val context = appContext.reactContext ?: return
+            recoveryRequested = enabled
+            if (!enabled) {
+                ShizukuRecovery.disable(context, if (disposing) recoveryOwner else null)
+                try {
+                    clipboardService?.clearRecoveryWatch(recoveryToken)
+                } catch (error: Exception) {
+                    NativeLogger.w(TAG, "Cannot detach recovery watch: ${error.message}")
+                }
+                return
+            }
+            if (!hasPermission()) return
+            val service = clipboardService
+            if (service != null && isServiceAlive(service)) restoreRecoveryWatch(service)
+            else bindUserService()
+        }
+    }
+
+    private fun acknowledgeRecoveryReady() {
+        synchronized(recoveryLock) {
+            if (!recoveryRequested || !ServiceRuntimeSession.isReady()) return
+            try {
+                clipboardService?.acknowledgeRecoveryReady(recoveryToken)
+            } catch (error: Exception) {
+                NativeLogger.w(TAG, "Cannot acknowledge recovery: ${error.message}")
+            }
+        }
+    }
+
     override fun definition() = ModuleDefinition {
         Name("ShizukuClipboardModule")
 
@@ -467,6 +524,7 @@ class ShizukuClipboardModule : Module() {
 
         OnDestroy {
             try {
+                setRecoveryEnabled(false, disposing = true)
                 clipboardListenerRequested = false
                 disconnectUserService()
                 Shizuku.removeRequestPermissionResultListener(permissionResultListener)
@@ -475,6 +533,10 @@ class ShizukuClipboardModule : Module() {
             } catch (e: Exception) {
                 NativeLogger.e(TAG, "Failed to cleanup Shizuku listeners", e)
             }
+        }
+
+        Function("setRecoveryEnabled") { enabled: Boolean ->
+            setRecoveryEnabled(enabled)
         }
 
         Function("isShizukuAvailable") {

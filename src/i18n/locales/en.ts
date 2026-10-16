@@ -248,6 +248,10 @@ const en: DeepString<typeof zh> = {
       'You can upload text via the text selection popup without enabling this option.\n\nOn Android 10 and above, apps cannot directly access the clipboard in the background. You may need to enable the overlay window or use another tool to bypass this restriction.',
     backgroundUploadEnabled: 'Background upload enabled',
     backgroundUploadDisabled: 'Background upload disabled',
+    shizukuRecovery: 'Restore background sync via Shizuku',
+    shizukuRecoveryDesc:
+      'When Shizuku is running and authorized, attempt to restore sync after the app process exits unexpectedly. Requires foreground notifications and background upload or download. Respects manual stops. On non-rooted devices, restart Shizuku after reboot.',
+    shizukuRecoveryAuthorize: 'Authorize Shizuku, then turn on recovery again',
     tileRecovery: 'Restore background tasks via Quick Settings tiles',
     tileRecoveryDesc:
       'No tap required. Expanding the Quick Settings panel to show the quick action buttons triggers an attempt to restore background tasks.',

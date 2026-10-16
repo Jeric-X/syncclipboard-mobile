@@ -24,6 +24,7 @@ object ServiceRuntimeSession {
     @Volatile private var current: Session? = null
 
     fun currentSessionId(): String? = current?.id
+    fun isReady(): Boolean = current?.ready == true
 
     /** 与已保存的配置同步，默认关闭；不能把磁贴加载视为用户主动恢复。 */
     fun setTileRecoveryEnabled(context: Context, enabled: Boolean) {
@@ -69,7 +70,9 @@ object ServiceRuntimeSession {
     fun markReady(id: String) {
         handler.post {
             current?.takeIf { it.id == id }?.let {
+                it.ready = true
                 it.releaseStartupResources()
+                ShizukuRecovery.notifyRuntimeReady()
                 NativeLogger.i(TAG, "Headless sync ready: $id")
                 it.logStartupTiming("jsReady")
             }
@@ -81,6 +84,7 @@ object ServiceRuntimeSession {
         check(Looper.myLooper() == Looper.getMainLooper())
         if (current?.id != id) return
         val context = current!!.context
+        ShizukuRecovery.disable(context)
         SyncForegroundService.requestStop(context)
         stop(id)
     }
@@ -94,6 +98,7 @@ object ServiceRuntimeSession {
     }
 
     private class Session(val context: Context, val host: ReactHost) {
+        @Volatile var ready = false
         val id = UUID.randomUUID().toString()
         private val createdAtMs = SystemClock.elapsedRealtime()
         var reactContext: ReactContext? = null
@@ -171,6 +176,7 @@ object ServiceRuntimeSession {
         private fun fail(reason: String) {
             if (current !== this) return
             NativeLogger.w(TAG, "$reason, session=$id")
+            ShizukuRecovery.disable(context)
             stop(id)
             SyncForegroundService.requestStop(context)
         }

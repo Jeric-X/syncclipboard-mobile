@@ -4,6 +4,7 @@
  */
 
 import { smsForwardingTask } from './SmsForwardingTask';
+import { shizukuRecoveryTask } from './ShizukuRecoveryTask';
 import { foregroundServiceTask } from './ForegroundServiceTask';
 import { historySyncTask } from './HistorySyncTask';
 import { clipboardMonitorTask } from './ClipboardMonitorTask';
@@ -52,3 +53,4 @@ longRunningTaskManager.register(historyTrackerTask, true);
 longRunningTaskManager.register(historySyncTask, true);
 longRunningTaskManager.register(heartbeatTask);
 longRunningTaskManager.register(foregroundServiceTask);
+longRunningTaskManager.register(shizukuRecoveryTask);
