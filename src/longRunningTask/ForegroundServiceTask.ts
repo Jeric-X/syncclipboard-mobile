@@ -146,7 +146,9 @@ class ForegroundServiceTask extends LongRunningTask {
 
   /** 根据当前配置决定启动或停止服务 */
   private async _refresh(): Promise<void> {
-    if (await this._shouldRunForegroundService()) {
+    const config = await configService.getConfig();
+    ForegroundService.setStickyEnabled(config.enableForegroundServiceSticky !== false);
+    if (this._running && this._configAllowsService(config)) {
       try {
         await this._startService();
       } catch (error) {

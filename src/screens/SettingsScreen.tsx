@@ -172,6 +172,9 @@ export const SettingsScreen = () => {
   const [localTileRecovery, setLocalTileRecovery] = useSyncedState(
     config?.enableTileRecovery ?? false
   );
+  const [localForegroundServiceSticky, setLocalForegroundServiceSticky] = useSyncedState(
+    config?.enableForegroundServiceSticky ?? true
+  );
   const [localForegroundNotification, setLocalForegroundNotification] = useState(
     config?.enableForegroundNotification ?? true
   );
@@ -644,6 +647,16 @@ export const SettingsScreen = () => {
       showMessage(t('settings.backgroundUploadDisabled'), 'success');
     } catch (error: unknown) {
       setLocalBackgroundUploadEnabled(true);
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
+    }
+  };
+
+  const handleToggleForegroundServiceSticky = async (enabled: boolean) => {
+    setLocalForegroundServiceSticky(enabled);
+    try {
+      await configService.updateConfig({ enableForegroundServiceSticky: enabled });
+    } catch (error: unknown) {
+      setLocalForegroundServiceSticky(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
@@ -1590,6 +1603,18 @@ export const SettingsScreen = () => {
               value={localBackgroundTasksEnabled && localForegroundNotification}
               onChange={handleToggleForegroundNotification}
               disabled={!localBackgroundTasksEnabled}
+            />
+
+            <SettingSwitch
+              label={t('settings.foregroundServiceSticky')}
+              description={t('settings.foregroundServiceStickyDesc')}
+              value={
+                localBackgroundTasksEnabled &&
+                localForegroundNotification &&
+                localForegroundServiceSticky
+              }
+              onChange={handleToggleForegroundServiceSticky}
+              disabled={!localBackgroundTasksEnabled || !localForegroundNotification}
             />
 
             <SettingSwitch
