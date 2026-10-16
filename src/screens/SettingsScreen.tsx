@@ -169,6 +169,9 @@ export const SettingsScreen = () => {
   const [localOverlayKeepAlive, setLocalOverlayKeepAlive] = useSyncedState(
     config?.enableOverlayKeepAlive ?? false
   );
+  const [localTileRecovery, setLocalTileRecovery] = useSyncedState(
+    config?.enableTileRecovery ?? false
+  );
   const [localForegroundNotification, setLocalForegroundNotification] = useState(
     config?.enableForegroundNotification ?? true
   );
@@ -641,6 +644,16 @@ export const SettingsScreen = () => {
       showMessage(t('settings.backgroundUploadDisabled'), 'success');
     } catch (error: unknown) {
       setLocalBackgroundUploadEnabled(true);
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
+    }
+  };
+
+  const handleToggleTileRecovery = async (enabled: boolean) => {
+    setLocalTileRecovery(enabled);
+    try {
+      await configService.updateConfig({ enableTileRecovery: enabled });
+    } catch (error: unknown) {
+      setLocalTileRecovery(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
@@ -1584,6 +1597,14 @@ export const SettingsScreen = () => {
               description={t('settings.overlayKeepAliveDesc')}
               value={localBackgroundTasksEnabled && localOverlayKeepAlive}
               onChange={handleToggleOverlayKeepAlive}
+              disabled={!localBackgroundTasksEnabled}
+            />
+
+            <SettingSwitch
+              label={t('settings.tileRecovery')}
+              description={t('settings.tileRecoveryDesc')}
+              value={localBackgroundTasksEnabled && localTileRecovery}
+              onChange={handleToggleTileRecovery}
               disabled={!localBackgroundTasksEnabled}
             />
 

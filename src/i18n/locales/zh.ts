@@ -237,6 +237,8 @@ const zh = {
       '无需启用此选项，SyncClipboard 也支持从选中文字弹出的菜单直接上传文字。\n\nAndroid 10 及以上的系统，应用在后台无法直接获取本地剪贴板内容，你可能需要启用悬浮窗或使用其他工具绕过此限制。',
     backgroundUploadEnabled: '已启用后台上传本地',
     backgroundUploadDisabled: '已禁用后台上传本地',
+    tileRecovery: '下拉快捷设置时恢复后台任务',
+    tileRecoveryDesc: '显示快捷设置磁贴时，尝试恢复后台任务',
     overlayKeepAlive: '通过悬浮窗保持后台运行',
     overlayKeepAliveDesc: '提高后台运行的稳定性',
     overlayKeepAlivePermission: '需要悬浮窗权限。请先授权，再回来启用此选项。',
