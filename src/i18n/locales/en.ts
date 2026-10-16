@@ -246,8 +246,9 @@ const en: DeepString<typeof zh> = {
       'You can upload text via the text selection popup without enabling this option.\n\nOn Android 10 and above, apps cannot directly access the clipboard in the background. You may need to enable the overlay window or use another tool to bypass this restriction.',
     backgroundUploadEnabled: 'Background upload enabled',
     backgroundUploadDisabled: 'Background upload disabled',
-    tileRecovery: 'Restore background tasks from Quick Settings',
-    tileRecoveryDesc: 'Attempts to restore background tasks when a Quick Settings tile is shown',
+    tileRecovery: 'Restore background tasks via Quick Settings tiles',
+    tileRecoveryDesc:
+      'Attempts to restore background tasks as soon as a tile is shown. No tap required.',
     overlayKeepAlive: 'Keep running in background via overlay',
     overlayKeepAliveDesc: 'Improves background reliability',
     overlayKeepAlivePermission:
