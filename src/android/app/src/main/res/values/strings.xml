@@ -3,15 +3,11 @@
   <!-- Foreground Service -->
   <string name="fg_channel_name">Background Service</string>
   <string name="fg_channel_desc">SyncClipboard background sync service</string>
-  <string name="fg_restart_channel_name">Service Restart Alert</string>
-  <string name="fg_restart_channel_desc">Alert when background service is terminated by system</string>
   <string name="fg_notification_running">Background service running</string>
   <string name="fg_notification_stopping">Stopping...</string>
   <string name="fg_action_temp_stop">Pause</string>
   <string name="fg_action_stop">Stop</string>
   <string name="fg_timeout_content">System limits background tasks to 6 hours after the main screen is closed. Tap to restart.</string>
-  <string name="fg_restart_title">Background service stopped</string>
-  <string name="fg_restart_content">Tap to resume background service</string>
 
   <!-- Shortcut -->
   <string name="shortcut_download_label">Download</string>

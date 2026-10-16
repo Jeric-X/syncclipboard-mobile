@@ -90,5 +90,3 @@ jest.mock('@microsoft/signalr', () => ({
     build: jest.fn(),
   })),
 }));
-
-global.setImmediate = jest.useRealTimers;
