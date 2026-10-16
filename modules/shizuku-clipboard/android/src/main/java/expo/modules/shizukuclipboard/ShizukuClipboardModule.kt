@@ -56,9 +56,9 @@ class ShizukuClipboardModule : Module() {
     private val recoveryLock = Any()
     @Volatile private var recoveryRequested = false
     private val recoveryRebind = RecoveryRebind(
-        schedule = { callback ->
+        schedule = { delayMs, callback ->
             val runnable = Runnable { callback() }
-            mainHandler.postDelayed(runnable, 2_000L)
+            mainHandler.postDelayed(runnable, delayMs)
             val cancel: () -> Unit = { mainHandler.removeCallbacks(runnable) }
             cancel
         },
@@ -176,8 +176,9 @@ class ShizukuClipboardModule : Module() {
             if (clipboardListenerRequested) {
                 restoreClipboardListenerAfterConnection(publishedService)
             }
-        } else if (notifyUnavailable && clipboardListenerRequested) {
-            sendClipboardListenerUnavailable()
+        } else if (notifyUnavailable) {
+            recoveryRebind.failed()
+            if (clipboardListenerRequested) sendClipboardListenerUnavailable()
         }
     }
 
@@ -185,6 +186,7 @@ class ShizukuClipboardModule : Module() {
         Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
             if (requestCode == REQUEST_CODE_PERMISSION) {
                 if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                    recoveryRebind.cancel()
                     bindUserService()
                 }
             }
@@ -194,6 +196,7 @@ class ShizukuClipboardModule : Module() {
         NativeLogger.i(TAG, "Shizuku binder received")
         // 当 Shizuku 连接时，如果已有权限，绑定或复用 daemon UserService。
         if (hasPermission()) {
+            recoveryRebind.cancel()
             bindUserService()
         }
     }
@@ -262,7 +265,7 @@ class ShizukuClipboardModule : Module() {
                 NativeLogger.i(TAG, "Binding UserService...")
                 Shizuku.bindUserService(userServiceArgs, connection)
             } catch (e: Exception) {
-                markConnectionFailed(connection)
+                if (markConnectionFailed(connection)) recoveryRebind.failed()
                 NativeLogger.e(TAG, "Failed to bind UserService", e)
             }
             return latch
@@ -499,6 +502,7 @@ class ShizukuClipboardModule : Module() {
             val context = appContext.reactContext ?: return
             // 仅失败清理可保留已有授权；设置关闭和用户停止永远走撤销路径。
             if (!enabled && preserveStartupFailure && ServiceRuntimeSession.hasFailedStartup()) return
+            if (enabled && !recoveryRequested) recoveryRebind.cancel()
             recoveryRequested = enabled
             if (!enabled) {
                 recoveryRebind.cancel()

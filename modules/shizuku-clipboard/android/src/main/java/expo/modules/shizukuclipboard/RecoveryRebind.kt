@@ -1,23 +1,38 @@
 package expo.modules.shizukuclipboard
 
-/** 只为有效断线安排重连；关闭和新连接使已经出队的旧回调失效。 */
+/** 有效断线或绑定失败后有限重试；关闭和新连接使已出队的旧回调失效。 */
 internal class RecoveryRebind(
-    private val schedule: (() -> Unit) -> (() -> Unit),
+    private val schedule: (Long, () -> Unit) -> (() -> Unit),
     private val canBind: () -> Boolean,
     private val bind: () -> Unit
 ) {
     private var generation = 0L
+    private var retries = 0
+    private val retryDelays = longArrayOf(2_000L, 5_000L, 15_000L)
     private var cancelPending: () -> Unit = {}
 
     @Synchronized
     fun disconnected() {
-        cancel()
+        // 未成功连接就断开同样消耗预算；成功连接处的 cancel 才会清零。
+        failed()
+    }
+
+    @Synchronized
+    fun failed() {
+        invalidatePending()
+        if (retries >= retryDelays.size) return
+        val delayMs = retryDelays[retries++]
         val expected = generation
-        cancelPending = schedule { execute(expected) }
+        cancelPending = schedule(delayMs) { execute(expected) }
     }
 
     @Synchronized
     fun cancel() {
+        retries = 0
+        invalidatePending()
+    }
+
+    private fun invalidatePending() {
         generation++
         cancelPending()
         cancelPending = {}
