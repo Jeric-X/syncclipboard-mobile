@@ -4,12 +4,13 @@ package expo.modules.shizukuclipboard
 internal class ProcessRecoveryGuard<T>(
     private val now: () -> Long,
     private val link: (T, () -> Unit) -> (() -> Unit),
-    private val schedule: (() -> Unit) -> (() -> Unit)
+    private val schedule: (Long, () -> Unit) -> (() -> Unit)
 ) {
     private class Watch<T>(val token: T, var recover: () -> Unit) {
         var unlink: () -> Unit = {}
         var cancel: () -> Unit = {}
         var dead = false
+        var generation = 0L
     }
     private var current: Watch<T>? = null
     private val attempts = ArrayDeque<Long>()
@@ -54,17 +55,35 @@ internal class ProcessRecoveryGuard<T>(
     private fun died(watch: Watch<T>) {
         if (current !== watch || watch.dead) return
         watch.dead = true
-        watch.cancel = schedule { recover(watch) }
+        enqueue(watch, 2_000L)
+    }
+
+    /** 每次排队都更新代际，已出队的旧回调不能重复消耗尝试次数。 */
+    private fun enqueue(watch: Watch<T>, delayMs: Long) {
+        val generation = ++watch.generation
+        watch.cancel = schedule(delayMs) { recover(watch, generation) }
     }
 
     @Synchronized
-    private fun recover(watch: Watch<T>) {
-        if (current !== watch || !watch.dead) return
-        close()
+    private fun recover(watch: Watch<T>, generation: Long) {
+        if (current !== watch || !watch.dead || watch.generation != generation) return
+        watch.generation++
+        watch.cancel = {}
         val time = now()
         while (attempts.isNotEmpty() && time - attempts.first() >= 600_000L) attempts.removeFirst()
-        if (attempts.size >= 3) return
+        if (attempts.size >= 3) {
+            close()
+            return
+        }
         attempts.addLast(time)
-        watch.recover()
+        try {
+            watch.recover()
+        } finally {
+            if (current === watch) {
+                // 保留旧凭证以处理 React 启动前崩溃；新注册会取消此重试但不清零预算。
+                // 给每次启动完整的一分钟，避免与 Headless 的启动超时相互竞争。
+                if (attempts.size < 3) enqueue(watch, 60_000L) else close()
+            }
+        }
     }
 }

@@ -22,8 +22,8 @@ internal class RecoveryWatch {
             }
             unlink
         },
-        schedule = { recover ->
-            val future = executor.schedule({ recover() }, 2, TimeUnit.SECONDS)
+        schedule = { delayMs, recover ->
+            val future = executor.schedule({ recover() }, delayMs, TimeUnit.MILLISECONDS)
             val cancel: () -> Unit = { future.cancel(false); Unit }
             cancel
         }
@@ -35,8 +35,12 @@ internal class RecoveryWatch {
                 // PendingIntent 由 App 创建，shell 无须访问未导出的接收器或私有配置。
                 recovery.send()
                 Log.i("ShizukuRecovery", "Requested Headless recovery after process death")
+            } catch (error: PendingIntent.CanceledException) {
+                // 用户撤销或系统强制停止后不可继续重试。
+                guard.clear(token)
+                Log.i("ShizukuRecovery", "Recovery permission was revoked", error)
             } catch (error: Exception) {
-                // 已取消、强制停止或系统拒绝均不循环拉起；下一次有效注册才重新守护。
+                // 暂时失败保留凭证，由守护状态机按剩余预算重试。
                 Log.w("ShizukuRecovery", "Recovery request failed", error)
             }
         }
