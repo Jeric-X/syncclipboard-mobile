@@ -8,6 +8,7 @@ import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import expo.modules.nativeutil.NativeLogger
+import expo.modules.foregroundservice.ServiceRuntimeSession
 
 @SuppressLint("StartActivityAndCollapseDeprecated")
 class UploadTileService : TileService() {
@@ -18,6 +19,7 @@ class UploadTileService : TileService() {
 
     override fun onStartListening() {
         super.onStartListening()
+        ServiceRuntimeSession.recoverFromTile(this)
         qsTile?.apply {
             state = Tile.STATE_INACTIVE
             updateTile()

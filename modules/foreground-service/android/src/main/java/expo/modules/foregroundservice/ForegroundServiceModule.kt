@@ -49,6 +49,10 @@ class ForegroundServiceModule : Module() {
             true
         }
 
+        Function("setTileRecoveryEnabled") { enabled: Boolean ->
+            appContext.reactContext?.let { ServiceRuntimeSession.setTileRecoveryEnabled(it, enabled) }
+        }
+
         AsyncFunction("startHeadlessRuntime") {
             val context = appContext.reactContext ?: return@AsyncFunction null
             ServiceRuntimeSession.ensureStarted(context)
