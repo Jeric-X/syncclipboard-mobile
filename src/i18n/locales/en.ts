@@ -250,7 +250,7 @@ const en: DeepString<typeof zh> = {
     backgroundUploadDisabled: 'Background upload disabled',
     shizukuRecovery: 'Restore background sync via Shizuku',
     shizukuRecoveryDesc:
-      'When Shizuku is running and authorized, attempt to restore sync after the app process exits unexpectedly. Requires background upload or download. Respects manual stops. On non-rooted devices, restart Shizuku after reboot.',
+      'When Shizuku is running and authorized, attempt to restore sync after the app process exits unexpectedly. Requires background upload or download. Respects manual stops. With foreground notifications off, dismissing the app from Recents does not disable recovery; turn off Background Tasks or Shizuku recovery to disable it. On non-rooted devices, restart Shizuku after reboot.',
     shizukuRecoveryAuthorize: 'Authorize Shizuku, then turn on recovery again',
     tileRecovery: 'Restore background tasks via Quick Settings tiles',
     tileRecoveryDesc:
