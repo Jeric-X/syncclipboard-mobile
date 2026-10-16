@@ -5,7 +5,6 @@
  * 职责：
  * - 根据后台任务总开关（enableBackgroundTasks + enableBackgroundDownload/Upload +
  *   enableForegroundNotification + tempDisabled）决定是否运行前台服务
- * - 监听通知栏"停止"／"临时停止"操作并写回配置或运行时状态
  * - 通过 onConfigChanged 响应配置变更（由 LongRunningTaskManager 统一分发）
  * - 运行时状态变化由任务管理器统一串行分发
  *
@@ -96,8 +95,6 @@ class ForegroundServiceTask extends LongRunningTask {
 
   /** 任务是否已启动（订阅是否活跃） */
   private _running = false;
-  private _stopSub: { remove(): void } | null = null;
-  private _tempStopSub: { remove(): void } | null = null;
   private readonly _startup = new ForegroundServiceStartup({
     isRunning: ForegroundService.isRunning,
     start: ForegroundService.startService,
@@ -158,7 +155,6 @@ class ForegroundServiceTask extends LongRunningTask {
       } catch (error) {
         // 失败不能留下“任务已运行”的标记，否则下一次独立入口无法再次确保服务。
         this._running = false;
-        this._detachServiceListeners();
         throw error;
       }
     } else {
@@ -168,7 +164,6 @@ class ForegroundServiceTask extends LongRunningTask {
 
   /** 启动前台服务 */
   private async _startService(): Promise<void> {
-    this._attachServiceListeners();
     // 配置通知不能等任务管理器串行队列，否则关闭再开启可能漏掉取消信号。
     const unsubscribeConfig = configService.subscribe((config) => {
       if (!this._configAllowsService(config)) this._startup.cancel();
@@ -204,35 +199,8 @@ class ForegroundServiceTask extends LongRunningTask {
   /** 停止服务，包括由 Android 冷启动而非本 JS 实例创建的服务。 */
   private async _stopService(): Promise<void> {
     this._startup.cancel();
-    this._detachServiceListeners();
-    // 原生请求可能来自重载前的 JS；由原生取消代号并判断会话归属。
+    // 原生请求可能来自重载前的 JS；由原生取消前台服务的启动代号。
     ForegroundService.stopService();
-  }
-
-  /** 绑定通知栏操作监听 */
-  private _attachServiceListeners(): void {
-    if (this._stopSub || this._tempStopSub) return;
-    this._stopSub = ForegroundService.addStopListener(() => {
-      this._startup.cancel();
-      configService
-        .updateConfig({ enableBackgroundTasks: false })
-        .then(() => ForegroundService.clearStopReason())
-        .catch((e) => {
-          console.error('[ForegroundServiceTask] Failed to disable background tasks:', e);
-        });
-    });
-    this._tempStopSub = ForegroundService.addTempStopListener(() => {
-      this._startup.cancel();
-      backgroundRuntimeState.setTempDisabled(true);
-    });
-  }
-
-  /** 移除通知栏操作监听 */
-  private _detachServiceListeners(): void {
-    this._stopSub?.remove();
-    this._tempStopSub?.remove();
-    this._stopSub = null;
-    this._tempStopSub = null;
   }
 }
 

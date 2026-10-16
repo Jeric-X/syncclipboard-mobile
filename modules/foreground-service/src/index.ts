@@ -103,7 +103,7 @@ export function markSessionReady(sessionId: string): void {
   NativeModule?.markSessionReady(sessionId);
 }
 
-/** 监听进程级会话结束，包括服务停止或启动失败。 */
+/** 监听进程级会话结束，包括 Headless 主动退出或初始化失败。 */
 export function addSessionStoppedListener(
   listener: (event: { sessionId: string }) => void
 ): EventSubscription | null {

@@ -34,7 +34,6 @@ object ServiceRuntimeSession {
         val host = checkNotNull((application as ReactApplication).reactHost) { "ReactHost is unavailable" }
         current?.let { session ->
             if (session.reactContext == null || session.reactContext === host.currentReactContext) {
-                SyncForegroundService.attachRuntime(session.id)
                 return session.id
             }
             // React reload 后使用新一代会话，旧任务的回调不能结束新任务。
@@ -48,7 +47,7 @@ object ServiceRuntimeSession {
             stop(session.id)
             throw error
         }
-        return session.id.takeIf { current === session }?.also { SyncForegroundService.attachRuntime(it) }
+        return session.id.takeIf { current === session }
     }
 
     fun markReady(id: String) {
@@ -67,13 +66,9 @@ object ServiceRuntimeSession {
     fun finishFromJs(id: String) {
         check(Looper.myLooper() == Looper.getMainLooper())
         if (current?.id != id) return
+        val context = current!!.context
+        SyncForegroundService.requestStop(context)
         stop(id)
-        SyncForegroundService.onRuntimeFailed()
-    }
-
-    /** 带会话 ID 的结束请求不会误停下一代；调用方可来自 JS 线程。 */
-    fun requestStop(id: String?) {
-        handler.post { if (id != null) stop(id) }
     }
 
     fun stop(id: String) {

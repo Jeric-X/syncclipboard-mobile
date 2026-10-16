@@ -17,6 +17,7 @@ import { prepareAppFoundation } from './AppFoundation';
 
 let initializing: Promise<void> | null = null;
 let installed = false;
+let stopping: Promise<void> | null = null;
 
 /** Android 只由 Headless 任务调用；其他平台保留直接初始化入口。 */
 export function startServiceRuntime(): Promise<void> {
@@ -53,7 +54,6 @@ async function applyStopPolicy(foregroundEntry: boolean): Promise<string | null>
   const stopReason = ForegroundService.getStopReason();
   if (stopReason === 'stop') {
     await configService.updateConfig({ enableBackgroundTasks: false });
-    if (ForegroundService.getStopReason() === stopReason) ForegroundService.clearStopReason();
   }
   if (foregroundEntry && ForegroundService.getStopReason() === stopReason) {
     ForegroundService.clearStopReason();
@@ -71,10 +71,13 @@ let resuming: Promise<void> | null = null;
 
 /** UI 请求会话并等待就绪；原生创建调用本身不等待 JS，避免相互等待。 */
 export async function requestServiceRuntime(foregroundEntry = false): Promise<void> {
+  // 用户回到主界面时，必须等上一轮 Headless 自行清理完成，才能恢复新会话。
+  if (stopping) await stopping.catch(() => {});
   if (foregroundEntry) {
     if (!resuming) {
       resuming = (async () => {
         await initializing;
+        if (stopping) await stopping.catch(() => {});
         await configService.getConfig();
         await applyStopPolicy(true);
       })().finally(() => {
@@ -127,4 +130,35 @@ export async function stopServiceRuntimeIfIdle(): Promise<void> {
   if (AppState.currentState === 'active' || ForegroundService.getSessionId()) return;
   await longRunningTaskManager.stopAll();
   await dismissOverlay();
+}
+
+/** 仅由 Headless 接收用户控制后调用；前台服务生命周期本身不能结束任务。 */
+export function stopServiceRuntime(sessionId: string, reason: string): Promise<void> {
+  if (ForegroundService.getSessionId() !== sessionId) return Promise.resolve();
+  if (stopping) return stopping;
+  // 立即取消前台服务的等待与重试，不排在任务管理器的初始化后面。
+  backgroundRuntimeState.setTempDisabled(true);
+  stopping = (async () => {
+    await initializing?.catch(() => {});
+    if (ForegroundService.getSessionId() !== sessionId) return;
+    try {
+      // 配置写入失败也必须停止；保留原生命令供下次进入时补偿。
+      if (reason === 'stop' || ForegroundService.getStopReason() === 'stop') {
+        await configService.updateConfig({ enableBackgroundTasks: false });
+      }
+    } finally {
+      try {
+        await longRunningTaskManager.stopAll();
+        // 清理期间可能又收到永久停止，不能被先到的临时停止吞掉。
+        if (reason !== 'stop' && ForegroundService.getStopReason() === 'stop') {
+          await configService.updateConfig({ enableBackgroundTasks: false });
+        }
+      } finally {
+        await ForegroundService.finishHeadlessRuntime(sessionId);
+      }
+    }
+  })().finally(() => {
+    stopping = null;
+  });
+  return stopping;
 }

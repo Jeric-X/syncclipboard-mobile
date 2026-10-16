@@ -14,7 +14,7 @@ import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import expo.modules.nativeutil.NativeLogger
 
-/** 前台服务与进程级 Headless 会话相互确保启动，重复请求不会创建重复任务。 */
+/** 由 Headless 管理的前台服务；仅系统 Sticky 重建时反向恢复 Headless。 */
 class SyncForegroundService : Service() {
     companion object {
         private const val TAG = "SyncForegroundService"
@@ -63,9 +63,7 @@ class SyncForegroundService : Service() {
             stopForegroundService(
                 launchState,
                 hasInstance = instance != null,
-                attachedSessionId = instance?.sessionId,
-                stopNative = { context.stopService(Intent(context, SyncForegroundService::class.java)) },
-                stopSession = ServiceRuntimeSession::requestStop
+                stopNative = { context.stopService(Intent(context, SyncForegroundService::class.java)) }
             )
         }
 
@@ -75,12 +73,10 @@ class SyncForegroundService : Service() {
         }
 
         fun onRuntimeFailed() {
-            instance?.pauseAndStop("temporary", showRecovery = true)
-        }
-
-        /** 仅正在运行的服务绑定当前会话；等待销毁的旧服务不能认领新会话。 */
-        fun attachRuntime(sessionId: String) {
-            instance?.takeIf { isRunning }?.sessionId = sessionId
+            instance?.let {
+                it.showRestartNotification()
+                requestStop(it)
+            }
         }
 
         fun getStopReason(context: Context): String? =
@@ -90,7 +86,7 @@ class SyncForegroundService : Service() {
         }
     }
 
-    @Volatile private var sessionId: String? = null
+    private val sessionId: String? get() = ServiceRuntimeSession.currentSessionId()
     private val createdAtMs = SystemClock.elapsedRealtime()
     private val startupTimingStages = mutableSetOf<String>()
 
@@ -120,11 +116,11 @@ class SyncForegroundService : Service() {
         NativeLogger.d(TAG, "onStartCommand action=${intent?.action}, session=$sessionId")
         when (intent?.action) {
             ACTION_STOP -> {
-                pauseAndStop("stop")
+                forwardControl("stop")
                 return START_NOT_STICKY
             }
             ACTION_TEMP_STOP -> {
-                pauseAndStop("temporary")
+                forwardControl("temporary")
                 return START_NOT_STICKY
             }
             ACTION_UPDATE -> {
@@ -142,23 +138,20 @@ class SyncForegroundService : Service() {
                         stopSelfResult(startId)
                         return START_NOT_STICKY
                     }
-                    sessionId = ServiceRuntimeSession.ensureStarted(this)
+                    // 普通启动由 Headless 发起，不反向创建运行时。
+                    if (intent == null) ServiceRuntimeSession.ensureStarted(this)
                 } catch (error: Exception) {
                     NativeLogger.e(TAG, "Cannot start foreground sync", error)
-                    // 提升失败时保留独立启动的 Headless 会话，让 JS 完成有限的悬浮窗重试。
-                    if (isRunning) {
-                        pauseAndStop("temporary", showRecovery = true)
-                    } else {
-                        val showRecovery = synchronized(Companion) {
-                            launchState.promotionFailed(
-                                hasRuntimeSession = ServiceRuntimeSession.currentSessionId() != null,
-                                stoppedByPolicy = getStopReason(this) != null
-                            )
-                        }
-                        if (showRecovery) showRestartNotification()
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                        stopSelfResult(startId)
+                    // 前台服务失败不能结束 Headless，也不能修改用户暂停状态。
+                    val showRecovery = synchronized(Companion) {
+                        launchState.promotionFailed(
+                            hasRuntimeSession = ServiceRuntimeSession.currentSessionId() != null,
+                            stoppedByPolicy = getStopReason(this) != null
+                        )
                     }
+                    if (showRecovery) showRestartNotification()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelfResult(startId)
                     return START_NOT_STICKY
                 }
             }
@@ -176,18 +169,14 @@ class SyncForegroundService : Service() {
         }
     }
 
-    private fun pauseAndStop(reason: String, showRecovery: Boolean = false) {
-        // 先持久化，确保 JS 尚未启动或进程随后死亡时也不会丢失用户的停止操作。
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(STOP_REASON, reason).commit()
-        synchronized(Companion) {
-            launchState.requestStop(hasInstance = true)
-        }
-        ServiceRuntimeSession.currentSessionId()?.let { ServiceRuntimeSession.stop(it) }
-        if (reason == "stop") ForegroundServiceModule.sendStopEvent()
+    /** 只保存并转发用户命令，任务停止和偏好更新由 Headless 执行。 */
+    private fun forwardControl(reason: String) {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        // 永久停止优先，随后划掉主界面的临时停止不能覆盖它。
+        val pending = if (prefs.getString(STOP_REASON, null) == "stop") "stop" else reason
+        prefs.edit().putString(STOP_REASON, pending).commit()
+        if (pending == "stop") ForegroundServiceModule.sendStopEvent()
         else ForegroundServiceModule.sendTempStopEvent()
-        if (showRecovery) showRestartNotification()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -195,25 +184,26 @@ class SyncForegroundService : Service() {
     // specialUse 当前没有类型专属配额，保留系统超时回调作为防御性清理。
     override fun onTimeout(startId: Int, fgsType: Int) {
         NativeLogger.w(TAG, "Foreground service timeout, type=$fgsType")
-        pauseAndStop("temporary", showRecovery = true)
+        // 系统要求立即结束前台服务，但不改变 Headless 的任务策略。
+        requestStop(this)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelfResult(startId)
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         if (rootIntent?.component?.className?.endsWith(".MainActivity") == true) {
-            pauseAndStop("temporary")
+            forwardControl("temporary")
         }
     }
 
     override fun onDestroy() {
-        val endedSession = sessionId
         synchronized(Companion) {
             if (instance === this) {
                 val unexpected = isRunning
                 instance = null
-                endedSession?.let { ServiceRuntimeSession.stop(it) }
                 val restart = launchState.onDestroyed()
-                if (unexpected) showRestartNotification()
+                if (unexpected && ServiceRuntimeSession.currentSessionId() == null) showRestartNotification()
                 if (restart != null) {
                     if (getStopReason(this) == null) {
                         try {
@@ -352,15 +342,12 @@ class SyncForegroundService : Service() {
     }
 }
 
-/** 取消跨 JS 重载保留的原生请求，仅结束已绑定服务的会话，保留独立 Headless。 */
+/** 取消跨 JS 重载保留的前台服务请求，不改变 Headless 会话。 */
 internal fun stopForegroundService(
     state: ForegroundServiceLaunchState,
     hasInstance: Boolean,
-    attachedSessionId: String?,
-    stopNative: () -> Unit,
-    stopSession: (String) -> Unit
+    stopNative: () -> Unit
 ) {
     state.requestStop(hasInstance)
     stopNative()
-    attachedSessionId?.let(stopSession)
 }

@@ -4,40 +4,36 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ForegroundServiceStopTest {
-    @Test fun replacementJsCancelsPendingIntentWithoutStoppingIndependentSession() {
+    @Test fun replacementJsCancelsPendingIntentWithoutSessionOwnership() {
         val state = ForegroundServiceLaunchState()
         val old = state.requestStart()!!
         var stoppedNative = false
-        stopForegroundService(state, false, null, {
+        stopForegroundService(state, false, {
             assertFalse(state.acceptStart(old))
             stoppedNative = true
-        }, { fail("Independent Headless session must remain active") })
+        })
         assertTrue(stoppedNative)
         assertFalse(state.acceptStart(old))
         val next = state.requestStart()!!
         assertTrue(state.acceptStart(next))
     }
 
-    @Test fun stoppingUntouchedServiceDoesNotStopHeadless() {
+    @Test fun stoppingUntouchedServiceDoesNotPreventLaterStart() {
         val state = ForegroundServiceLaunchState()
-        stopForegroundService(state, false, null, {}, {
-            fail("No service owns a Headless session")
-        })
+        stopForegroundService(state, false, {})
         assertFalse(state.isRunning)
         assertTrue(state.acceptStart(state.requestStart()))
     }
 
-    @Test fun stoppingAttachedServiceUsesItsSessionIdAndInvalidatesStartsFirst() {
+    @Test fun stoppingRunningServiceInvalidatesStartsWithoutSessionOwnership() {
         val state = ForegroundServiceLaunchState()
         assertTrue(state.acceptStart(state.requestStart()))
-        var currentSession = "attached"
-        var stoppedSession: String? = null
-        stopForegroundService(state, true, currentSession, {
+        var stopped = false
+        stopForegroundService(state, true, {
             assertFalse(state.isRunning)
-            currentSession = "replacement"
-        }, { stoppedSession = it })
-        assertEquals("attached", stoppedSession)
-        assertEquals("replacement", currentSession)
+            stopped = true
+        })
+        assertTrue(stopped)
         assertNull(state.onDestroyed())
     }
 }

@@ -8,6 +8,7 @@ jest.mock('foreground-service', () => ({
   getStopReason: jest.fn(),
   clearStopReason: jest.fn(),
   getSessionId: jest.fn(),
+  finishHeadlessRuntime: jest.fn(),
 }));
 jest.mock('../services/ConfigService', () => ({
   configService: { getConfig: jest.fn(), updateConfig: jest.fn() },
@@ -31,6 +32,7 @@ import {
   startServiceRuntime,
   requestServiceRuntime,
   stopServiceRuntimeIfIdle,
+  stopServiceRuntime,
 } from '../services/ServiceRuntime';
 import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
@@ -102,7 +104,7 @@ describe('service runtime bootstrap', () => {
     expect((configService.updateConfig as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
       (longRunningTaskManager.startAll as jest.Mock).mock.invocationCallOrder[0]
     );
-    expect(stopReason).toBeNull();
+    expect(stopReason).toBe('stop');
   });
 
   it('does not let a Headless task clear temporary pause even while an Activity is active', async () => {
@@ -293,5 +295,93 @@ describe('service runtime bootstrap', () => {
     } finally {
       Platform.OS = originalPlatform;
     }
+  });
+});
+
+describe('Headless controlled shutdown', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    AppState.currentState = 'active';
+    (ForegroundService.getSessionId as jest.Mock).mockReturnValue('control-1');
+    (ForegroundService.getStopReason as jest.Mock).mockReturnValue(null);
+    (configService.updateConfig as jest.Mock).mockResolvedValue({ enableBackgroundTasks: false });
+    (longRunningTaskManager.stopAll as jest.Mock).mockResolvedValue(undefined);
+    (ForegroundService.finishHeadlessRuntime as jest.Mock).mockResolvedValue(undefined);
+  });
+
+  it('lets Headless persist stop, clean tasks, then finish its own session even with UI active', async () => {
+    await stopServiceRuntime('control-1', 'stop');
+    expect(backgroundRuntimeState.setTempDisabled).toHaveBeenCalledWith(true);
+    expect(configService.updateConfig).toHaveBeenCalledWith({ enableBackgroundTasks: false });
+    expect(longRunningTaskManager.stopAll).toHaveBeenCalledTimes(1);
+    expect(ForegroundService.finishHeadlessRuntime).toHaveBeenCalledWith('control-1');
+    expect((longRunningTaskManager.stopAll as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
+      (ForegroundService.finishHeadlessRuntime as jest.Mock).mock.invocationCallOrder[0]
+    );
+    expect(ForegroundService.clearStopReason).not.toHaveBeenCalled();
+  });
+
+  it('temporary stop leaves background preference unchanged and deduplicates cleanup', async () => {
+    const first = stopServiceRuntime('control-1', 'temporary');
+    const second = stopServiceRuntime('control-1', 'temporary');
+    expect(first).toBe(second);
+    await first;
+    expect(configService.updateConfig).not.toHaveBeenCalled();
+    expect(longRunningTaskManager.stopAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not let an old Headless command stop its replacement', async () => {
+    await stopServiceRuntime('old-control', 'stop');
+    expect(backgroundRuntimeState.setTempDisabled).not.toHaveBeenCalled();
+    expect(longRunningTaskManager.stopAll).not.toHaveBeenCalled();
+    expect(ForegroundService.finishHeadlessRuntime).not.toHaveBeenCalled();
+  });
+
+  it('cleans tasks and ends the session even when saving the preference fails', async () => {
+    (configService.updateConfig as jest.Mock).mockRejectedValueOnce(new Error('disk failed'));
+    await expect(stopServiceRuntime('control-1', 'stop')).rejects.toThrow('disk failed');
+    expect(longRunningTaskManager.stopAll).toHaveBeenCalledTimes(1);
+    expect(ForegroundService.finishHeadlessRuntime).toHaveBeenCalledWith('control-1');
+  });
+
+  it('does not lose a permanent stop arriving while temporary cleanup is running', async () => {
+    (longRunningTaskManager.stopAll as jest.Mock).mockImplementationOnce(async () => {
+      (ForegroundService.getStopReason as jest.Mock).mockReturnValue('stop');
+    });
+    await stopServiceRuntime('control-1', 'temporary');
+    expect(configService.updateConfig).toHaveBeenCalledWith({ enableBackgroundTasks: false });
+  });
+
+  it('waits for controlled shutdown before an explicit foreground request can resume', async () => {
+    let release!: () => void;
+    (longRunningTaskManager.stopAll as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        })
+    );
+    (ForegroundService.getStopReason as jest.Mock).mockReturnValue('temporary');
+    (ForegroundService.clearStopReason as jest.Mock).mockImplementation(() => {
+      (ForegroundService.getStopReason as jest.Mock).mockReturnValue(null);
+    });
+    (ForegroundService.startHeadlessRuntime as jest.Mock).mockImplementation(async () => {
+      (ForegroundService.getSessionId as jest.Mock).mockReturnValue('control-next');
+      await headlessRuntimeInitialization.initialize('control-next', async () => {});
+      return 'control-next';
+    });
+    const stopped = stopServiceRuntime('control-1', 'temporary');
+    const resumed = requestServiceRuntime(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ForegroundService.clearStopReason).not.toHaveBeenCalled();
+    expect(ForegroundService.startHeadlessRuntime).not.toHaveBeenCalled();
+    release();
+    await Promise.all([stopped, resumed]);
+    expect(ForegroundService.startHeadlessRuntime).toHaveBeenCalledTimes(1);
+    expect(
+      (ForegroundService.finishHeadlessRuntime as jest.Mock).mock.invocationCallOrder[0]
+    ).toBeLessThan(
+      (ForegroundService.startHeadlessRuntime as jest.Mock).mock.invocationCallOrder[0]
+    );
+    headlessRuntimeInitialization.end('control-next');
   });
 });
