@@ -28,8 +28,6 @@ class SyncForegroundService : Service() {
         const val ACTION_TEMP_STOP = "TEMP_STOP"
         const val ACTION_UPDATE = "UPDATE"
         const val EXTRA_CONTENT = "content"
-        const val RESTART_NOTIFY_ID = 0x2021
-        private const val RESTART_CHANNEL_ID = "syncclipboard_restart"
         @Volatile private var instance: SyncForegroundService? = null
         private val launchState = ForegroundServiceLaunchState()
         val isRunning get() = launchState.isRunning
@@ -70,13 +68,6 @@ class SyncForegroundService : Service() {
         @Synchronized
         private fun acceptStart(intent: Intent?): Boolean {
             return launchState.acceptStart(intent?.getLongExtra(EXTRA_GENERATION, -1L))
-        }
-
-        fun onRuntimeFailed() {
-            instance?.let {
-                it.showRestartNotification()
-                requestStop(it)
-            }
         }
 
         fun getStopReason(context: Context): String? =
@@ -143,13 +134,9 @@ class SyncForegroundService : Service() {
                 } catch (error: Exception) {
                     NativeLogger.e(TAG, "Cannot start foreground sync", error)
                     // 前台服务失败不能结束 Headless，也不能修改用户暂停状态。
-                    val showRecovery = synchronized(Companion) {
-                        launchState.promotionFailed(
-                            hasRuntimeSession = ServiceRuntimeSession.currentSessionId() != null,
-                            stoppedByPolicy = getStopReason(this) != null
-                        )
+                    synchronized(Companion) {
+                        launchState.requestStop(hasInstance = true)
                     }
-                    if (showRecovery) showRestartNotification()
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelfResult(startId)
                     return START_NOT_STICKY
@@ -200,10 +187,8 @@ class SyncForegroundService : Service() {
     override fun onDestroy() {
         synchronized(Companion) {
             if (instance === this) {
-                val unexpected = isRunning
                 instance = null
                 val restart = launchState.onDestroyed()
-                if (unexpected && ServiceRuntimeSession.currentSessionId() == null) showRestartNotification()
                 if (restart != null) {
                     if (getStopReason(this) == null) {
                         try {
@@ -296,49 +281,6 @@ class SyncForegroundService : Service() {
     private fun updateNotification(content: String) {
         val notification = createNotification(content)
         notificationManager?.notify(NOTIFY_ID, notification)
-    }
-
-    private fun showRestartNotification(contentText: String = getAppString("fg_restart_content")) {
-        val nm = getSystemService(NOTIFICATION_SERVICE) as? NotificationManager ?: return
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                RESTART_CHANNEL_ID,
-                getAppString("fg_restart_channel_name"),
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = getAppString("fg_restart_channel_desc")
-            }
-            nm.createNotificationChannel(channel)
-        }
-
-        val restartIntent = Intent().apply {
-            setClassName(packageName, "com.jericx.syncclipboardmobile.servicerestart.ServiceRestartActivity")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        }
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, restartIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val iconResId = applicationContext.resources.getIdentifier(
-            "ic_notification", "drawable", packageName
-        ).takeIf { it != 0 }
-            ?: applicationContext.resources.getIdentifier(
-                "ic_launcher_foreground", "mipmap", packageName
-            ).takeIf { it != 0 }
-            ?: android.R.drawable.ic_menu_info_details
-
-        val notification = NotificationCompat.Builder(this, RESTART_CHANNEL_ID)
-            .setContentTitle(getAppString("fg_restart_title"))
-            .setContentText(contentText)
-            .setSmallIcon(iconResId)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .build()
-
-        nm.notify(RESTART_NOTIFY_ID, notification)
     }
 }
 

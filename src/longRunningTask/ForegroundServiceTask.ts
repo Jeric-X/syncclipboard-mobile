@@ -108,9 +108,6 @@ class ForegroundServiceTask extends LongRunningTask {
     if (this._running) return;
     this._running = true;
 
-    // 清除可能残留的复活通知（用户未通过复活通知而是直接打开 APP 时，通知不会自动消失）
-    ForegroundService.cancelRestartNotification();
-
     // 立即应用当前配置
     await this._refresh();
   }

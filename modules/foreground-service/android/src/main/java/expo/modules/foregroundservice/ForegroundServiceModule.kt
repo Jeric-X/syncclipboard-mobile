@@ -1,6 +1,5 @@
 package expo.modules.foregroundservice
 
-import android.content.Context
 import android.content.Intent
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
@@ -91,11 +90,5 @@ class ForegroundServiceModule : Module() {
             ServiceRuntimeSession.markReady(sessionId)
         }
 
-        Function("cancelRestartNotification") {
-            val context = appContext.reactContext ?: return@Function false
-            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
-            nm?.cancel(SyncForegroundService.RESTART_NOTIFY_ID)
-            true
-        }
     }
 }

@@ -10,7 +10,6 @@ interface ForegroundServiceModuleType {
   stopService(): boolean;
   updateNotification(content: string): boolean;
   isRunning(): boolean;
-  cancelRestartNotification(): boolean;
   getSessionId(): string | null;
   getStopReason(): string | null;
   clearStopReason(): void;
@@ -48,13 +47,6 @@ export function updateNotification(content: string): boolean {
 export function isRunning(): boolean {
   if (NativeModule) {
     return NativeModule.isRunning();
-  }
-  return false;
-}
-
-export function cancelRestartNotification(): boolean {
-  if (NativeModule) {
-    return NativeModule.cancelRestartNotification();
   }
   return false;
 }

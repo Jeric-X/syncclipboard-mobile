@@ -1,6 +1,5 @@
 package expo.modules.foregroundservice
 
-import android.app.NotificationManager
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -54,8 +53,6 @@ object ServiceRuntimeSession {
         handler.post {
             current?.takeIf { it.id == id }?.let {
                 it.releaseStartupResources()
-                (it.context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)
-                    ?.cancel(SyncForegroundService.RESTART_NOTIFY_ID)
                 NativeLogger.i(TAG, "Headless sync ready: $id")
                 it.logStartupTiming("jsReady")
             }
@@ -158,7 +155,7 @@ object ServiceRuntimeSession {
             if (current !== this) return
             NativeLogger.w(TAG, "$reason, session=$id")
             stop(id)
-            SyncForegroundService.onRuntimeFailed()
+            SyncForegroundService.requestStop(context)
         }
 
         fun releaseStartupResources() {

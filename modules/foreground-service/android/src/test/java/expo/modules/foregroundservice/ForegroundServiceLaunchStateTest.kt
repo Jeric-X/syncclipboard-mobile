@@ -72,26 +72,21 @@ class ForegroundServiceLaunchStateTest {
         assertNull(state.onDestroyed())
         assertFalse(state.isRunning)
     }
-    @Test fun coldPromotionFailureOffersRecoveryAndInvalidatesTheRequest() {
+    @Test fun promotionFailureInvalidatesTheRequest() {
         val state = ForegroundServiceLaunchState()
         val token = state.requestStart()!!
-        assertTrue(state.promotionFailed(hasRuntimeSession = false, stoppedByPolicy = false))
+        state.requestStop(hasInstance = true)
         assertFalse(state.isRunning)
         assertFalse(state.acceptStart(token))
         assertNull(state.onDestroyed())
     }
 
-    @Test fun promotionFailureLeavesExistingRuntimeToRetryWithoutRecoveryNotification() {
+    @Test fun promotionFailureAllowsAnExplicitRetryAfterDestruction() {
         val state = ForegroundServiceLaunchState()
-        assertFalse(state.promotionFailed(hasRuntimeSession = true, stoppedByPolicy = false))
+        state.requestStop(hasInstance = true)
         assertNull(state.requestStart())
         val retry = state.onDestroyed()!!
         assertTrue(state.acceptStart(retry))
     }
 
-    @Test fun policyStopDoesNotOfferRecoveryAfterPromotionFailure() {
-        val state = ForegroundServiceLaunchState()
-        assertFalse(state.promotionFailed(hasRuntimeSession = false, stoppedByPolicy = true))
-        assertNull(state.onDestroyed())
-    }
 }

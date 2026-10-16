@@ -6,7 +6,6 @@ jest.mock('foreground-service', () => ({
   startHeadlessRuntime: jest.fn(),
   getSessionId: jest.fn(),
   getStopReason: jest.fn(),
-  cancelRestartNotification: jest.fn(),
   clearStopReason: jest.fn(),
   addStopListener: jest.fn(),
   addTempStopListener: jest.fn(),
