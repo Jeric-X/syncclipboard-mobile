@@ -4,6 +4,7 @@ import { requireNativeModule, type EventSubscription } from 'expo-modules-core';
 const MODULE_NAME = 'ForegroundServiceModule';
 
 interface ForegroundServiceModuleType {
+  setTileRecoveryEnabled(enabled: boolean): void;
   startHeadlessRuntime(): Promise<string | null>;
   finishHeadlessRuntime(sessionId: string): Promise<void>;
   startService(): boolean;
@@ -100,4 +101,9 @@ export function addSessionStoppedListener(
   listener: (event: { sessionId: string }) => void
 ): EventSubscription | null {
   return NativeModule?.addListener('onSessionStopped', listener) ?? null;
+}
+
+/** 保存磁贴恢复许可，供 JS 尚未启动时的原生入口读取。 */
+export function setTileRecoveryEnabled(enabled: boolean): void {
+  NativeModule?.setTileRecoveryEnabled(enabled);
 }

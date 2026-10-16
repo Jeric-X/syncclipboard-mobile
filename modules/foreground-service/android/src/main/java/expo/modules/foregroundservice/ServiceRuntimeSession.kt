@@ -25,6 +25,23 @@ object ServiceRuntimeSession {
 
     fun currentSessionId(): String? = current?.id
 
+    /** 与已保存的配置同步，默认关闭；不能把磁贴加载视为用户主动恢复。 */
+    fun setTileRecoveryEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences("tile_recovery", Context.MODE_PRIVATE)
+            .edit().putBoolean("enabled", enabled).apply()
+    }
+
+    /** 磁贴仅触发已有 Headless 入口，不清除停止标记，也不直接启动前台服务。 */
+    fun recoverFromTile(context: Context) {
+        if (!context.getSharedPreferences("tile_recovery", Context.MODE_PRIVATE)
+                .getBoolean("enabled", false)) return
+        try {
+            ensureStarted(context)
+        } catch (error: Exception) {
+            NativeLogger.e(TAG, "Cannot restore Headless from Quick Settings", error)
+        }
+    }
+
     /** 先占用会话再启动 ReactHost，重复请求复用正在启动或运行的任务。 */
     fun ensureStarted(context: Context): String? {
         check(Looper.myLooper() == Looper.getMainLooper())

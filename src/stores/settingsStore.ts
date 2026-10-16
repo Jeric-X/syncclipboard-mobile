@@ -190,6 +190,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   loadConfig: async () => {
     try {
       const config = await configService.getConfig();
+      syncTileRecoveryPreference(config);
       set({ config, isLoaded: true, error: null });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load config';
@@ -500,7 +501,19 @@ backgroundRuntimeState.subscribe(() => {
   });
 });
 
+/** 原生磁贴冷启动前即可读取许可；只同步已加载/保存的配置，不使用 UI 乐观状态。 */
+function syncTileRecoveryPreference(config: AppConfig): void {
+  try {
+    ForegroundService.setTileRecoveryEnabled(
+      config.enableBackgroundTasks && config.enableTileRecovery === true
+    );
+  } catch (error) {
+    console.error('[SettingsStore] Failed to sync Quick Settings recovery preference:', error);
+  }
+}
+
 // 自动切换等 service 层写入也必须及时驱动设置页和首页刷新。
 configService.subscribe((config) => {
+  syncTileRecoveryPreference(config);
   useSettingsStore.setState({ config, isLoaded: true });
 });

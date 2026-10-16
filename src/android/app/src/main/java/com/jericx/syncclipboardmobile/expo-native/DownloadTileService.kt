@@ -8,6 +8,7 @@ import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import expo.modules.nativeutil.NativeLogger
+import expo.modules.foregroundservice.ServiceRuntimeSession
 
 class DownloadTileService : TileService() {
 
@@ -17,6 +18,7 @@ class DownloadTileService : TileService() {
 
     override fun onStartListening() {
         super.onStartListening()
+        ServiceRuntimeSession.recoverFromTile(this)
         qsTile?.apply {
             state = Tile.STATE_INACTIVE
             updateTile()
