@@ -1,7 +1,7 @@
 import {
   runHeadlessServiceRuntimeSession,
   type HeadlessServiceRuntimeSessionDependencies,
-} from '../utils/headlessServiceRuntimeSession';
+} from '../services/headless/headlessServiceRuntimeSession';
 
 function setup() {
   let active = 'session-1';
@@ -17,6 +17,9 @@ function setup() {
     initialize: jest.fn(async () => {}),
     acquireKeepAliveOverlay: jest.fn(() => releaseOverlay),
     markReady: jest.fn(),
+    finishSession: jest.fn(async (id) => {
+      if (active === id) active = '';
+    }),
     shutdownIfIdle: jest.fn(async () => {}),
   };
   return {
@@ -47,6 +50,21 @@ describe('Headless sync session', () => {
     await task;
     expect(unsubscribe).toHaveBeenCalledTimes(1);
     expect(releaseOverlay).toHaveBeenCalledTimes(1);
+    expect(deps.shutdownIfIdle).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears native ownership before checking whether failed initialization left an idle runtime', async () => {
+    const { deps } = setup();
+    deps.initialize = jest.fn(async () => {
+      throw new Error('startup failed');
+    });
+    deps.shutdownIfIdle = jest.fn(async () => {
+      expect(deps.isActive('session-1')).toBe(false);
+    });
+    await expect(runHeadlessServiceRuntimeSession('session-1', deps)).rejects.toThrow(
+      'startup failed'
+    );
+    expect(deps.finishSession).toHaveBeenCalledWith('session-1');
     expect(deps.shutdownIfIdle).toHaveBeenCalledTimes(1);
   });
 
@@ -82,5 +100,85 @@ describe('Headless sync session', () => {
     expect(unsubscribe).toHaveBeenCalledTimes(1);
     expect(releaseOverlay).toHaveBeenCalledTimes(1);
     expect(deps.shutdownIfIdle).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Headless user control', () => {
+  it('handles controls received before initialization without starting tasks', async () => {
+    const { deps } = setup();
+    const controlled = {
+      ...deps,
+      subscribeControl: jest.fn(() => () => {}),
+      getPendingControl: () => 'stop',
+      stopFromControl: jest.fn(async () => {}),
+    };
+    const task = runHeadlessServiceRuntimeSession('session-1', controlled);
+    await Promise.resolve();
+    expect(controlled.stopFromControl).toHaveBeenCalledWith('stop');
+    await task;
+    expect(deps.initialize).not.toHaveBeenCalled();
+    expect(deps.markReady).not.toHaveBeenCalled();
+  });
+
+  it('forwards controls during initialization immediately and waits for cleanup', async () => {
+    const { deps } = setup();
+    let control!: (reason: string) => void;
+    let initialized!: () => void;
+    let cleaned!: () => void;
+    deps.initialize = () =>
+      new Promise<void>((resolve) => {
+        initialized = resolve;
+      });
+    const unsubscribe = jest.fn();
+    const controlled = {
+      ...deps,
+      subscribeControl: (listener: (reason: string) => void) => {
+        control = listener;
+        return unsubscribe;
+      },
+      getPendingControl: () => null,
+      stopFromControl: jest.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            cleaned = resolve;
+          })
+      ),
+    };
+    const task = runHeadlessServiceRuntimeSession('session-1', controlled);
+    expect(control).toBeDefined();
+    control('temporary');
+    expect(controlled.stopFromControl).toHaveBeenCalledWith('temporary');
+    initialized();
+    await Promise.resolve();
+    expect(deps.finishSession).not.toHaveBeenCalled();
+    expect(deps.markReady).not.toHaveBeenCalled();
+    cleaned();
+    await task;
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats readiness cancellation from a user stop as normal completion', async () => {
+    const { deps } = setup();
+    let control!: (reason: string) => void;
+    let rejectInitialization!: (error: Error) => void;
+    deps.initialize = () =>
+      new Promise<void>((_resolve, reject) => {
+        rejectInitialization = reject;
+      });
+    const controlled = {
+      ...deps,
+      subscribeControl: (listener: (reason: string) => void) => {
+        control = listener;
+        return () => {};
+      },
+      getPendingControl: () => null,
+      stopFromControl: jest.fn(async () => {}),
+    };
+    const task = runHeadlessServiceRuntimeSession('session-1', controlled);
+    control('temporary');
+    rejectInitialization(new Error('Headless session ended before initialization'));
+    await expect(task).resolves.toBeUndefined();
+    expect(deps.markReady).not.toHaveBeenCalled();
+    expect(deps.finishSession).toHaveBeenCalledTimes(1);
   });
 });

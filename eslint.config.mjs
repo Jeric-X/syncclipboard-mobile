@@ -16,6 +16,7 @@ export default [
       'build/**',
       'plugins/build/**',
       'modules/*/build/**',
+      'modules/*/android/build/**',
       '*.config.js',
       'babel.config.js',
       'jest.config.js',

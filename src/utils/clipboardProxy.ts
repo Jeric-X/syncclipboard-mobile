@@ -14,7 +14,10 @@ import * as overlayModule from 'clipboard-overlay';
 import * as shizukuModule from 'shizuku-clipboard';
 import { Platform } from 'react-native';
 import { configService } from '@/services/ConfigService';
-import { acquireClipboardOverlay, dismissClipboardOverlay } from '../services/OverlayRuntime';
+import {
+  acquireClipboardOverlay,
+  dismissClipboardOverlay,
+} from '../services/overlay/OverlayManager';
 import { nativeSaveClipboardImageToFile } from 'native-util';
 
 /** 释放剪贴板对共享悬浮窗的占用。 */

@@ -3,15 +3,11 @@
   <!-- Foreground Service -->
   <string name="fg_channel_name">后台任务</string>
   <string name="fg_channel_desc">SyncClipboard 后台同步服务</string>
-  <string name="fg_restart_channel_name">服务重启提醒</string>
-  <string name="fg_restart_channel_desc">后台服务被系统终止后重启提醒</string>
   <string name="fg_notification_running">后台任务运行中</string>
   <string name="fg_notification_stopping">正在停止...</string>
   <string name="fg_action_temp_stop">临时停止</string>
   <string name="fg_action_stop">永久停止</string>
   <string name="fg_timeout_content">系统限制后台任务在主界面关闭后24小时内最多运行6小时，点击重新启动</string>
-  <string name="fg_restart_title">后台服务已停止</string>
-  <string name="fg_restart_content">点击恢复后台服务</string>
 
   <!-- Shortcut -->
   <string name="shortcut_download_label">下载剪贴板</string>

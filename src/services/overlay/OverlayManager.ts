@@ -1,8 +1,8 @@
 import { AppState, Platform } from 'react-native';
 import * as overlayModule from 'clipboard-overlay';
 import { setTimer, clearTimer } from 'native-timer';
-import { configService } from './ConfigService';
-import { OverlayLifecycle } from '../utils/overlayLifecycle';
+import { configService } from '../ConfigService';
+import { OverlayLifecycle } from './overlayLifecycle';
 
 const IDLE_TIMER_TAG = 'clipboard_overlay_idle';
 const lifecycle = new OverlayLifecycle({
@@ -17,7 +17,7 @@ const lifecycle = new OverlayLifecycle({
     setTimer(callback, 10_000, IDLE_TIMER_TAG);
   },
   cancelIdle: () => clearTimer(IDLE_TIMER_TAG),
-  onError: (error) => console.warn('[OverlayRuntime] Failed to update overlay:', error),
+  onError: (error) => console.warn('[OverlayManager] Failed to update overlay:', error),
 });
 
 let configRevision = 0;
@@ -56,7 +56,7 @@ export function acquireKeepAliveOverlay(): () => Promise<void> {
   if (Platform.OS !== 'android') return async () => {};
   const release = lifecycle.acquireKeepAlive();
   void initialize().catch((error) => {
-    console.warn('[OverlayRuntime] Failed to load overlay settings:', error);
+    console.warn('[OverlayManager] Failed to load overlay settings:', error);
   });
   return release;
 }
@@ -68,9 +68,16 @@ export async function acquireClipboardOverlay(): Promise<(() => Promise<void>) |
     await initialize();
     return await lifecycle.acquireClipboard();
   } catch (error) {
-    console.warn('[OverlayRuntime] Failed to acquire clipboard overlay:', error);
+    console.warn('[OverlayManager] Failed to acquire clipboard overlay:', error);
     return null;
   }
+}
+
+/** 启动重试临时使用窗口，不改变剪贴板或保持后台运行的用户设置。 */
+export async function acquireStartupOverlay(): Promise<(() => Promise<void>) | null> {
+  if (Platform.OS !== 'android') return null;
+  await initialize();
+  return lifecycle.acquireStartup();
 }
 
 /** Runtime 空闲时释放剪贴板占用，保活占用由 Headless 会话独立释放。 */

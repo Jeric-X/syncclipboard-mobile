@@ -69,7 +69,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (Platform.OS !== 'android' && !isLoaded) {
+    if (!isLoaded) {
       loadConfig();
     }
   }, [isLoaded, loadConfig]);

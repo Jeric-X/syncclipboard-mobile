@@ -1,8 +1,7 @@
 package expo.modules.foregroundservice
 
-import android.content.Context
 import android.content.Intent
-import android.os.Build
+import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -41,27 +40,23 @@ class ForegroundServiceModule : Module() {
 
         Function("startService") {
             val context = appContext.reactContext ?: return@Function false
-            if (SyncForegroundService.getStopReason(context) != null) return@Function false
-            val intent = Intent(context, SyncForegroundService::class.java).apply {
-                action = SyncForegroundService.ACTION_START
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
-            true
+            SyncForegroundService.requestStart(context)
         }
 
         Function("stopService") {
             val context = appContext.reactContext ?: return@Function false
-            if (!SyncForegroundService.isRunning) return@Function true
-            // 标记为用户主动停止，避免 onDestroy 中误发重启通知
-            SyncForegroundService.stoppedByUser = true
-            val intent = Intent(context, SyncForegroundService::class.java)
-            context.stopService(intent)
+            SyncForegroundService.requestStop(context)
             true
         }
+
+        AsyncFunction("startHeadlessRuntime") {
+            val context = appContext.reactContext ?: return@AsyncFunction null
+            ServiceRuntimeSession.ensureStarted(context)
+        }.runOnQueue(Queues.MAIN)
+
+        AsyncFunction("finishHeadlessRuntime") { sessionId: String ->
+            ServiceRuntimeSession.finishFromJs(sessionId)
+        }.runOnQueue(Queues.MAIN)
 
         Function("updateNotification") { content: String ->
             val context = appContext.reactContext ?: return@Function false
@@ -80,7 +75,7 @@ class ForegroundServiceModule : Module() {
         }
 
         Function("getSessionId") {
-            SyncForegroundService.currentSessionId()
+            ServiceRuntimeSession.currentSessionId()
         }
 
         Function("getStopReason") {
@@ -92,14 +87,8 @@ class ForegroundServiceModule : Module() {
         }
 
         Function("markSessionReady") { sessionId: String ->
-            SyncForegroundService.markSessionReady(sessionId)
+            ServiceRuntimeSession.markReady(sessionId)
         }
 
-        Function("cancelRestartNotification") {
-            val context = appContext.reactContext ?: return@Function false
-            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
-            nm?.cancel(SyncForegroundService.RESTART_NOTIFY_ID)
-            true
-        }
     }
 }
