@@ -59,12 +59,19 @@ it('defaults to off and does not arm on iOS', async () => {
   expect(task.isRunning()).toBe(false);
 });
 
-it('guards independently of clipboard and Sticky recovery settings', async () => {
+it('guards independently of clipboard, foreground notification and Sticky settings', async () => {
   (configService.getConfig as jest.Mock).mockResolvedValue({
     ...enabledConfig,
     enableForegroundServiceSticky: false,
+    enableForegroundNotification: false,
   });
   await task.start();
+  expect(setRecoveryEnabled).toHaveBeenLastCalledWith(true);
+});
+
+it('keeps watching when foreground notifications are disabled while running', async () => {
+  await task.start();
+  changed({ ...enabledConfig, enableForegroundNotification: false });
   expect(setRecoveryEnabled).toHaveBeenLastCalledWith(true);
 });
 
@@ -72,7 +79,6 @@ it.each([
   { enableShizukuRecovery: false },
   { enableShizukuRecovery: undefined },
   { enableBackgroundTasks: false },
-  { enableForegroundNotification: false },
   { enableBackgroundDownload: false, enableBackgroundUpload: false },
 ])('immediately revokes on saved configuration changes: %j', async (flags) => {
   await task.start();

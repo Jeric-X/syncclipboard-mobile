@@ -146,26 +146,6 @@ class SyncForegroundService : Service() {
                     ?: getAppString("fg_notification_running"))
                 return restartMode()
             }
-            ShizukuRecovery.ACTION -> {
-                // 已撤销或迟到的请求不能停止正在运行的服务。
-                if (!ShizukuRecovery.isAllowed(this, intent)) {
-                    if (!isRunning) stopSelfResult(startId)
-                    return restartMode()
-                }
-                try {
-                    promoteToForeground()
-                    if (!acceptStart(null)) {
-                        stopSelfResult(startId)
-                        return START_NOT_STICKY
-                    }
-                    ServiceRuntimeSession.ensureStarted(this)
-                } catch (error: Exception) {
-                    NativeLogger.e(TAG, "Cannot recover Headless from Shizuku", error)
-                    requestStop(this)
-                    stopSelfResult(startId)
-                    return START_NOT_STICKY
-                }
-            }
             ACTION_START, null -> {
                 logStartupTiming(if (intent == null) "stickyStart" else "explicitStart")
                 try {

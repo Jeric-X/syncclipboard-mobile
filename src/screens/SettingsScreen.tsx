@@ -1653,11 +1653,9 @@ export const SettingsScreen = () => {
             <SettingSwitch
               label={t('settings.shizukuRecovery')}
               description={t('settings.shizukuRecoveryDesc')}
-              value={
-                localBackgroundTasksEnabled && localForegroundNotification && localShizukuRecovery
-              }
+              value={localBackgroundTasksEnabled && localShizukuRecovery}
               onChange={handleToggleShizukuRecovery}
-              disabled={!localBackgroundTasksEnabled || !localForegroundNotification}
+              disabled={!localBackgroundTasksEnabled}
             />
 
             <SettingSwitch

@@ -6,7 +6,7 @@ import android.content.Intent
 import expo.modules.nativeutil.NativeLogger
 import java.util.UUID
 
-/** 向守护进程授予可撤销的单一恢复能力，不导出服务，也不清除用户停止状态。 */
+/** 向守护进程授予可撤销的单一恢复能力，不导出接收器，也不清除用户停止状态。 */
 object ShizukuRecovery {
     const val ACTION = "SHIZUKU_RECOVER"
     private const val PREFS = "shizuku_recovery"
@@ -26,9 +26,9 @@ object ShizukuRecovery {
         val ticket = UUID.randomUUID().toString()
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         check(prefs.edit().putString(TICKET, ticket).commit()) { "Cannot persist recovery permission" }
-        return PendingIntent.getForegroundService(
+        return PendingIntent.getBroadcast(
             context, 50,
-            Intent(context, SyncForegroundService::class.java).apply {
+            Intent(context, ShizukuRecoveryReceiver::class.java).apply {
                 action = ACTION
                 putExtra(TICKET, ticket)
             },
@@ -41,8 +41,8 @@ object ShizukuRecovery {
         // 旧 Expo 实例的销毁不能撤销新实例已经注册的守护。
         if (owner != null && currentOwner != null && owner != currentOwner) return
         // 先撤销系统持有的能力，即使偏好写入失败也不能继续拉起。
-        val existing = pendingIntent ?: PendingIntent.getForegroundService(
-            context, 50, Intent(context, SyncForegroundService::class.java).setAction(ACTION),
+        val existing = pendingIntent ?: PendingIntent.getBroadcast(
+            context, 50, Intent(context, ShizukuRecoveryReceiver::class.java).setAction(ACTION),
             PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
         )
         existing?.cancel()

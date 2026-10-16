@@ -58,7 +58,6 @@ export class ShizukuRecoveryTask extends LongRunningTask {
       this.running &&
         config?.enableShizukuRecovery === true &&
         config.enableBackgroundTasks &&
-        config.enableForegroundNotification &&
         (config.enableBackgroundUpload || config.enableBackgroundDownload) &&
         !backgroundRuntimeState.isTempDisabled() &&
         !getStopReason()
