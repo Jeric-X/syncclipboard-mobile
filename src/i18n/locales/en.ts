@@ -229,8 +229,10 @@ const en: DeepString<typeof zh> = {
     backgroundTasksEnabled: 'Background tasks enabled',
     backgroundTasksDisabled: 'Background tasks disabled',
     foregroundNotification: 'Persistent foreground notification',
-    foregroundNotificationDesc:
-      'Improves background reliability and automatically restores the service when stopped by the system',
+    foregroundNotificationDesc: 'Improves background reliability',
+    foregroundServiceSticky: 'Automatically restore the service after system reclamation',
+    foregroundServiceStickyDesc:
+      'Only takes effect when “Persistent foreground notification” is enabled. Registers the service in Sticky mode so the system can attempt to restart it after reclaiming its process.',
     disableForegroundNotifTitle: 'Disable Persistent Notification',
     disableForegroundNotifMessage:
       'Disabling the persistent notification may reduce background service stability and increase the likelihood of the system terminating background tasks.',

@@ -1,9 +1,17 @@
 package expo.modules.foregroundservice
 
+import android.app.Service
 import org.junit.Assert.*
 import org.junit.Test
 
 class ForegroundServiceStopTest {
+    @Test fun restartPolicyHonorsStickyAndUserStop() {
+        assertEquals(Service.START_STICKY, foregroundServiceRestartMode(true, true, false))
+        assertEquals(Service.START_NOT_STICKY, foregroundServiceRestartMode(true, false, false))
+        assertEquals(Service.START_NOT_STICKY, foregroundServiceRestartMode(true, true, true))
+        assertEquals(Service.START_NOT_STICKY, foregroundServiceRestartMode(false, true, false))
+    }
+
     @Test fun replacementJsCancelsPendingIntentWithoutSessionOwnership() {
         val state = ForegroundServiceLaunchState()
         val old = state.requestStart()!!

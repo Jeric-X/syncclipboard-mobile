@@ -21,12 +21,14 @@ class SyncForegroundService : Service() {
         private const val APP_PACKAGE = "com.jericx.syncclipboardmobile"
         private const val PREFS = "sync_foreground_runtime"
         private const val STOP_REASON = "stop_reason"
+        private const val STICKY_ENABLED = "sticky_enabled"
         const val CHANNEL_ID = "syncclipboard_foreground"
         const val NOTIFY_ID = 0x2020
         const val ACTION_START = "START"
         const val ACTION_STOP = "STOP"
         const val ACTION_TEMP_STOP = "TEMP_STOP"
         const val ACTION_UPDATE = "UPDATE"
+        private const val ACTION_UPDATE_POLICY = "UPDATE_POLICY"
         const val EXTRA_CONTENT = "content"
         @Volatile private var instance: SyncForegroundService? = null
         private val launchState = ForegroundServiceLaunchState()
@@ -68,6 +70,26 @@ class SyncForegroundService : Service() {
         @Synchronized
         private fun acceptStart(intent: Intent?): Boolean {
             return launchState.acceptStart(intent?.getLongExtra(EXTRA_GENERATION, -1L))
+        }
+
+        /** 默认为 Sticky，兼容升级前正在运行的服务。 */
+        private fun isStickyEnabled(context: Context): Boolean =
+            context.getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(STICKY_ENABLED, true)
+
+        @Synchronized
+        fun setStickyEnabled(context: Context, enabled: Boolean) {
+            val prefs = context.getSharedPreferences(PREFS, MODE_PRIVATE)
+            if (prefs.getBoolean(STICKY_ENABLED, true) == enabled) return
+            prefs.edit().putBoolean(STICKY_ENABLED, enabled).apply()
+            // 仅刷新已有服务；没有服务时只保存策略，不创建任务或通知。
+            if (!isRunning || instance == null) return
+            try {
+                context.startService(Intent(context, SyncForegroundService::class.java).apply {
+                    action = ACTION_UPDATE_POLICY
+                })
+            } catch (error: Exception) {
+                NativeLogger.w(TAG, "Cannot refresh restart policy: ${error.message}")
+            }
         }
 
         fun getStopReason(context: Context): String? =
@@ -114,10 +136,15 @@ class SyncForegroundService : Service() {
                 forwardControl("temporary")
                 return START_NOT_STICKY
             }
+            ACTION_UPDATE_POLICY -> {
+                // 排队期间服务可能已停止；迟到的策略命令不能重新启动它。
+                if (!isRunning) stopSelfResult(startId)
+                return restartMode()
+            }
             ACTION_UPDATE -> {
                 if (isRunning) updateNotification(intent.getStringExtra(EXTRA_CONTENT)
                     ?: getAppString("fg_notification_running"))
-                return if (isRunning) START_STICKY else START_NOT_STICKY
+                return restartMode()
             }
             ACTION_START, null -> {
                 logStartupTiming(if (intent == null) "stickyStart" else "explicitStart")
@@ -125,7 +152,8 @@ class SyncForegroundService : Service() {
                     // 必须先兑现前台服务启动时限，再等待 ReactHost/配置初始化。
                     promoteToForeground()
                     logStartupTiming("foregroundReady")
-                    if (getStopReason(this) != null || !acceptStart(intent)) {
+                    if (getStopReason(this) != null ||
+                        (intent == null && !isStickyEnabled(this)) || !acceptStart(intent)) {
                         stopSelfResult(startId)
                         return START_NOT_STICKY
                     }
@@ -144,8 +172,12 @@ class SyncForegroundService : Service() {
             }
             else -> return START_NOT_STICKY
         }
-        return if (isRunning) START_STICKY else START_NOT_STICKY
+        return restartMode()
     }
+
+    private fun restartMode(): Int = foregroundServiceRestartMode(
+        isRunning, isStickyEnabled(this), getStopReason(this) != null
+    )
 
     private fun promoteToForeground() {
         val notification = createNotification(getAppString("fg_notification_running"))
@@ -293,3 +325,10 @@ internal fun stopForegroundService(
     state.requestStop(hasInstance)
     stopNative()
 }
+
+/** 所有正常启动及更新命令使用同一重建策略；用户停止始终优先。 */
+internal fun foregroundServiceRestartMode(
+    running: Boolean,
+    stickyEnabled: Boolean,
+    stopRequested: Boolean
+): Int = if (running && stickyEnabled && !stopRequested) Service.START_STICKY else Service.START_NOT_STICKY

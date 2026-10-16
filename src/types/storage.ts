@@ -126,6 +126,9 @@ export interface AppConfig {
   /** 启用前台服务常驻通知 */
   enableForegroundNotification: boolean;
 
+  /** 前台服务被系统回收后是否允许 Sticky 重建 */
+  enableForegroundServiceSticky: boolean;
+
   /** 同步后发送 Toast 通知（上传/下载完成时） */
   syncToastEnabled: boolean;
 
@@ -348,6 +351,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   debugColdStartToast: false,
   debugUpdateCheckNoLimit: false, // 默认不跳过每日更新检查限制
   enableForegroundNotification: true, // 默认启用前台服务常驻通知
+  enableForegroundServiceSticky: true, // 保持既有 Sticky 行为
   syncToastEnabled: true, // 默认开启同步 Toast 通知
   hideFromRecents: false, // 默认不隐藏最近任务
   historyImageAutoDownload: 'wifi', // 默认 Wi-Fi 网络自动下载

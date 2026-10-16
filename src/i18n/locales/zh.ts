@@ -221,7 +221,10 @@ const zh = {
     backgroundTasksEnabled: '已启用后台任务',
     backgroundTasksDisabled: '已禁用后台任务',
     foregroundNotification: '后台服务常驻通知',
-    foregroundNotificationDesc: '提高后台运行的稳定性，自动恢复被系统停止的后台服务',
+    foregroundNotificationDesc: '提高后台运行的稳定性',
+    foregroundServiceSticky: '后台服务被回收后自动恢复',
+    foregroundServiceStickyDesc:
+      '仅在“后台服务常驻通知”开启时生效。将服务注册为粘性（Sticky）模式，系统会尝试重新启动被回收的后台服务',
     disableForegroundNotifTitle: '关闭常驻通知',
     disableForegroundNotifMessage:
       '关闭常驻通知会降低后台服务稳定性，系统终止后台任务的可能性增大。',

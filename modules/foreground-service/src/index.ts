@@ -5,6 +5,7 @@ const MODULE_NAME = 'ForegroundServiceModule';
 
 interface ForegroundServiceModuleType {
   setTileRecoveryEnabled(enabled: boolean): void;
+  setStickyEnabled(enabled: boolean): void;
   startHeadlessRuntime(): Promise<string | null>;
   finishHeadlessRuntime(sessionId: string): Promise<void>;
   startService(): boolean;
@@ -106,4 +107,9 @@ export function addSessionStoppedListener(
 /** 保存磁贴恢复许可，供 JS 尚未启动时的原生入口读取。 */
 export function setTileRecoveryEnabled(enabled: boolean): void {
   NativeModule?.setTileRecoveryEnabled(enabled);
+}
+
+/** 保存前台服务的重建策略，并通知正在运行的服务更新系统记录。 */
+export function setStickyEnabled(enabled: boolean): void {
+  NativeModule?.setStickyEnabled(enabled);
 }
