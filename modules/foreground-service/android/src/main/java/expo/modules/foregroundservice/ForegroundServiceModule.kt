@@ -49,6 +49,10 @@ class ForegroundServiceModule : Module() {
             true
         }
 
+        Function("setStickyEnabled") { enabled: Boolean ->
+            appContext.reactContext?.let { SyncForegroundService.setStickyEnabled(it, enabled) }
+        }
+
         Function("setTileRecoveryEnabled") { enabled: Boolean ->
             appContext.reactContext?.let { ServiceRuntimeSession.setTileRecoveryEnabled(it, enabled) }
         }

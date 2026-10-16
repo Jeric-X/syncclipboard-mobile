@@ -11,6 +11,7 @@ jest.mock('foreground-service', () => ({
   isRunning: jest.fn(),
   startService: jest.fn(),
   stopService: jest.fn(),
+  setStickyEnabled: jest.fn(),
   startHeadlessRuntime: jest.fn(),
   getSessionId: jest.fn(),
   getStopReason: jest.fn(),
@@ -202,3 +203,47 @@ test.each(['sleep', 'config'])(
     expect(ForegroundService.startService).toHaveBeenCalledTimes(1);
   }
 );
+
+test('older configuration retains Sticky before starting the foreground service', async () => {
+  jest.mocked(ForegroundService.startService).mockImplementation(() => {
+    expect(ForegroundService.setStickyEnabled).toHaveBeenLastCalledWith(true);
+    jest.mocked(ForegroundService.isRunning).mockReturnValue(true);
+    return true;
+  });
+  await foregroundServiceTask.start();
+  expect(ForegroundService.startService).toHaveBeenCalledTimes(1);
+});
+
+test('Sticky can be disabled without disabling the notification or Headless', async () => {
+  const config = await configService.getConfig();
+  jest.mocked(configService.getConfig).mockResolvedValue({
+    ...config,
+    enableForegroundServiceSticky: false,
+  });
+  jest.mocked(ForegroundService.startService).mockImplementation(() => {
+    expect(ForegroundService.setStickyEnabled).toHaveBeenLastCalledWith(false);
+    jest.mocked(ForegroundService.isRunning).mockReturnValue(true);
+    return true;
+  });
+  await foregroundServiceTask.start();
+  expect(ForegroundService.isRunning()).toBe(true);
+  expect(ForegroundService.stopService).not.toHaveBeenCalled();
+  expect(ForegroundService.startHeadlessRuntime).not.toHaveBeenCalled();
+});
+
+test('changing Sticky on a running service updates the policy without restarting tasks', async () => {
+  jest.mocked(ForegroundService.isRunning).mockReturnValue(true);
+  await foregroundServiceTask.start();
+  const config = await configService.getConfig();
+  for (const enabled of [false, true]) {
+    jest.mocked(configService.getConfig).mockResolvedValue({
+      ...config,
+      enableForegroundServiceSticky: enabled,
+    });
+    await foregroundServiceTask.onConfigChanged();
+    expect(ForegroundService.setStickyEnabled).toHaveBeenLastCalledWith(enabled);
+  }
+  expect(ForegroundService.startService).not.toHaveBeenCalled();
+  expect(ForegroundService.stopService).not.toHaveBeenCalled();
+  expect(ForegroundService.startHeadlessRuntime).not.toHaveBeenCalled();
+});
