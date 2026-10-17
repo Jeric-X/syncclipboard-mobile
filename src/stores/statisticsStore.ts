@@ -10,8 +10,8 @@ import {
   mergeStatisticsHeartbeat,
 } from '../services/statistics/statisticsPersistence';
 
-const STORAGE_KEY = '@statistics';
-const HEARTBEAT_KEY = '@statistics/heartbeat';
+const STORAGE_KEY = '@app-lifetime-statistics';
+const HEARTBEAT_KEY = '@app-lifetime-statistics/heartbeat';
 export const MAX_STATISTICS_RECORDS = 10_000;
 
 export interface AppLifetimeRecord {
@@ -19,8 +19,6 @@ export interface AppLifetimeRecord {
   startedAt: string;
   /** 最后确认存活时间，不代表精确退出时间 */
   lastHeartbeat: string;
-  /** 迁移的旧记录只覆盖后台任务，不能当作完整应用存活记录 */
-  legacyBackground?: boolean;
 }
 
 interface StatisticsData {

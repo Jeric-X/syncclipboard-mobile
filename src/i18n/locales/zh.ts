@@ -389,7 +389,6 @@ const zh = {
     statistics: '统计信息',
     statisticsLifetimeTitle: '应用存活统计',
     statisticsLifetimeRecord: '应用存活',
-    statisticsLegacyRecord: '后台记录（旧版）',
     statisticsStartedAt: '启动: {{time}}',
     statisticsLastActive: '最后活跃: {{time}}',
     statisticsDuration: '持续: {{duration}}',

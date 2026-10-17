@@ -404,7 +404,6 @@ const en: DeepString<typeof zh> = {
     statistics: 'Statistics',
     statisticsLifetimeTitle: 'App lifetime statistics',
     statisticsLifetimeRecord: 'App lifetime',
-    statisticsLegacyRecord: 'Background record (legacy)',
     statisticsStartedAt: 'Started: {{time}}',
     statisticsLastActive: 'Last active: {{time}}',
     statisticsDuration: 'Duration: {{duration}}',

@@ -38,7 +38,7 @@ export function formatLifetimeRecord(
   { t, locale }: StatisticsFormatting
 ): string {
   return [
-    `${index + 1}. ${t(record.legacyBackground ? 'settings.statisticsLegacyRecord' : 'settings.statisticsLifetimeRecord')}`,
+    `${index + 1}. ${t('settings.statisticsLifetimeRecord')}`,
     t('settings.statisticsStartedAt', { time: formatTime(record.startedAt, locale) }),
     t('settings.statisticsLastActive', { time: formatTime(record.lastHeartbeat, locale) }),
     t('settings.statisticsDuration', {

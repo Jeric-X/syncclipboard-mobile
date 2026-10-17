@@ -16,27 +16,27 @@ function isRecord(value: unknown): value is AppLifetimeRecord {
   );
 }
 
-/** 兼容旧版后台记录与未拆分心跳的快照，过滤损坏数据。 */
+/** 读取当前统计快照，过滤损坏数据。 */
 export function readStatisticsSnapshot(raw: string | null, limit: number): StatisticsSnapshot {
   const empty = { revision: 0, appLifetimeRecords: [] };
   if (!raw) return empty;
   try {
     const data = JSON.parse(raw);
-    const legacy = !Array.isArray(data.appLifetimeRecords);
-    const records: unknown = legacy ? data.backgroundTaskRecords : data.appLifetimeRecords;
-    const revision = Number.isSafeInteger(data.revision) && data.revision > 0 ? data.revision : 0;
+    if (
+      !Number.isSafeInteger(data.revision) ||
+      data.revision <= 0 ||
+      !Array.isArray(data.appLifetimeRecords)
+    )
+      return empty;
     return {
-      revision,
-      appLifetimeRecords: Array.isArray(records)
-        ? records
-            .filter(isRecord)
-            .slice(0, limit)
-            .map((record) => ({
-              startedAt: record.startedAt,
-              lastHeartbeat: record.lastHeartbeat,
-              ...(legacy || record.legacyBackground ? { legacyBackground: true } : {}),
-            }))
-        : [],
+      revision: data.revision,
+      appLifetimeRecords: data.appLifetimeRecords
+        .filter(isRecord)
+        .slice(0, limit)
+        .map((record: AppLifetimeRecord) => ({
+          startedAt: record.startedAt,
+          lastHeartbeat: record.lastHeartbeat,
+        })),
     };
   } catch {
     return empty;
