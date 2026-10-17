@@ -93,9 +93,9 @@ internal class ProcessRecoveryGuard<T>(
         } finally {
             if (current === watch) {
                 // 保留旧凭证以处理 React 启动前崩溃；新注册会取消此重试但不清零预算。
-                // 给每次启动完整的一分钟，避免与 Headless 的启动超时相互竞争。
+                // 超过 Headless 从广播送达后起算的 60 秒超时，并预留 30 秒投递/清理余量。
                 // 耗尽预算只停止发送，保留监听以接收最后一次启动的成功确认。
-                if (attempts.size < 3) enqueue(watch, 60_000L)
+                if (attempts.size < 3) enqueue(watch, 90_000L)
             }
         }
     }

@@ -108,9 +108,30 @@ class ProcessRecoveryGuardTest {
         queued[2]()
         assertEquals(3, recovered)
         assertEquals(3, queued.size)
-        assertEquals(listOf(2_000L, 60_000L, 60_000L), delays)
+        assertEquals(listOf(2_000L, 90_000L, 90_000L), delays)
         queued.forEach { it() }
         assertEquals(3, recovered)
+    }
+
+    @Test fun retriesStartFreshSessionsAfterDelayedDeliveryAndNativeTimeout() {
+        var sessionExpiresAt = Long.MIN_VALUE
+        var sessionsStarted = 0
+        guard.watch("app") {
+            // 首次冷启动投递晚一秒；后续进程存活时立即送达。
+            // 原生从收到首次广播起等待 60 秒超时。
+            val deliveredAt = time + if (sessionsStarted == 0) 1_000L else 0L
+            if (deliveredAt >= sessionExpiresAt) {
+                sessionsStarted++
+                sessionExpiresAt = deliveredAt + 60_000L
+            }
+        }
+        deaths.getValue("app")()
+        repeat(3) { index ->
+            time += delays[index]
+            queued[index]()
+        }
+        assertEquals(3, sessionsStarted)
+        assertEquals(3, queued.size)
     }
 
     @Test fun replacementCancelsRetryAfterTheFirstLaunchWithoutResettingBudget() {
