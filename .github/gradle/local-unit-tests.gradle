@@ -1,0 +1,17 @@
+// 按项目目录收集仓库内的测试，避免执行 node_modules 中第三方库自身的测试。
+gradle.projectsEvaluated {
+    def root = gradle.rootProject
+    def modulesDir = new File(root.projectDir.parentFile, 'modules').canonicalFile.toPath()
+    def androidDir = root.projectDir.canonicalFile.toPath()
+
+    root.tasks.register('testLocalReleaseUnitTest') {
+        group = 'verification'
+        description = 'Runs Release unit tests for all repository Android modules.'
+        dependsOn root.subprojects.findAll { project ->
+            def directory = project.projectDir.canonicalFile.toPath()
+            directory.startsWith(modulesDir) || directory.startsWith(androidDir)
+        }.collect { project ->
+            project.tasks.findByName('testReleaseUnitTest')
+        }.findAll { it != null }
+    }
+}
