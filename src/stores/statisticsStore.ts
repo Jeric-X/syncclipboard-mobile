@@ -1,144 +1,130 @@
-/**
- * Statistics Store
- * 统计信息持久化存储 - 记录后台任务启动时间、持续时间等运行统计
- */
-
+/** Headless 服务运行时存活统计；每次调试统计会话一条，前后台切换不拆分记录。 */
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  formatStatisticsText,
+  type StatisticsFormatting,
+} from '../services/statistics/statisticsFormatting';
+import {
+  readStatisticsSnapshot,
+  mergeStatisticsHeartbeat,
+} from '../services/statistics/statisticsPersistence';
 
-const STORAGE_KEY = '@statistics';
-const MAX_RECORDS = 5;
+const STORAGE_KEY = '@headless-lifetime-statistics';
+const HEARTBEAT_KEY = '@headless-lifetime-statistics/heartbeat';
+export const MAX_STATISTICS_RECORDS = 10_000;
 
-export interface BackgroundTaskRecord {
+export interface HeadlessLifetimeRecord {
   /** 启动时间（ISO 字符串） */
   startedAt: string;
-  /** 最后心跳时间（ISO 字符串） */
+  /** 最后确认存活时间，不代表精确退出时间 */
   lastHeartbeat: string;
 }
 
-export interface StatisticsData {
-  /** 后台任务启动记录列表（最新在前，最多 MAX_RECORDS 条） */
-  backgroundTaskRecords: BackgroundTaskRecord[];
+interface StatisticsData {
+  headlessLifetimeRecords: HeadlessLifetimeRecord[];
 }
-
-const defaultData: StatisticsData = {
-  backgroundTaskRecords: [],
-};
 
 interface StatisticsState {
   data: StatisticsData;
   isLoaded: boolean;
-
-  /** 加载持久化数据 */
   load: () => Promise<void>;
-
-  /** 记录后台任务启动（新增一条记录，超过上限自动删除最旧的） */
-  recordBackgroundTaskStart: () => Promise<void>;
-
-  /** 更新心跳（更新最新一条记录的最后活跃时间） */
-  updateHeartbeat: () => Promise<void>;
-
-  /** 获取所有统计信息的文本 */
-  getStatisticsText: () => string;
+  recordSessionStart: (startedAt: string, lastHeartbeat?: string) => Promise<void>;
+  updateHeartbeat: (lastHeartbeat?: string) => Promise<void>;
+  stopRecording: () => Promise<void>;
+  clear: () => Promise<void>;
+  getStatisticsText: (formatting: StatisticsFormatting) => string;
 }
 
-async function save(data: StatisticsData): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+interface StatisticsDeps {
+  storage: Pick<typeof AsyncStorage, 'getItem' | 'setItem'>;
+  now: () => Date;
 }
 
-function formatDuration(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
+/** 注入存储和时钟，串行处理加载、心跳及清除，防止旧写入恢复已清除记录。 */
+export function createStatisticsStore({ storage, now }: StatisticsDeps) {
+  let queue = Promise.resolve();
+  let activeStartedAt: string | null = null;
+  let revision = 0;
+  const enqueue = (operation: () => Promise<void>): Promise<void> => {
+    const result = queue.then(operation);
+    queue = result.catch(() => {});
+    return result;
+  };
 
-  const parts: string[] = [];
-  if (days > 0) parts.push(`${days}天`);
-  if (hours % 24 > 0) parts.push(`${hours % 24}小时`);
-  if (minutes % 60 > 0) parts.push(`${minutes % 60}分钟`);
-  if (parts.length === 0) parts.push(`${seconds}秒`);
-
-  return parts.join(' ');
-}
-
-function formatTime(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
+  return create<StatisticsState>((set, get) => {
+    const load = async (): Promise<void> => {
+      if (get().isLoaded) return;
+      const snapshot = readStatisticsSnapshot(
+        await storage.getItem(STORAGE_KEY),
+        MAX_STATISTICS_RECORDS
+      );
+      const records = mergeStatisticsHeartbeat(snapshot, await storage.getItem(HEARTBEAT_KEY));
+      revision = snapshot.revision;
+      set({ data: { headlessLifetimeRecords: records }, isLoaded: true });
+    };
+    const save = async (records: HeadlessLifetimeRecord[]): Promise<void> => {
+      const data = { headlessLifetimeRecords: records };
+      const nextRevision = revision + 1;
+      await storage.setItem(STORAGE_KEY, JSON.stringify({ ...data, revision: nextRevision }));
+      revision = nextRevision;
+      set({ data });
+    };
+    return {
+      data: { headlessLifetimeRecords: [] },
+      isLoaded: false,
+      load: () => enqueue(load),
+      recordSessionStart: (startedAt, lastHeartbeat = now().toISOString()) =>
+        enqueue(async () => {
+          await load();
+          if (activeStartedAt !== null) return;
+          await save(
+            [{ startedAt, lastHeartbeat }, ...get().data.headlessLifetimeRecords].slice(
+              0,
+              MAX_STATISTICS_RECORDS
+            )
+          );
+          activeStartedAt = startedAt;
+        }),
+      updateHeartbeat: (lastHeartbeat = now().toISOString()) =>
+        enqueue(async () => {
+          await load();
+          if (activeStartedAt === null) return;
+          const records = [...get().data.headlessLifetimeRecords];
+          const record = {
+            startedAt: activeStartedAt,
+            // 排队中的心跳可能早于手动清除，不能产生负时长。
+            lastHeartbeat: lastHeartbeat < activeStartedAt ? activeStartedAt : lastHeartbeat,
+          };
+          // 清除后下一次心跳从清除时间开始新一段，不恢复之前的记录。
+          if (records.length === 0) records.push(record);
+          else records[0] = record;
+          // 历史不变时仅写入一个活动心跳，避免每 5 秒重写整个历史快照。
+          await storage.setItem(HEARTBEAT_KEY, JSON.stringify({ revision, record }));
+          set({ data: { headlessLifetimeRecords: records } });
+        }),
+      stopRecording: () =>
+        enqueue(async () => {
+          activeStartedAt = null;
+        }),
+      clear: () =>
+        enqueue(async () => {
+          await load();
+          const clearedAt = now().toISOString();
+          await save([]);
+          if (activeStartedAt !== null) activeStartedAt = clearedAt;
+        }),
+      getStatisticsText: (formatting) =>
+        formatStatisticsText(
+          get().data.headlessLifetimeRecords,
+          MAX_STATISTICS_RECORDS,
+          formatting
+        ),
+    };
   });
 }
 
-export const useStatisticsStore = create<StatisticsState>((set, get) => ({
-  data: defaultData,
-  isLoaded: false,
-
-  load: async () => {
-    try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<StatisticsData>;
-        set({
-          data: {
-            ...defaultData,
-            ...parsed,
-            backgroundTaskRecords: parsed.backgroundTaskRecords ?? [],
-          },
-          isLoaded: true,
-        });
-      } else {
-        set({ data: defaultData, isLoaded: true });
-      }
-    } catch {
-      set({ data: defaultData, isLoaded: true });
-    }
-  },
-
-  recordBackgroundTaskStart: async () => {
-    if (!get().isLoaded) await get().load();
-    const now = new Date().toISOString();
-    const newRecord: BackgroundTaskRecord = {
-      startedAt: now,
-      lastHeartbeat: now,
-    };
-    const records = [newRecord, ...get().data.backgroundTaskRecords].slice(0, MAX_RECORDS);
-    const newData: StatisticsData = { ...get().data, backgroundTaskRecords: records };
-    set({ data: newData });
-    await save(newData);
-  },
-
-  updateHeartbeat: async () => {
-    if (!get().isLoaded) await get().load();
-    const records = [...get().data.backgroundTaskRecords];
-    if (records.length === 0) return;
-    records[0] = { ...records[0], lastHeartbeat: new Date().toISOString() };
-    const newData: StatisticsData = { ...get().data, backgroundTaskRecords: records };
-    set({ data: newData });
-    await save(newData);
-  },
-
-  getStatisticsText: () => {
-    const { backgroundTaskRecords } = get().data;
-    const lines: string[] = ['=== 统计信息 ===', ''];
-
-    if (backgroundTaskRecords.length === 0) {
-      lines.push('后台任务: 无记录');
-    } else {
-      lines.push(`后台任务记录 (最近 ${backgroundTaskRecords.length} 次):`);
-      backgroundTaskRecords.forEach((record, index) => {
-        const start = new Date(record.startedAt).getTime();
-        const last = new Date(record.lastHeartbeat).getTime();
-        const duration = formatDuration(last - start);
-        lines.push(`  ${index + 1}. 启动: ${formatTime(record.startedAt)}`);
-        lines.push(`     持续: ${duration}`);
-      });
-    }
-
-    return lines.join('\n');
-  },
-}));
+export const useStatisticsStore = createStatisticsStore({
+  storage: AsyncStorage,
+  now: () => new Date(),
+});
