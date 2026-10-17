@@ -20,11 +20,9 @@ import {
   FlatList,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import {
-  useStatisticsStore,
-  formatLifetimeRecord,
-  MAX_STATISTICS_RECORDS,
-} from '@/stores/statisticsStore';
+import { useStatisticsStore, MAX_STATISTICS_RECORDS } from '@/stores/statisticsStore';
+import { formatLifetimeRecord } from '@/utils/statisticsFormatting';
+import { useStatisticsRecords } from '@/hooks/useStatisticsRecords';
 import { APP_VERSION } from '@/constants';
 import { Paths, Directory } from 'expo-file-system';
 import { calculateDirectorySize, clearDirectory } from '@/utils/fileStorage';
@@ -93,7 +91,8 @@ import { useUpdateDialog } from '@/hooks/useUpdateDialog';
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const statisticsFormatting = { t, locale: i18n.resolvedLanguage || i18n.language };
   const { language: currentLanguage, systemLanguage, setLanguage } = useI18n();
   const navigation = useNavigation<StackNavigationProp<SettingsStackParamList>>();
   const autoSwitchRuntime = useNetworkAutoSwitch();
@@ -207,7 +206,7 @@ export const SettingsScreen = () => {
   const [localImageAutoDownload, setLocalImageAutoDownload] = useState<'wifi' | 'always' | 'off'>(
     config?.historyImageAutoDownload ?? 'wifi'
   );
-  const statisticsRecords = useStatisticsStore((state) => state.data.appLifetimeRecords);
+  const statisticsRecords = useStatisticsRecords(showStatsModal);
 
   const {
     isChecking: isCheckingUpdate,
@@ -1091,7 +1090,9 @@ export const SettingsScreen = () => {
   // 复制所有记录，列表本身按需渲染，避免一次渲染一万条文本。
   const handleCopyStatistics = async () => {
     try {
-      await Clipboard.setStringAsync(useStatisticsStore.getState().getStatisticsText());
+      await Clipboard.setStringAsync(
+        useStatisticsStore.getState().getStatisticsText(statisticsFormatting)
+      );
       setShowStatsModal(false);
       showMessage(t('settings.statisticsCopied'), 'success');
     } catch (error) {
@@ -2181,7 +2182,7 @@ export const SettingsScreen = () => {
               keyExtractor={(record, index) => `${record.startedAt}-${index}`}
               renderItem={({ item, index }) => (
                 <Text style={[styles.statsText, { color: theme.colors.text }]} selectable>
-                  {formatLifetimeRecord(item, index)}
+                  {formatLifetimeRecord(item, index, statisticsFormatting)}
                 </Text>
               )}
               ListEmptyComponent={
