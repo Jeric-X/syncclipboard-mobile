@@ -213,7 +213,7 @@ Bottom tab navigator (Home / History / Settings) in `src/navigation/AppNavigator
 See `docs/bug-fix-workflow.md` for the TDD-style bug fix process:
 
 1. Reproduce & locate root cause
-2. Extract buggy logic into a testable pure function in `src/utils/` with dependency injection
+2. When extraction is needed, keep feature-specific logic with its owning feature/service and use dependency injection; reserve `src/utils/` for broadly reusable utilities
 3. Write a failing test in `src/__tests__/` that asserts the **correct** behavior
 4. Fix the extracted function so the test passes
 5. Update callers to use the fixed function
@@ -223,7 +223,7 @@ See `docs/bug-fix-workflow.md` for the TDD-style bug fix process:
 ### Dependency Injection Pattern for Testability
 
 ```typescript
-// src/utils/xxxLogic.ts
+// src/services/example/xxxLogic.ts
 export interface XxxDeps {
   getSomeState: () => SomeType;
   queryStorage: (key: string) => Promise<Result | null>;
@@ -234,6 +234,8 @@ export async function xxxLogic(input: InputType, deps: XxxDeps): Promise<OutputT
 ```
 
 ## Code Style and Conventions
+
+- **Utility scope**: `src/utils/` is for broadly reusable, feature-independent utilities. Keep service- or feature-specific helpers with their owning module. Do not split trivial logic into separate files solely for testing.
 
 - **Linter**: ESLint v9 flat config (`eslint.config.mjs`) with TypeScript, React, React Hooks, React Native, and Prettier plugins
 - **Import aliases**: Path aliases defined in both `tsconfig.json` and `babel.config.js`: `@/` → `src/`, `@components/`, `@services/`, etc. Module aliases: `native-util`, `shortcut`, `signalr-client`, etc. point to their `src/` directories.

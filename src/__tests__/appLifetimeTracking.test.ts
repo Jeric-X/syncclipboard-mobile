@@ -1,4 +1,4 @@
-import { createAppLifetimeTracking } from '../utils/appLifetimeTracking';
+import { createAppLifetimeTracking } from '../services/statistics/appLifetimeTracking';
 
 function setup(debugMode = true) {
   let debugModeChanged!: (enabled: boolean) => void;

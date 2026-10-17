@@ -1,4 +1,4 @@
-import type { AppLifetimeRecord } from '../stores/statisticsStore';
+import type { AppLifetimeRecord } from '../../stores/statisticsStore';
 
 interface StatisticsSnapshot {
   revision: number;

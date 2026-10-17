@@ -21,7 +21,7 @@ import {
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useStatisticsStore, MAX_STATISTICS_RECORDS } from '@/stores/statisticsStore';
-import { formatLifetimeRecord } from '@/utils/statisticsFormatting';
+import { formatLifetimeRecord } from '@/services/statistics/statisticsFormatting';
 import { useStatisticsRecords } from '@/hooks/useStatisticsRecords';
 import { APP_VERSION } from '@/constants';
 import { Paths, Directory } from 'expo-file-system';

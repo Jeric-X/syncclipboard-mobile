@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next';
-import type { AppLifetimeRecord } from '../stores/statisticsStore';
+import type { AppLifetimeRecord } from '../../stores/statisticsStore';
 
 export interface StatisticsFormatting {
   t: TFunction;

@@ -4,7 +4,7 @@ import { setTimer, clearTimer } from 'native-timer';
 import { useStatisticsStore } from '../stores/statisticsStore';
 import { configService } from './ConfigService';
 import { appStartedAt } from '../utils/startupClock';
-import { createAppLifetimeTracking } from '../utils/appLifetimeTracking';
+import { createAppLifetimeTracking } from './statistics/appLifetimeTracking';
 
 export const installAppLifetimeTracking = createAppLifetimeTracking({
   startedAt: appStartedAt,

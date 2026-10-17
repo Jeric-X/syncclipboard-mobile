@@ -1,7 +1,7 @@
 import { createInstance } from 'i18next';
 import zh from '../i18n/locales/zh';
 import en from '../i18n/locales/en';
-import { formatLifetimeRecord } from '../utils/statisticsFormatting';
+import { formatLifetimeRecord } from '../services/statistics/statisticsFormatting';
 import { createStatisticsStore } from '../stores/statisticsStore';
 
 it.each(['en', 'zh'])(

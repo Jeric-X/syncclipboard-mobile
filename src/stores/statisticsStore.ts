@@ -1,8 +1,14 @@
 /** 应用存活统计；每次调试统计会话一条，前后台切换不拆分记录。 */
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { formatStatisticsText, type StatisticsFormatting } from '../utils/statisticsFormatting';
-import { readStatisticsSnapshot, mergeStatisticsHeartbeat } from '../utils/statisticsPersistence';
+import {
+  formatStatisticsText,
+  type StatisticsFormatting,
+} from '../services/statistics/statisticsFormatting';
+import {
+  readStatisticsSnapshot,
+  mergeStatisticsHeartbeat,
+} from '../services/statistics/statisticsPersistence';
 
 const STORAGE_KEY = '@statistics';
 const HEARTBEAT_KEY = '@statistics/heartbeat';
