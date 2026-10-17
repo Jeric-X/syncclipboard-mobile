@@ -7,13 +7,15 @@ import {
   stopServiceRuntime,
   stopServiceRuntimeIfIdle,
 } from '../ServiceRuntime';
+import { startHeadlessLifetimeTracking } from '../statistics/HeadlessLifetimeTracking';
 import { runHeadlessServiceRuntimeSession } from './headlessServiceRuntimeSession';
 
 /** 无 Activity 的服务运行时入口；Promise 直到进程级会话结束才结束。 */
 export default async function ServiceRuntimeHeadlessTask(data: {
   sessionId: string;
 }): Promise<void> {
-  if (Platform.OS !== 'android') return;
+  if (Platform.OS !== 'android' || ForegroundService.getSessionId() !== data.sessionId) return;
+  const stopTracking = startHeadlessLifetimeTracking();
   console.info('[ServiceRuntimeHeadlessTask] Starting session', data.sessionId);
   try {
     await runHeadlessServiceRuntimeSession(data.sessionId, {
@@ -51,6 +53,7 @@ export default async function ServiceRuntimeHeadlessTask(data: {
     });
   } finally {
     headlessRuntimeInitialization.end(data.sessionId);
+    await stopTracking();
   }
   console.info('[ServiceRuntimeHeadlessTask] Session stopped', data.sessionId);
 }

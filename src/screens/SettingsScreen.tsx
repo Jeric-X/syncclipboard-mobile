@@ -17,7 +17,12 @@ import {
   Platform,
   PermissionsAndroid,
   Modal,
+  FlatList,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import { useStatisticsStore, MAX_STATISTICS_RECORDS } from '@/stores/statisticsStore';
+import { formatLifetimeRecord } from '@/services/statistics/statisticsFormatting';
+import { useStatisticsRecords } from '@/hooks/useStatisticsRecords';
 import { APP_VERSION } from '@/constants';
 import { Paths, Directory } from 'expo-file-system';
 import { calculateDirectorySize, clearDirectory } from '@/utils/fileStorage';
@@ -86,7 +91,8 @@ import { useUpdateDialog } from '@/hooks/useUpdateDialog';
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const statisticsFormatting = { t, locale: i18n.resolvedLanguage || i18n.language };
   const { language: currentLanguage, systemLanguage, setLanguage } = useI18n();
   const navigation = useNavigation<StackNavigationProp<SettingsStackParamList>>();
   const autoSwitchRuntime = useNetworkAutoSwitch();
@@ -200,7 +206,7 @@ export const SettingsScreen = () => {
   const [localImageAutoDownload, setLocalImageAutoDownload] = useState<'wifi' | 'always' | 'off'>(
     config?.historyImageAutoDownload ?? 'wifi'
   );
-  const [statsText, setStatsText] = useState('');
+  const statisticsRecords = useStatisticsRecords(showStatsModal);
 
   const {
     isChecking: isCheckingUpdate,
@@ -1062,23 +1068,36 @@ export const SettingsScreen = () => {
     }
   };
 
-  // 显示统计信息弹窗
+  // 查看仅加载记录，写入统一由调试模式控制的心跳负责。
   const handleShowStatistics = async () => {
-    const { useStatisticsStore } = await import('@/stores/statisticsStore');
-    const store = useStatisticsStore.getState();
-    if (!store.isLoaded) {
-      await store.load();
+    try {
+      await useStatisticsStore.getState().load();
+      setShowStatsModal(true);
+    } catch (error) {
+      showMessage(error instanceof Error ? error.message : t('common.operationFailed'), 'error');
     }
-    setStatsText(useStatisticsStore.getState().getStatisticsText());
-    setShowStatsModal(true);
   };
 
-  // 复制统计信息到剪贴板
+  const handleClearStatistics = async () => {
+    try {
+      await useStatisticsStore.getState().clear();
+      showMessage(t('settings.statisticsCleared'), 'success');
+    } catch (error) {
+      showMessage(error instanceof Error ? error.message : t('common.operationFailed'), 'error');
+    }
+  };
+
+  // 复制所有记录，列表本身按需渲染，避免一次渲染一万条文本。
   const handleCopyStatistics = async () => {
-    const Clipboard = await import('expo-clipboard');
-    await Clipboard.setStringAsync(statsText);
-    setShowStatsModal(false);
-    showMessage(t('settings.statisticsCopied'), 'success');
+    try {
+      await Clipboard.setStringAsync(
+        useStatisticsStore.getState().getStatisticsText(statisticsFormatting)
+      );
+      setShowStatsModal(false);
+      showMessage(t('settings.statisticsCopied'), 'success');
+    } catch (error) {
+      showMessage(error instanceof Error ? error.message : t('common.operationFailed'), 'error');
+    }
   };
 
   // 处理切换自动检查更新
@@ -2139,14 +2158,48 @@ export const SettingsScreen = () => {
         onRequestClose={() => setShowStatsModal(false)}
       >
         <View style={[styles.smsTestModalOverlay, { backgroundColor: theme.colors.overlay }]}>
-          <View style={[styles.smsTestModalContent, { backgroundColor: theme.colors.surface }]}>
+          <View
+            style={[
+              styles.smsTestModalContent,
+              styles.statisticsModalContent,
+              { backgroundColor: theme.colors.surface },
+            ]}
+          >
             <Text style={[styles.smsTestModalTitle, { color: theme.colors.text }]}>
               {t('settings.statistics')}
             </Text>
-            <Text style={[styles.statsText, { color: theme.colors.text }]} selectable>
-              {statsText}
+            <Text style={[styles.statisticsHint, { color: theme.colors.textSecondary }]}>
+              {t('settings.statisticsDescription')}
             </Text>
-            <View style={styles.smsTestModalButtons}>
+            <Text style={[styles.statisticsHint, { color: theme.colors.textSecondary }]}>
+              {t('settings.statisticsCount', {
+                count: statisticsRecords.length,
+                max: MAX_STATISTICS_RECORDS,
+              })}
+            </Text>
+            <FlatList
+              data={statisticsRecords}
+              keyExtractor={(record, index) => `${record.startedAt}-${index}`}
+              renderItem={({ item, index }) => (
+                <Text style={[styles.statsText, { color: theme.colors.text }]} selectable>
+                  {formatLifetimeRecord(item, index, statisticsFormatting)}
+                </Text>
+              )}
+              ListEmptyComponent={
+                <Text style={[styles.statsText, { color: theme.colors.textSecondary }]}>
+                  {t('settings.statisticsEmpty')}
+                </Text>
+              }
+            />
+            <View style={[styles.smsTestModalButtons, styles.statisticsButtons]}>
+              <TouchableOpacity
+                style={[styles.smsTestModalButton, { backgroundColor: theme.colors.divider }]}
+                onPress={handleClearStatistics}
+              >
+                <Text style={[styles.smsTestModalButtonText, { color: theme.colors.text }]}>
+                  {t('settings.statisticsClear')}
+                </Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.smsTestModalButton, { backgroundColor: theme.colors.divider }]}
                 onPress={() => setShowStatsModal(false)}
@@ -2252,6 +2305,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     minHeight: 100,
     marginBottom: 16,
+  },
+  statisticsModalContent: {
+    maxHeight: '85%',
+  },
+  statisticsHint: {
+    fontSize: 12,
+    marginBottom: 12,
+  },
+  statisticsButtons: {
+    flexWrap: 'wrap',
   },
   statsText: {
     fontSize: 14,
