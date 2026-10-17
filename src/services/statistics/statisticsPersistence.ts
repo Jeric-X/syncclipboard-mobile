@@ -1,13 +1,13 @@
-import type { AppLifetimeRecord } from '../../stores/statisticsStore';
+import type { HeadlessLifetimeRecord } from '../../stores/statisticsStore';
 
 interface StatisticsSnapshot {
   revision: number;
-  appLifetimeRecords: AppLifetimeRecord[];
+  headlessLifetimeRecords: HeadlessLifetimeRecord[];
 }
 
-function isRecord(value: unknown): value is AppLifetimeRecord {
+function isRecord(value: unknown): value is HeadlessLifetimeRecord {
   if (!value || typeof value !== 'object') return false;
-  const record = value as Partial<AppLifetimeRecord>;
+  const record = value as Partial<HeadlessLifetimeRecord>;
   return (
     typeof record.startedAt === 'string' &&
     typeof record.lastHeartbeat === 'string' &&
@@ -18,22 +18,22 @@ function isRecord(value: unknown): value is AppLifetimeRecord {
 
 /** 读取当前统计快照，过滤损坏数据。 */
 export function readStatisticsSnapshot(raw: string | null, limit: number): StatisticsSnapshot {
-  const empty = { revision: 0, appLifetimeRecords: [] };
+  const empty = { revision: 0, headlessLifetimeRecords: [] };
   if (!raw) return empty;
   try {
     const data = JSON.parse(raw);
     if (
       !Number.isSafeInteger(data.revision) ||
       data.revision <= 0 ||
-      !Array.isArray(data.appLifetimeRecords)
+      !Array.isArray(data.headlessLifetimeRecords)
     )
       return empty;
     return {
       revision: data.revision,
-      appLifetimeRecords: data.appLifetimeRecords
+      headlessLifetimeRecords: data.headlessLifetimeRecords
         .filter(isRecord)
         .slice(0, limit)
-        .map((record: AppLifetimeRecord) => ({
+        .map((record: HeadlessLifetimeRecord) => ({
           startedAt: record.startedAt,
           lastHeartbeat: record.lastHeartbeat,
         })),
@@ -47,8 +47,8 @@ export function readStatisticsSnapshot(raw: string | null, limit: number): Stati
 export function mergeStatisticsHeartbeat(
   snapshot: StatisticsSnapshot,
   raw: string | null
-): AppLifetimeRecord[] {
-  const records = snapshot.appLifetimeRecords;
+): HeadlessLifetimeRecord[] {
+  const records = snapshot.headlessLifetimeRecords;
   if (!raw || snapshot.revision === 0) return records;
   try {
     const heartbeat = JSON.parse(raw);

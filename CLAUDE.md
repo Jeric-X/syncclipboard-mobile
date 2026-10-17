@@ -116,11 +116,13 @@ Key singletons, typically accessed via `getInstance()` or module-level exports:
 
 **keepAlive** tasks ignore the "background tasks" master toggle and always run. Non-keepAlive tasks are stopped when the user disables background tasks or when the app is backgrounded with temp-disabled state.
 
-Application lifetime statistics are installed once from `index.ts` through
-`AppLifetimeTracking`, independently of background task switches and foreground/background
-transitions. Tracking runs only while debug mode is enabled, with a heartbeat every 5 seconds.
+Headless lifetime statistics start in `ServiceRuntimeHeadlessTask` and stop when that task
+exits, through `services/statistics/HeadlessLifetimeTracking`. Foreground/background
+transitions do not split a session; UI-only and SMS tasks do not start statistics.
+Tracking runs only while debug mode is enabled, with a heartbeat every 5 seconds.
 Re-enabling debug mode starts a new segment. Up to 10,000 records are retained with start
-and last-heartbeat timestamps.
+and last-heartbeat timestamps. Normal task exit records a final heartbeat; process death
+leaves the last persisted heartbeat.
 
 ### Clipboard Access Fallback Chain
 

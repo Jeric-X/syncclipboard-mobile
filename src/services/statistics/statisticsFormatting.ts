@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next';
-import type { AppLifetimeRecord } from '../../stores/statisticsStore';
+import type { HeadlessLifetimeRecord } from '../../stores/statisticsStore';
 
 export interface StatisticsFormatting {
   t: TFunction;
@@ -33,7 +33,7 @@ function formatTime(isoString: string, locale: string): string {
 
 /** 查看列表与复制文本共用当前语言、时区下的记录格式。 */
 export function formatLifetimeRecord(
-  record: AppLifetimeRecord,
+  record: HeadlessLifetimeRecord,
   index: number,
   { t, locale }: StatisticsFormatting
 ): string {
@@ -49,7 +49,7 @@ export function formatLifetimeRecord(
 
 /** 完整导出也使用界面当前语言，包括标题、计数和空状态。 */
 export function formatStatisticsText(
-  records: AppLifetimeRecord[],
+  records: HeadlessLifetimeRecord[],
   max: number,
   formatting: StatisticsFormatting
 ): string {

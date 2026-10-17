@@ -1,4 +1,4 @@
-/** 应用存活统计；每次调试统计会话一条，前后台切换不拆分记录。 */
+/** Headless 服务运行时存活统计；每次调试统计会话一条，前后台切换不拆分记录。 */
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -10,11 +10,11 @@ import {
   mergeStatisticsHeartbeat,
 } from '../services/statistics/statisticsPersistence';
 
-const STORAGE_KEY = '@app-lifetime-statistics';
-const HEARTBEAT_KEY = '@app-lifetime-statistics/heartbeat';
+const STORAGE_KEY = '@headless-lifetime-statistics';
+const HEARTBEAT_KEY = '@headless-lifetime-statistics/heartbeat';
 export const MAX_STATISTICS_RECORDS = 10_000;
 
-export interface AppLifetimeRecord {
+export interface HeadlessLifetimeRecord {
   /** 启动时间（ISO 字符串） */
   startedAt: string;
   /** 最后确认存活时间，不代表精确退出时间 */
@@ -22,15 +22,15 @@ export interface AppLifetimeRecord {
 }
 
 interface StatisticsData {
-  appLifetimeRecords: AppLifetimeRecord[];
+  headlessLifetimeRecords: HeadlessLifetimeRecord[];
 }
 
 interface StatisticsState {
   data: StatisticsData;
   isLoaded: boolean;
   load: () => Promise<void>;
-  recordAppStart: (startedAt: string) => Promise<void>;
-  updateHeartbeat: () => Promise<void>;
+  recordSessionStart: (startedAt: string, lastHeartbeat?: string) => Promise<void>;
+  updateHeartbeat: (lastHeartbeat?: string) => Promise<void>;
   stopRecording: () => Promise<void>;
   clear: () => Promise<void>;
   getStatisticsText: (formatting: StatisticsFormatting) => string;
@@ -61,43 +61,47 @@ export function createStatisticsStore({ storage, now }: StatisticsDeps) {
       );
       const records = mergeStatisticsHeartbeat(snapshot, await storage.getItem(HEARTBEAT_KEY));
       revision = snapshot.revision;
-      set({ data: { appLifetimeRecords: records }, isLoaded: true });
+      set({ data: { headlessLifetimeRecords: records }, isLoaded: true });
     };
-    const save = async (records: AppLifetimeRecord[]): Promise<void> => {
-      const data = { appLifetimeRecords: records };
+    const save = async (records: HeadlessLifetimeRecord[]): Promise<void> => {
+      const data = { headlessLifetimeRecords: records };
       const nextRevision = revision + 1;
       await storage.setItem(STORAGE_KEY, JSON.stringify({ ...data, revision: nextRevision }));
       revision = nextRevision;
       set({ data });
     };
     return {
-      data: { appLifetimeRecords: [] },
+      data: { headlessLifetimeRecords: [] },
       isLoaded: false,
       load: () => enqueue(load),
-      recordAppStart: (startedAt) =>
+      recordSessionStart: (startedAt, lastHeartbeat = now().toISOString()) =>
         enqueue(async () => {
           await load();
           if (activeStartedAt !== null) return;
           await save(
-            [
-              { startedAt, lastHeartbeat: now().toISOString() },
-              ...get().data.appLifetimeRecords,
-            ].slice(0, MAX_STATISTICS_RECORDS)
+            [{ startedAt, lastHeartbeat }, ...get().data.headlessLifetimeRecords].slice(
+              0,
+              MAX_STATISTICS_RECORDS
+            )
           );
           activeStartedAt = startedAt;
         }),
-      updateHeartbeat: () =>
+      updateHeartbeat: (lastHeartbeat = now().toISOString()) =>
         enqueue(async () => {
           await load();
           if (activeStartedAt === null) return;
-          const records = [...get().data.appLifetimeRecords];
-          const record = { startedAt: activeStartedAt, lastHeartbeat: now().toISOString() };
+          const records = [...get().data.headlessLifetimeRecords];
+          const record = {
+            startedAt: activeStartedAt,
+            // 排队中的心跳可能早于手动清除，不能产生负时长。
+            lastHeartbeat: lastHeartbeat < activeStartedAt ? activeStartedAt : lastHeartbeat,
+          };
           // 清除后下一次心跳从清除时间开始新一段，不恢复之前的记录。
           if (records.length === 0) records.push(record);
           else records[0] = record;
           // 历史不变时仅写入一个活动心跳，避免每 5 秒重写整个历史快照。
           await storage.setItem(HEARTBEAT_KEY, JSON.stringify({ revision, record }));
-          set({ data: { appLifetimeRecords: records } });
+          set({ data: { headlessLifetimeRecords: records } });
         }),
       stopRecording: () =>
         enqueue(async () => {
@@ -111,7 +115,11 @@ export function createStatisticsStore({ storage, now }: StatisticsDeps) {
           if (activeStartedAt !== null) activeStartedAt = clearedAt;
         }),
       getStatisticsText: (formatting) =>
-        formatStatisticsText(get().data.appLifetimeRecords, MAX_STATISTICS_RECORDS, formatting),
+        formatStatisticsText(
+          get().data.headlessLifetimeRecords,
+          MAX_STATISTICS_RECORDS,
+          formatting
+        ),
     };
   });
 }
