@@ -402,6 +402,12 @@ const en: DeepString<typeof zh> = {
     debugUpdateCheckNoLimit: 'Unlimited update checks',
     debugUpdateCheckNoLimitDesc: 'Check for updates on every launch, not limited to once per day',
     statistics: 'Statistics',
+    statisticsDescription:
+      'Tracks app runtime in foreground and background only while debug mode is enabled, with a heartbeat every 5 seconds. Duration ends at the last heartbeat. Clearing restarts tracking.',
+    statisticsCount: '{{count}} records, keeping up to {{max}}',
+    statisticsEmpty: 'No lifetime records',
+    statisticsClear: 'Clear',
+    statisticsCleared: 'Statistics cleared; tracking restarts from now',
     statisticsCopied: 'Statistics copied',
     smsTestTitle: 'Test Verification Code SMS',
     smsTestInputPlaceholder: 'Enter SMS content...',

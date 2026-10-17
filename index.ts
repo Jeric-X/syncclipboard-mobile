@@ -10,6 +10,7 @@ import ServiceRestartApp from './src/ServiceRestartApp';
 import SmsUploadTask from './src/tasks/SmsUploadTask';
 import ServiceRuntimeHeadlessTask from './src/services/headless/ServiceRuntimeHeadlessTask';
 import { installServiceRuntime } from './src/services/ServiceRuntime';
+import { installAppLifetimeTracking } from './src/services/AppLifetimeTracking';
 import { notifyColdStart } from './src/services/ColdStartNotification';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
@@ -27,5 +28,6 @@ AppRegistry.registerComponent('serviceRestart', () => ServiceRestartApp);
 AppRegistry.registerHeadlessTask('SmsUploadTask', () => SmsUploadTask);
 AppRegistry.registerHeadlessTask('ServiceRuntimeHeadlessTask', () => ServiceRuntimeHeadlessTask);
 
+installAppLifetimeTracking();
 installServiceRuntime();
 notifyColdStart().catch((error) => console.error('[ColdStartNotification] Failed:', error));

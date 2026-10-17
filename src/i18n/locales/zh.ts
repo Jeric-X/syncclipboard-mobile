@@ -387,6 +387,12 @@ const zh = {
     debugUpdateCheckNoLimit: '更新检查不限次数',
     debugUpdateCheckNoLimitDesc: '开启后每次启动均检查更新，不限每天一次',
     statistics: '统计信息',
+    statisticsDescription:
+      '仅在调试模式开启时统计前后台存活，每 5 秒记录心跳，持续时间截至最后活跃。清除后重新统计。',
+    statisticsCount: '共 {{count}} 条，最多保留 {{max}} 条',
+    statisticsEmpty: '暂无存活记录',
+    statisticsClear: '清除',
+    statisticsCleared: '已清除统计信息，将从当前时间重新统计',
     statisticsCopied: '已复制统计信息',
     smsTestTitle: '测试验证码短信',
     smsTestInputPlaceholder: '输入短信内容...',

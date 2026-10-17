@@ -107,7 +107,6 @@ Key singletons, typically accessed via `getInstance()` or module-level exports:
 | ---------------------------- | ---------- | ----------------------------------------------- |
 | `foregroundServiceTask`      | No         | Manages Android foreground service notification |
 | `clipboardSyncTask`          | No         | Registers callbacks in ClipboardSyncService     |
-| `heartbeatTask`              | No         | Periodic SignalR ping for SyncClipboard servers |
 | `smsForwardingTask`          | Yes        | SMS forwarding hook                             |
 | `clipboardMonitorTask`       | Yes        | Clipboard polling lifecycle                     |
 | `remoteClipboardMonitorTask` | Yes        | Remote monitor lifecycle (SignalR/polling)      |
@@ -116,6 +115,12 @@ Key singletons, typically accessed via `getInstance()` or module-level exports:
 | `networkAutoSwitchTask`      | Yes        | Selects servers from network changes            |
 
 **keepAlive** tasks ignore the "background tasks" master toggle and always run. Non-keepAlive tasks are stopped when the user disables background tasks or when the app is backgrounded with temp-disabled state.
+
+Application lifetime statistics are installed once from `index.ts` through
+`AppLifetimeTracking`, independently of background task switches and foreground/background
+transitions. Tracking runs only while debug mode is enabled, with a heartbeat every 5 seconds.
+Re-enabling debug mode starts a new segment. Up to 10,000 records are retained with start
+and last-heartbeat timestamps.
 
 ### Clipboard Access Fallback Chain
 
