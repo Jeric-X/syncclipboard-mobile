@@ -194,6 +194,7 @@ class SyncForegroundService : Service() {
         // 永久停止优先，随后划掉主界面的临时停止不能覆盖它。
         val pending = if (prefs.getString(STOP_REASON, null) == "stop") "stop" else reason
         prefs.edit().putString(STOP_REASON, pending).commit()
+        ShizukuRecovery.disable(this)
         if (pending == "stop") ForegroundServiceModule.sendStopEvent()
         else ForegroundServiceModule.sendTempStopEvent()
     }

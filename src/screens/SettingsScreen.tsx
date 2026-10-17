@@ -169,6 +169,9 @@ export const SettingsScreen = () => {
   const [localOverlayKeepAlive, setLocalOverlayKeepAlive] = useSyncedState(
     config?.enableOverlayKeepAlive ?? false
   );
+  const [localShizukuRecovery, setLocalShizukuRecovery] = useSyncedState(
+    config?.enableShizukuRecovery ?? false
+  );
   const [localTileRecovery, setLocalTileRecovery] = useSyncedState(
     config?.enableTileRecovery ?? false
   );
@@ -657,6 +660,28 @@ export const SettingsScreen = () => {
       await configService.updateConfig({ enableForegroundServiceSticky: enabled });
     } catch (error: unknown) {
       setLocalForegroundServiceSticky(!enabled);
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
+    }
+  };
+
+  const handleToggleShizukuRecovery = async (enabled: boolean) => {
+    if (enabled && !isShizukuAvailable()) {
+      Alert.alert(t('settings.shizukuNotRunningTitle'), t('settings.shizukuNotRunningMessage'));
+      return;
+    }
+    if (enabled && !hasShizukuPermission()) {
+      if (requestShizukuPermission()) {
+        showMessage(t('settings.shizukuRecoveryAuthorize'), 'info');
+      } else {
+        showMessage(t('settings.shizukuPermissionRequestFailed'), 'error');
+      }
+      return;
+    }
+    setLocalShizukuRecovery(enabled);
+    try {
+      await configService.updateConfig({ enableShizukuRecovery: enabled });
+    } catch (error: unknown) {
+      setLocalShizukuRecovery(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
@@ -1622,6 +1647,14 @@ export const SettingsScreen = () => {
               description={t('settings.overlayKeepAliveDesc')}
               value={localBackgroundTasksEnabled && localOverlayKeepAlive}
               onChange={handleToggleOverlayKeepAlive}
+              disabled={!localBackgroundTasksEnabled}
+            />
+
+            <SettingSwitch
+              label={t('settings.shizukuRecovery')}
+              description={t('settings.shizukuRecoveryDesc')}
+              value={localBackgroundTasksEnabled && localShizukuRecovery}
+              onChange={handleToggleShizukuRecovery}
               disabled={!localBackgroundTasksEnabled}
             />
 

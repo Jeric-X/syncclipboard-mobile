@@ -240,6 +240,10 @@ const zh = {
       '无需启用此选项，SyncClipboard 也支持从选中文字弹出的菜单直接上传文字。\n\nAndroid 10 及以上的系统，应用在后台无法直接获取本地剪贴板内容，你可能需要启用悬浮窗或使用其他工具绕过此限制。',
     backgroundUploadEnabled: '已启用后台上传本地',
     backgroundUploadDisabled: '已禁用后台上传本地',
+    shizukuRecovery: '通过 Shizuku 恢复后台同步',
+    shizukuRecoveryDesc:
+      'Shizuku 已运行并授权时，尝试在应用进程意外退出后恢复同步。需要开启后台上传或下载；主动停止后不恢复。关闭前台通知时，划掉最近任务不会停用恢复，关闭后台任务总开关或 Shizuku 恢复开关即可停用。非 Root 设备重启后需重新启动 Shizuku。',
+    shizukuRecoveryAuthorize: '请先完成 Shizuku 授权，然后再次开启恢复开关',
     tileRecovery: '通过快捷操作磁贴恢复后台任务',
     tileRecoveryDesc: '无需点击，展开下拉菜单显示快捷操作按钮时即会尝试恢复后台任务',
     overlayKeepAlive: '通过悬浮窗保持后台运行',
