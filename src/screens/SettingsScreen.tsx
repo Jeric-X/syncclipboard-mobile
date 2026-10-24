@@ -175,6 +175,9 @@ export const SettingsScreen = () => {
   const [localOverlayKeepAlive, setLocalOverlayKeepAlive] = useSyncedState(
     config?.enableOverlayKeepAlive ?? false
   );
+  const [localShizukuRecovery, setLocalShizukuRecovery] = useSyncedState(
+    config?.enableShizukuRecovery ?? false
+  );
   const [localTileRecovery, setLocalTileRecovery] = useSyncedState(
     config?.enableTileRecovery ?? false
   );
@@ -667,6 +670,44 @@ export const SettingsScreen = () => {
     }
   };
 
+  /** 两个 Shizuku 开关共用运行检查、授权和引导；授权后需再次开启。 */
+  const ensureShizukuReady = (): boolean => {
+    if (Platform.OS !== 'android') return false;
+    if (!isShizukuAvailable()) {
+      Alert.alert(t('settings.shizukuNotRunningTitle'), t('settings.shizukuNotRunningMessage'), [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.learnMore'),
+          onPress: () => Linking.openURL('https://shizuku.rikka.app/guide/setup/'),
+        },
+      ]);
+      return false;
+    }
+    if (!hasShizukuPermission()) {
+      if (!requestShizukuPermission()) {
+        Alert.alert(
+          t('settings.permissionRequestFailed'),
+          t('settings.shizukuPermissionRequestFailed')
+        );
+        return false;
+      }
+      showMessage(t('settings.shizukuGrantThenEnable'), 'info');
+      return false;
+    }
+    return true;
+  };
+
+  const handleToggleShizukuRecovery = async (enabled: boolean) => {
+    if (enabled && !ensureShizukuReady()) return;
+    setLocalShizukuRecovery(enabled);
+    try {
+      await configService.updateConfig({ enableShizukuRecovery: enabled });
+    } catch (error: unknown) {
+      setLocalShizukuRecovery(!enabled);
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
+    }
+  };
+
   const handleToggleTileRecovery = async (enabled: boolean) => {
     setLocalTileRecovery(enabled);
     try {
@@ -743,48 +784,7 @@ export const SettingsScreen = () => {
 
   // 处理切换 Shizuku 获取剪贴板
   const handleToggleShizukuClipboard = async (enabled: boolean) => {
-    if (enabled && Platform.OS === 'android') {
-      // 检查 Shizuku 是否可用
-      if (!isShizukuAvailable()) {
-        Alert.alert(t('settings.shizukuNotRunningTitle'), t('settings.shizukuNotRunningMessage'), [
-          { text: t('common.cancel'), style: 'cancel' },
-          {
-            text: t('common.learnMore'),
-            onPress: () => Linking.openURL('https://shizuku.rikka.app/guide/setup/'),
-          },
-        ]);
-        return;
-      }
-
-      // 检查 Shizuku 权限
-      if (!hasShizukuPermission()) {
-        const requested = requestShizukuPermission();
-        if (!requested) {
-          Alert.alert(
-            t('settings.permissionRequestFailed'),
-            t('settings.shizukuPermissionRequestFailed')
-          );
-          return;
-        }
-        showMessage(t('settings.shizukuGrantThenEnable'), 'info');
-        return;
-      }
-
-      setLocalShizukuClipboardEnabled(true);
-      try {
-        // 启用 Shizuku 时自动关闭悬浮窗方式
-        if (localClipboardOverlayEnabled) {
-          setLocalClipboardOverlayEnabled(false);
-          await setEnableClipboardOverlay(false);
-        }
-        await setEnableShizukuClipboard(true);
-        showMessage(t('settings.shizukuClipboardEnabled'), 'success');
-      } catch (error: unknown) {
-        setLocalShizukuClipboardEnabled(false);
-        showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
-      }
-      return;
-    }
+    if (enabled && !ensureShizukuReady()) return;
 
     setLocalShizukuClipboardEnabled(enabled);
     try {
@@ -1641,6 +1641,13 @@ export const SettingsScreen = () => {
               description={t('settings.overlayKeepAliveDesc')}
               value={localBackgroundTasksEnabled && localOverlayKeepAlive}
               onChange={handleToggleOverlayKeepAlive}
+              disabled={!localBackgroundTasksEnabled}
+            />
+
+            <SettingSwitch
+              label={t('settings.shizukuRecovery')}
+              value={localBackgroundTasksEnabled && localShizukuRecovery}
+              onChange={handleToggleShizukuRecovery}
               disabled={!localBackgroundTasksEnabled}
             />
 

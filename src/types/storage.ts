@@ -104,6 +104,8 @@ export interface AppConfig {
 
   /** 显示快捷设置磁贴时尝试恢复后台任务（仅 Android） */
   enableTileRecovery: boolean;
+  /** 通过 Shizuku 独立进程在应用意外退出后恢复后台同步 */
+  enableShizukuRecovery: boolean;
 
   /** 是否使用 Shizuku 在后台获取剪贴板（仅 Android） */
   enableShizukuClipboard: boolean;
@@ -342,6 +344,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   enableBackgroundDownload: false, // 默认关闭后台下载远程
   enableBackgroundUpload: false, // 默认关闭后台上传本地
   enableOverlayKeepAlive: false, // 默认关闭悬浮窗保活
+  enableShizukuRecovery: false, // 默认关闭 Shizuku 恢复
   enableTileRecovery: false, // 默认关闭快捷设置被动恢复
   enableClipboardOverlay: false, // 默认关闭悬浮窗获取剪贴板
   enableShizukuClipboard: false, // 默认关闭 Shizuku 获取剪贴板

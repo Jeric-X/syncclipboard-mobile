@@ -4,6 +4,7 @@ import { requireNativeModule, type EventSubscription } from 'expo-modules-core';
 const MODULE_NAME = 'ShizukuClipboardModule';
 
 interface ShizukuClipboardModuleInterface {
+  setRecoveryEnabled(enabled: boolean, preserveStartupFailure: boolean): void;
   isShizukuAvailable(): boolean;
   hasShizukuPermission(): boolean;
   requestShizukuPermission(): boolean;
@@ -122,4 +123,9 @@ export async function subscribeToPrimaryClipChanges(
     unavailableSubscription?.remove();
     await NativeModule.stopPrimaryClipChangedListener();
   };
+}
+
+/** 独立守护主进程；不支持的平台静默忽略，授权与绑定由原生层处理。 */
+export function setRecoveryEnabled(enabled: boolean, preserveStartupFailure = false): void {
+  NativeModule?.setRecoveryEnabled(enabled, preserveStartupFailure);
 }
