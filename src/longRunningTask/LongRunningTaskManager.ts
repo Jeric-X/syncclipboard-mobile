@@ -46,9 +46,10 @@ export const longRunningTaskManager = new LongRunningTaskManager();
 longRunningTaskManager.register(networkAutoSwitchTask, true);
 longRunningTaskManager.register(clipboardSyncTask);
 longRunningTaskManager.register(smsForwardingTask, true);
+// 历史订阅必须先就绪，才能接住监听器启动时发出的首条内容。
+longRunningTaskManager.register(historyTrackerTask, true);
 longRunningTaskManager.register(clipboardMonitorTask, true);
 longRunningTaskManager.register(remoteClipboardMonitorTask, true);
-longRunningTaskManager.register(historyTrackerTask, true);
 longRunningTaskManager.register(historySyncTask, true);
 longRunningTaskManager.register(foregroundServiceTask);
 longRunningTaskManager.register(shizukuRecoveryTask);
