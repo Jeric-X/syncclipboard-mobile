@@ -21,6 +21,7 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
   readonly name = 'remoteClipboardMonitor';
 
   private _started = false;
+  private lifecycle = 0;
   private _activeServer: ServerConfig | null = null;
   private _activePollingInterval: number | undefined = undefined;
 
@@ -28,20 +29,23 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
     if (this._started) return;
     // 任务生命周期与当前是否有服务器分离，以便无服务器时仍能接收配置变化。
     this._started = true;
+    const lifecycle = ++this.lifecycle;
     const server = await configService.getActiveServer();
+    const config = await configService.getConfig();
+    if (lifecycle !== this.lifecycle) return;
     if (!server) {
       this._activeServer = null;
-      this._activePollingInterval = (await configService.getConfig())?.remotePollingInterval;
+      this._activePollingInterval = config?.remotePollingInterval;
       clipboardSyncState.setRemoteContent(null);
       return;
     }
-    const config = await configService.getConfig();
     this._activeServer = server;
     this._activePollingInterval = config?.remotePollingInterval;
-    await remoteClipboardMonitor.connect();
+    this.runInBackground(() => remoteClipboardMonitor.connect());
   }
 
   async stop(): Promise<void> {
+    this.lifecycle++;
     this._started = false;
     this._activeServer = null;
     this._activePollingInterval = undefined;
@@ -53,8 +57,11 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
   }
 
   override async onConfigChanged(): Promise<void> {
+    if (!this._started) return;
+    const lifecycle = this.lifecycle;
     const newServer = await configService.getActiveServer();
     const config = await configService.getConfig();
+    if (lifecycle !== this.lifecycle) return;
     const newPollingInterval = config?.remotePollingInterval;
 
     const serverChanged = JSON.stringify(newServer) !== JSON.stringify(this._activeServer);
@@ -70,11 +77,12 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
 
     if (serverChanged || pollingIntervalChanged) {
       await remoteClipboardMonitor.disconnect();
+      if (lifecycle !== this.lifecycle) return;
       this._activeServer = newServer;
       this._activePollingInterval = newPollingInterval;
-      await remoteClipboardMonitor.connect();
+      this.runInBackground(() => remoteClipboardMonitor.connect());
     } else if (!remoteClipboardMonitor.isConnected()) {
-      await remoteClipboardMonitor.connect();
+      this.runInBackground(() => remoteClipboardMonitor.connect());
     }
   }
 
@@ -83,7 +91,14 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
   }
 
   override async onForeground(): Promise<void> {
-    await remoteClipboardMonitor.handleForeground();
+    if (this._started) this.runInBackground(() => remoteClipboardMonitor.handleForeground());
+  }
+
+  private runInBackground(operation: () => Promise<void>): void {
+    void operation().catch((error) => {
+      console.error('[RemoteClipboardMonitorTask] Remote operation failed:', error);
+      clipboardSyncState.setSyncError({ title: '服务器连接断开' });
+    });
   }
 }
 
