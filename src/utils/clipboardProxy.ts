@@ -39,9 +39,11 @@ async function shouldUseShizuku(): Promise<boolean> {
   return true;
 }
 
-/** Shizuku 剪贴板事件模式与读取模式使用相同的启用条件。 */
-export async function isShizukuClipboardEnabled(): Promise<boolean> {
-  return shouldUseShizuku();
+/** 监听需求只由获取开关决定；Shizuku 暂时不可用时保留订阅等待重连。 */
+export async function isShizukuClipboardRequested(): Promise<boolean> {
+  if (Platform.OS !== 'android') return false;
+  const config = await configService.getConfig();
+  return config?.enableShizukuClipboard === true;
 }
 
 /**
