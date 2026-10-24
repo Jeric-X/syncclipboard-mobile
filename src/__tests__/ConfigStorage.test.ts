@@ -191,6 +191,108 @@ describe('ConfigStorage', () => {
     });
   });
 
+  it('切换服务器只修改自己的字段，不覆盖排队保存的后台任务设置', async () => {
+    mockGetItem.mockResolvedValue(
+      JSON.stringify({
+        ...DEFAULT_APP_CONFIG,
+        enableBackgroundTasks: true,
+        servers: [{ id: 'a', type: 'syncclipboard', url: 'https://a.example' }],
+        activeServerIndex: 0,
+      })
+    );
+    mockSetItem.mockResolvedValue(undefined);
+    await configStorage.initialize();
+    let finish!: () => void;
+    mockSetItem.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        })
+    );
+    const saving = configStorage.updateConfig({ enableBackgroundTasks: false });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const switching = configStorage.setActiveServerById('a');
+    finish();
+    await Promise.all([saving, switching]);
+    expect((await configStorage.getConfig()).enableBackgroundTasks).toBe(false);
+    expect(JSON.parse(mockSetItem.mock.calls.at(-1)![1]).enableBackgroundTasks).toBe(false);
+  });
+
+  it('模块更新只接受所属字段，不会写入旧快照中的其他模块', async () => {
+    mockGetItem.mockResolvedValue(null);
+    mockSetItem.mockResolvedValue(undefined);
+    await configStorage.initialize();
+    const old = await configStorage.getConfig();
+    await configStorage.updateConfig({ theme: 'dark' });
+    await configStorage.updateModule('sync', { ...old, autoSync: false });
+    const result = await configStorage.getConfig();
+    expect(result.theme).toBe('dark');
+    expect(result.autoSync).toBe(false);
+  });
+
+  it('服务器更新保存失败不会提前改变内存服务器列表', async () => {
+    mockGetItem.mockResolvedValue(
+      JSON.stringify({
+        ...DEFAULT_APP_CONFIG,
+        servers: [{ id: 'a', type: 'syncclipboard', url: 'https://a.example' }],
+        activeServerIndex: 0,
+      })
+    );
+    mockSetItem.mockResolvedValue(undefined);
+    await configStorage.initialize();
+    mockSetItem.mockRejectedValueOnce(new Error('disk failed'));
+    const log = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(configStorage.updateServer(0, { url: 'https://new.example' })).rejects.toThrow(
+        'disk failed'
+      );
+      expect((await configStorage.getActiveServer())?.url).toBe('https://a.example');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it.each(['reset', 'import'])('%s 完整替换配置，不保留旧可选字段', async (operation) => {
+    mockGetItem.mockResolvedValue(null);
+    mockSetItem.mockResolvedValue(undefined);
+    await configStorage.initialize();
+    await configStorage.updateConfig({ needsHistoryReorganize: true });
+    if (operation === 'reset') await configStorage.resetConfig();
+    else await configStorage.importConfig(JSON.stringify(DEFAULT_APP_CONFIG));
+    expect((await configStorage.getConfig()).needsHistoryReorganize).toBeUndefined();
+  });
+
+  it('并发规则更新基于队列中的最新规则，不撤销另一条规则的编辑', async () => {
+    mockGetItem.mockResolvedValue(null);
+    mockSetItem.mockResolvedValue(undefined);
+    await configStorage.initialize();
+    const rule = {
+      name: 'rule',
+      enabled: true,
+      targetServerId: 'server',
+      networkTypes: [],
+      ssids: [],
+      ipRanges: [],
+      matchMode: 'all' as const,
+    };
+    await configStorage.updateNetworkAutoSwitch({
+      rules: [
+        { ...rule, id: 'a' },
+        { ...rule, id: 'b' },
+      ],
+    });
+    await Promise.all(
+      ['a', 'b'].map((id) =>
+        configStorage.updateNetworkAutoSwitch((current) => ({
+          rules: current.rules.map((item) => (item.id === id ? { ...item, enabled: false } : item)),
+        }))
+      )
+    );
+    expect(
+      (await configStorage.getConfig()).networkAutoSwitch.rules.map((rule) => rule.enabled)
+    ).toEqual([false, false]);
+  });
+
   describe('updateConfig', () => {
     it('首笔保存失败不会污染并发的后续更新，读者只看到已提交配置', async () => {
       mockGetItem.mockResolvedValue(JSON.stringify(DEFAULT_APP_CONFIG));

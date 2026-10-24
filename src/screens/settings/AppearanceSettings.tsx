@@ -18,7 +18,7 @@ export const AppearanceSettings = ({ showMessage }: SettingsModuleProps) => {
 
   const { language: currentLanguage, systemLanguage, setLanguage } = useI18n();
 
-  const { config, updateConfig } = useSettingsStore();
+  const { config, updateModule } = useSettingsStore();
 
   const [localHideFromRecents, setLocalHideFromRecents] = useState(
     config?.hideFromRecents ?? false
@@ -58,7 +58,7 @@ export const AppearanceSettings = ({ showMessage }: SettingsModuleProps) => {
       if (Platform.OS === 'android') {
         setExcludeFromRecents(enabled);
       }
-      await updateConfig({ hideFromRecents: enabled });
+      await updateModule('appearance', { hideFromRecents: enabled });
     } catch (error: unknown) {
       setLocalHideFromRecents(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');

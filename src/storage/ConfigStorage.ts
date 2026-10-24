@@ -8,6 +8,8 @@ import { AppConfig, DEFAULT_APP_CONFIG, STORAGE_KEYS } from '../types/storage';
 import { ServerConfig } from '../types/api';
 import { migrateAppConfig } from '../utils/configMigration';
 import { createStableId } from '../utils/id';
+import { ConfigModule, ConfigModuleUpdates, pickModuleUpdates } from '../types/configModules';
+import type { NetworkAutoSwitchUpdate } from '../types/networkAutoSwitch';
 
 function createDefaultConfig(): AppConfig {
   return migrateAppConfig(DEFAULT_APP_CONFIG, DEFAULT_APP_CONFIG);
@@ -113,12 +115,37 @@ export class ConfigStorage {
    * 更新配置
    */
   public async updateConfig(updates: Partial<AppConfig>): Promise<void> {
-    // 后续更新基于已提交状态合并；失败不污染读者，也不阻塞队列。
+    await this.updateFields(() => updates);
+  }
+
+  /** 只接受所选模块的字段，调用方携带的其他模块快照不会被写入。 */
+  public async updateModule<K extends ConfigModule>(
+    module: K,
+    updates: ConfigModuleUpdates<K>
+  ): Promise<void> {
+    await this.updateConfig(pickModuleUpdates(module, updates));
+  }
+
+  public async updateNetworkAutoSwitch(updates: NetworkAutoSwitchUpdate): Promise<void> {
+    await this.updateFields((config) => ({
+      networkAutoSwitch: {
+        ...config.networkAutoSwitch,
+        ...(typeof updates === 'function' ? updates(config.networkAutoSwitch) : updates),
+      },
+    }));
+  }
+
+  /** 写入队列内只生成本操作拥有的字段；失败不污染内存缓存。 */
+  private async updateFields(build: (config: AppConfig) => Partial<AppConfig>): Promise<void> {
+    await this.writeConfig((config) => ({ ...config, ...build(config) }));
+  }
+
+  private async writeConfig(build: (config: AppConfig) => AppConfig): Promise<void> {
     const operation = this.updates
       .catch(() => {})
       .then(async () => {
         await this.initialize();
-        const next = { ...this.config!, ...updates };
+        const next = build(this.config!);
         await this.saveConfig(next);
         this.config = next;
       });
@@ -130,8 +157,7 @@ export class ConfigStorage {
    * 重置配置为默认值
    */
   public async resetConfig(): Promise<void> {
-    this.config = createDefaultConfig();
-    await this.saveConfig();
+    await this.writeConfig(createDefaultConfig);
   }
 
   // ========== 服务器配置管理 ==========
@@ -159,93 +185,72 @@ export class ConfigStorage {
    * 添加服务器配置
    */
   public async addServer(server: ServerConfig): Promise<number> {
-    const config = await this.getConfig();
-    const usedIds = new Set(config.servers.map((item) => item.id));
-    const requestedId = server.id?.trim();
-    const id = requestedId && !usedIds.has(requestedId) ? requestedId : createStableId('server');
-    config.servers.push({ ...server, id });
-
-    // 如果是第一个服务器，自动激活
-    if (config.servers.length === 1) {
-      config.activeServerIndex = 0;
-    }
-
-    await this.updateConfig(config);
-    return config.servers.length - 1;
+    let index = -1;
+    await this.updateFields((config) => {
+      const usedIds = new Set(config.servers.map((item) => item.id));
+      const requestedId = server.id?.trim();
+      const id = requestedId && !usedIds.has(requestedId) ? requestedId : createStableId('server');
+      const servers = [...config.servers, { ...server, id }];
+      index = servers.length - 1;
+      return { servers, ...(servers.length === 1 ? { activeServerIndex: 0 } : {}) };
+    });
+    return index;
   }
 
-  /**
-   * 更新服务器配置
-   */
+  /** 更新指定服务器，保留不可变的 ID；不回写其他模块。 */
   public async updateServer(index: number, updates: Partial<ServerConfig>): Promise<void> {
-    const config = await this.getConfig();
-
-    if (index < 0 || index >= config.servers.length) {
-      throw new Error(`Invalid server index: ${index}`);
-    }
-
-    const current = config.servers[index];
-    // 服务器 ID 是规则关联键，编辑服务器时不可改变。
-    config.servers[index] = { ...current, ...updates, id: current.id };
-    await this.updateConfig(config);
+    await this.updateFields((config) => {
+      if (index < 0 || index >= config.servers.length)
+        throw new Error(`Invalid server index: ${index}`);
+      const servers = [...config.servers];
+      const current = servers[index];
+      servers[index] = { ...current, ...updates, id: current.id };
+      return { servers };
+    });
   }
 
-  /**
-   * 删除服务器配置
-   */
+  /** 删除服务器并修复相关引用。 */
   public async deleteServer(index: number): Promise<void> {
-    const config = await this.getConfig();
-
-    if (index < 0 || index >= config.servers.length) {
-      throw new Error(`Invalid server index: ${index}`);
-    }
-
-    const [deletedServer] = config.servers.splice(index, 1);
-
-    // 调整当前激活索引
-    if (config.activeServerIndex === index) {
-      config.activeServerIndex = config.servers.length > 0 ? 0 : -1;
-    } else if (config.activeServerIndex > index) {
-      config.activeServerIndex--;
-    }
-
-    if (deletedServer.id) {
-      const autoSwitch = config.networkAutoSwitch;
-      const wasDefault = autoSwitch.defaultServerId === deletedServer.id;
-      config.networkAutoSwitch = {
-        ...autoSwitch,
-        rules: autoSwitch.rules.filter((rule) => rule.targetServerId !== deletedServer.id),
-        defaultServerId: wasDefault ? undefined : autoSwitch.defaultServerId,
-        noMatchAction: wasDefault ? 'none' : autoSwitch.noMatchAction,
-      };
-    }
-
-    await this.updateConfig(config);
+    await this.updateFields((config) => {
+      if (index < 0 || index >= config.servers.length)
+        throw new Error(`Invalid server index: ${index}`);
+      const servers = [...config.servers];
+      const [deletedServer] = servers.splice(index, 1);
+      let activeServerIndex = config.activeServerIndex;
+      if (activeServerIndex === index) activeServerIndex = servers.length > 0 ? 0 : -1;
+      else if (activeServerIndex > index) activeServerIndex--;
+      const patch: Partial<AppConfig> = { servers, activeServerIndex };
+      if (deletedServer.id) {
+        const autoSwitch = config.networkAutoSwitch;
+        const wasDefault = autoSwitch.defaultServerId === deletedServer.id;
+        patch.networkAutoSwitch = {
+          ...autoSwitch,
+          rules: autoSwitch.rules.filter((rule) => rule.targetServerId !== deletedServer.id),
+          defaultServerId: wasDefault ? undefined : autoSwitch.defaultServerId,
+          noMatchAction: wasDefault ? 'none' : autoSwitch.noMatchAction,
+        };
+      }
+      return patch;
+    });
   }
 
-  /**
-   * 设置激活的服务器
-   */
+  /** 仅更新当前服务器选择。 */
   public async setActiveServer(index: number): Promise<void> {
-    const config = await this.getConfig();
-
-    if (index < -1 || index >= config.servers.length) {
-      throw new Error(`Invalid server index: ${index}`);
-    }
-
-    config.activeServerIndex = index;
-    await this.updateConfig(config);
+    await this.updateFields((config) => {
+      if (index < -1 || index >= config.servers.length)
+        throw new Error(`Invalid server index: ${index}`);
+      return { activeServerIndex: index };
+    });
   }
 
   /** 使用稳定 ID 设置当前服务器；null 表示不使用服务器。 */
   public async setActiveServerById(serverId: string | null): Promise<void> {
-    const config = await this.getConfig();
-    const index =
-      serverId === null ? -1 : config.servers.findIndex((server) => server.id === serverId);
-    if (serverId !== null && index < 0) throw new Error(`Invalid server id: ${serverId}`);
-    config.activeServerIndex = index;
-    config.needsHistoryReorganize = true;
-    await this.updateConfig(config);
+    await this.updateFields((config) => {
+      const index =
+        serverId === null ? -1 : config.servers.findIndex((server) => server.id === serverId);
+      if (serverId !== null && index < 0) throw new Error(`Invalid server id: ${serverId}`);
+      return { activeServerIndex: index, needsHistoryReorganize: true };
+    });
   }
 
   // ========== 主题管理 ==========
@@ -347,8 +352,7 @@ export class ConfigStorage {
       }
 
       // 合并默认配置（确保所有字段都存在）
-      this.config = migrated;
-      await this.saveConfig();
+      await this.writeConfig(() => migrated);
     } catch (error) {
       console.error('[ConfigStorage] Failed to import config:', error);
       throw new Error('Invalid config JSON');

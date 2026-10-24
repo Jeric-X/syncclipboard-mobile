@@ -53,7 +53,7 @@ export function startServiceRuntime(): Promise<void> {
 async function applyStopPolicy(foregroundEntry: boolean): Promise<string | null> {
   const stopReason = ForegroundService.getStopReason();
   if (stopReason === 'stop') {
-    await configService.updateConfig({ enableBackgroundTasks: false });
+    await configService.updateModule('background', { enableBackgroundTasks: false });
   }
   if (foregroundEntry && ForegroundService.getStopReason() === stopReason) {
     ForegroundService.clearStopReason();
@@ -144,14 +144,14 @@ export function stopServiceRuntime(sessionId: string, reason: string): Promise<v
     try {
       // 配置写入失败也必须停止；保留原生命令供下次进入时补偿。
       if (reason === 'stop' || ForegroundService.getStopReason() === 'stop') {
-        await configService.updateConfig({ enableBackgroundTasks: false });
+        await configService.updateModule('background', { enableBackgroundTasks: false });
       }
     } finally {
       try {
         await longRunningTaskManager.stopAll();
         // 清理期间可能又收到永久停止，不能被先到的临时停止吞掉。
         if (reason !== 'stop' && ForegroundService.getStopReason() === 'stop') {
-          await configService.updateConfig({ enableBackgroundTasks: false });
+          await configService.updateModule('background', { enableBackgroundTasks: false });
         }
       } finally {
         await ForegroundService.finishHeadlessRuntime(sessionId);

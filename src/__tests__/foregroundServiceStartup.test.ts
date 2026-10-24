@@ -15,7 +15,7 @@ jest.mock('../services/ConfigService', () => ({
   configService: {
     getConfig: jest.fn(),
     subscribe: jest.fn(),
-    updateConfig: jest.fn(),
+    updateModule: jest.fn(),
   },
 }));
 jest.mock('../services/BackgroundRuntimeState', () => ({

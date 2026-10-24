@@ -10,11 +10,12 @@ import { ServerConfig } from '../types/api';
 import { ConflictResolution } from '../types/sync';
 import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
-import type { NetworkAutoSwitchConfig, NetworkAutoSwitchRule } from '../types/networkAutoSwitch';
+import type { NetworkAutoSwitchUpdate, NetworkAutoSwitchRule } from '../types/networkAutoSwitch';
 import { createStableId } from '../utils/id';
 import { normalizeNetworkRule, validateNetworkRule } from '../utils/networkAutoSwitch';
 import { networkAutoSwitchService } from '../services/NetworkAutoSwitchService';
 import { updateBackgroundTaskPause } from '../utils/backgroundTaskPause';
+import { ConfigModule, ConfigModuleUpdates, pickModuleUpdates } from '../types/configModules';
 
 /**
  * 设置状态接口
@@ -38,7 +39,10 @@ interface SettingsState {
   loadConfig: () => Promise<void>;
 
   /** 更新配置 */
-  updateConfig: (updates: Partial<AppConfig>) => Promise<void>;
+  updateModule: <K extends ConfigModule>(
+    module: K,
+    updates: ConfigModuleUpdates<K>
+  ) => Promise<void>;
 
   /** 重置配置 */
   resetConfig: () => Promise<void>;
@@ -63,7 +67,7 @@ interface SettingsState {
   setActiveServer: (index: number) => Promise<void>;
 
   /** 更新网络自动切换全局配置。 */
-  updateNetworkAutoSwitch: (updates: Partial<NetworkAutoSwitchConfig>) => Promise<void>;
+  updateNetworkAutoSwitch: (updates: NetworkAutoSwitchUpdate) => Promise<void>;
 
   /** 新增或替换规则，返回保存后的规则 ID。 */
   saveNetworkAutoSwitchRule: (rule: NetworkAutoSwitchRule) => Promise<string>;
@@ -198,15 +202,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }
   },
 
-  updateConfig: async (updates: Partial<AppConfig>) => {
+  updateModule: async (module, updates) => {
+    const patch = pickModuleUpdates(module, updates);
     set((state) => ({
-      config: state.config ? { ...state.config, ...updates } : null,
+      config: state.config ? { ...state.config, ...patch } : null,
       isSaving: true,
       error: null,
     }));
 
     try {
-      const config = await configService.updateConfig(updates);
+      const config = await configService.updateModule(module, updates);
       set({ config, isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to update config';
@@ -290,12 +295,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }
   },
 
-  updateNetworkAutoSwitch: async (updates: Partial<NetworkAutoSwitchConfig>) => {
+  updateNetworkAutoSwitch: async (updates: NetworkAutoSwitchUpdate) => {
     const config = get().config;
     if (!config) throw new Error('Config not loaded');
-    await get().updateConfig({
-      networkAutoSwitch: { ...config.networkAutoSwitch, ...updates },
-    });
+    set({ isSaving: true, error: null });
+    try {
+      const updated = await configService.updateNetworkAutoSwitch(updates);
+      set({ config: updated, isSaving: false });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to update config',
+        isSaving: false,
+      });
+    }
   },
 
   saveNetworkAutoSwitchRule: async (input: NetworkAutoSwitchRule) => {
@@ -311,31 +323,35 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           .filter((serverId): serverId is string => typeof serverId === 'string')
       )
     );
-    const index = config.networkAutoSwitch.rules.findIndex((rule) => rule.id === id);
-    const rules = [...config.networkAutoSwitch.rules];
-    if (index >= 0) rules[index] = normalized;
-    else rules.push(normalized);
-    await get().updateNetworkAutoSwitch({ rules });
+    await get().updateNetworkAutoSwitch((current) => {
+      const rules = [...current.rules];
+      const index = rules.findIndex((rule) => rule.id === id);
+      if (index >= 0) rules[index] = normalized;
+      else rules.push(normalized);
+      return { rules };
+    });
     return id;
   },
 
   deleteNetworkAutoSwitchRule: async (ruleId: string) => {
     const config = get().config;
     if (!config) throw new Error('Config not loaded');
-    await get().updateNetworkAutoSwitch({
-      rules: config.networkAutoSwitch.rules.filter((rule) => rule.id !== ruleId),
-    });
+    await get().updateNetworkAutoSwitch((current) => ({
+      rules: current.rules.filter((rule) => rule.id !== ruleId),
+    }));
   },
 
   moveNetworkAutoSwitchRule: async (ruleId: string, direction: -1 | 1) => {
     const config = get().config;
     if (!config) throw new Error('Config not loaded');
-    const rules = [...config.networkAutoSwitch.rules];
-    const index = rules.findIndex((rule) => rule.id === ruleId);
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= rules.length) return;
-    [rules[index], rules[target]] = [rules[target], rules[index]];
-    await get().updateNetworkAutoSwitch({ rules });
+    await get().updateNetworkAutoSwitch((current) => {
+      const rules = [...current.rules];
+      const index = rules.findIndex((rule) => rule.id === ruleId);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= rules.length) return {};
+      [rules[index], rules[target]] = [rules[target], rules[index]];
+      return { rules };
+    });
   },
 
   getTheme: () => {
@@ -344,15 +360,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setTheme: async (theme: 'light' | 'dark' | 'auto') => {
-    await get().updateConfig({ theme });
+    await get().updateModule('appearance', { theme });
   },
 
   setSyncInterval: async (interval: number) => {
-    await get().updateConfig({ syncInterval: interval });
+    await get().updateModule('sync', { syncInterval: interval });
   },
 
   setConflictResolution: async (strategy: string) => {
-    await get().updateConfig({ conflictResolution: strategy as ConflictResolution });
+    await get().updateModule('sync', { conflictResolution: strategy as ConflictResolution });
   },
 
   setLargeFileSync: async (enabled: boolean, threshold?: number) => {
@@ -360,59 +376,59 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     if (threshold !== undefined) {
       updates.largeFileThreshold = threshold;
     }
-    await get().updateConfig(updates);
+    await get().updateModule('sync', updates);
   },
 
   setNotifications: async (enabled: boolean) => {
-    await get().updateConfig({ enableNotifications: enabled });
+    await get().updateModule('notifications', { enableNotifications: enabled });
   },
 
   setSyncInBackground: async (enabled: boolean) => {
-    await get().updateConfig({ syncInBackground: enabled });
+    await get().updateModule('sync', { syncInBackground: enabled });
   },
 
   setSyncOnStartup: async (enabled: boolean) => {
-    await get().updateConfig({ syncOnStartup: enabled });
+    await get().updateModule('sync', { syncOnStartup: enabled });
   },
 
   setAutoSync: async (enabled: boolean) => {
-    await get().updateConfig({ autoSync: enabled });
+    await get().updateModule('sync', { autoSync: enabled });
   },
 
   setAutoDownloadMaxSize: async (sizeInBytes: number) => {
-    await get().updateConfig({ autoDownloadMaxSize: sizeInBytes });
+    await get().updateModule('sync', { autoDownloadMaxSize: sizeInBytes });
   },
 
   setAutoCheckUpdate: async (enabled: boolean) => {
-    await get().updateConfig({ autoCheckUpdate: enabled });
+    await get().updateModule('updates', { autoCheckUpdate: enabled });
   },
 
   setLastUpdateCheckDate: async (date: string) => {
-    await get().updateConfig({ lastUpdateCheckDate: date });
+    await get().updateModule('updates', { lastUpdateCheckDate: date });
   },
 
   setUpdateToBeta: async (enabled: boolean) => {
-    await get().updateConfig({ updateToBeta: enabled });
+    await get().updateModule('updates', { updateToBeta: enabled });
   },
 
   setUpdateChannel: async (channel: 'github' | 'gitee') => {
-    await get().updateConfig({ updateChannel: channel });
+    await get().updateModule('updates', { updateChannel: channel });
   },
 
   setEnableHistorySync: async (enabled: boolean) => {
-    await get().updateConfig({ enableHistorySync: enabled });
+    await get().updateModule('history', { enableHistorySync: enabled });
   },
 
   setLogLevel: async (level: 'debug' | 'info' | 'warn' | 'error') => {
-    await get().updateConfig({ logLevel: level });
+    await get().updateModule('debug', { logLevel: level });
   },
 
   setRemotePollingInterval: async (interval: number) => {
-    await get().updateConfig({ remotePollingInterval: interval });
+    await get().updateModule('sync', { remotePollingInterval: interval });
   },
 
   setLocalPollingInterval: async (interval: number) => {
-    await get().updateConfig({ localPollingInterval: interval });
+    await get().updateModule('sync', { localPollingInterval: interval });
   },
 
   setEnableBackgroundTasks: async (enabled: boolean) => {
@@ -420,7 +436,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // 用户主动开启时清除临时停止标志
       get().setTempDisabledBackgroundTasks(false);
     }
-    await get().updateConfig({ enableBackgroundTasks: enabled });
+    await get().updateModule('background', { enableBackgroundTasks: enabled });
   },
 
   setTempDisabledBackgroundTasks: (disabled: boolean) => {
@@ -433,31 +449,31 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setEnableBackgroundDownload: async (enabled: boolean) => {
-    await get().updateConfig({ enableBackgroundDownload: enabled });
+    await get().updateModule('background', { enableBackgroundDownload: enabled });
   },
 
   setEnableBackgroundUpload: async (enabled: boolean) => {
-    await get().updateConfig({ enableBackgroundUpload: enabled });
+    await get().updateModule('background', { enableBackgroundUpload: enabled });
   },
 
   setEnableClipboardOverlay: async (enabled: boolean) => {
-    await get().updateConfig({ enableClipboardOverlay: enabled });
+    await get().updateModule('clipboard', { enableClipboardOverlay: enabled });
   },
 
   setEnableShizukuClipboard: async (enabled: boolean) => {
-    await get().updateConfig({ enableShizukuClipboard: enabled });
+    await get().updateModule('clipboard', { enableShizukuClipboard: enabled });
   },
 
   setEnableSmsForwarding: async (enabled: boolean) => {
-    await get().updateConfig({ enableSmsForwarding: enabled });
+    await get().updateModule('clipboard', { enableSmsForwarding: enabled });
   },
 
   setAutoSaveSyncFile: async (enabled: boolean) => {
-    await get().updateConfig({ autoSaveSyncFile: enabled });
+    await get().updateModule('storage', { autoSaveSyncFile: enabled });
   },
 
   setSyncFileSavePath: async (path: string) => {
-    await get().updateConfig({ syncFileSavePath: path });
+    await get().updateModule('storage', { syncFileSavePath: path });
   },
 
   exportConfig: async () => {
