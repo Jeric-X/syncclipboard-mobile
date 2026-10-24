@@ -5,6 +5,7 @@ const zh = {
     save: '保存',
     close: '关闭',
     back: '返回',
+    autoReturning: '即将自动返回…',
     copy: '复制',
     delete: '删除',
     add: '添加',
@@ -590,6 +591,10 @@ const zh = {
   },
 
   quickTile: {
+    copyAndReturn: '复制并返回',
+    imageDownloaded: '图片已下载',
+    fileDownloaded: '文件已下载',
+    textCopied: '文字已复制',
     upload: '上传',
     download: '下载',
     sync: '同步',

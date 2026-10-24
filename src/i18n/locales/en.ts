@@ -12,6 +12,7 @@ const en: DeepString<typeof zh> = {
     save: 'Save',
     close: 'Close',
     back: 'Back',
+    autoReturning: 'Returning automatically…',
     copy: 'Copy',
     delete: 'Delete',
     add: 'Add',
@@ -606,6 +607,10 @@ const en: DeepString<typeof zh> = {
   },
 
   quickTile: {
+    copyAndReturn: 'Copy and return',
+    imageDownloaded: 'Image downloaded',
+    fileDownloaded: 'File downloaded',
+    textCopied: 'Text copied',
     upload: 'Upload',
     download: 'Download',
     sync: 'Sync',
