@@ -1,4 +1,6 @@
 import React from 'react';
+import { performance } from 'node:perf_hooks';
+import { cpuUsage } from 'node:process';
 // @ts-expect-error React Native 的 Jest 依赖提供 renderer，但未附带类型声明。
 import TestRenderer, { act } from 'react-test-renderer';
 import {
@@ -68,6 +70,30 @@ let previousActEnvironment: boolean | undefined;
 let previousPlatform: typeof Platform.OS;
 let root: ReturnType<typeof TestRenderer.create>;
 let backPress: () => boolean | null | undefined;
+let traceTiming: ((stage: string) => void) | undefined;
+
+// 本地诊断：记录首个用例的真实耗时及进程 CPU 用时，不受 Jest 虚拟计时器影响。
+function startTimingTrace() {
+  const startedAt = performance.now();
+  let previousAt = startedAt;
+  let previousCpu = cpuUsage();
+  traceTiming = (stage) => {
+    const now = performance.now();
+    const cpu = cpuUsage();
+    console.info('[QuickTileTiming]', {
+      stage,
+      elapsedMs: Number((now - startedAt).toFixed(2)),
+      deltaMs: Number((now - previousAt).toFixed(2)),
+      cpuMs: Number(
+        ((cpu.user + cpu.system - previousCpu.user - previousCpu.system) / 1000).toFixed(2)
+      ),
+    });
+    previousAt = now;
+    previousCpu = cpu;
+  };
+  traceTiming('test.begin');
+}
+
 const imageContent: ClipboardContent = {
   type: 'Image',
   text: '',
@@ -78,6 +104,7 @@ const imageContent: ClipboardContent = {
 };
 
 beforeEach(() => {
+  traceTiming = undefined;
   jest.clearAllMocks();
   previousPlatform = Platform.OS;
   Platform.OS = 'android';
@@ -92,18 +119,23 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  traceTiming?.('unmount.begin');
   await act(async () => root?.unmount());
+  traceTiming?.('unmount.end');
   root = undefined;
   jest.restoreAllMocks();
   Platform.OS = previousPlatform;
   testGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
   jest.useRealTimers();
+  traceTiming = undefined;
 });
 
 async function render(content: ClipboardContent) {
+  traceTiming?.('render.act.begin');
   jest.mocked(fetchRemoteClipboard).mockResolvedValue(content);
   jest.mocked(setLocalClipboardFromRemote).mockResolvedValue(content);
   await act(async () => {
+    traceTiming?.('renderer.create.begin');
     root = TestRenderer.create(
       <QuickTileLoadingScreen
         direction={SyncDirection.Download}
@@ -111,7 +143,9 @@ async function render(content: ClipboardContent) {
         overlayMode
       />
     );
+    traceTiming?.('renderer.create.end');
   });
+  traceTiming?.('render.act.end');
 }
 
 function button(label: string) {
@@ -130,10 +164,12 @@ function buttonLayout(node: { props: { style: unknown } }) {
 }
 
 it('图片复制完成后才返回；复制期间禁用其他操作、返回和重复点击', async () => {
+  startTimingTrace();
   let finish!: () => void;
   jest.mocked(localClipboard.setClipboardContent).mockImplementation(
     () =>
       new Promise<void>((resolve) => {
+        traceTiming?.('copy.promise.created');
         finish = resolve;
       })
   );
@@ -141,10 +177,12 @@ it('图片复制完成后才返回；复制期间禁用其他操作、返回和�
   const copy = button('quickTile.copyAndReturn');
   expect(copy).toBeDefined();
   let copying!: Promise<void>;
+  traceTiming?.('copy.act.begin');
   await act(async () => {
     copying = copy.props.onPress();
     void copy.props.onPress();
   });
+  traceTiming?.('copy.act.end');
   expect(localClipboard.setClipboardContent).toHaveBeenCalledTimes(1);
   expect(localClipboard.setClipboardContent).toHaveBeenCalledWith(imageContent, true);
   expect(complete).not.toHaveBeenCalled();
@@ -152,12 +190,19 @@ it('图片复制完成后才返回；复制期间禁用其他操作、返回和�
   expect(button('common.back').props.disabled).toBe(true);
   expect(backPress()).toBe(true);
   expect(complete).not.toHaveBeenCalled();
+  traceTiming?.('copy.pending.assertions.end');
+  traceTiming?.('finish.act.begin');
   await act(async () => {
+    traceTiming?.('finish.call');
     finish();
+    traceTiming?.('copying.await.begin');
     await copying;
+    traceTiming?.('copying.await.end');
   });
+  traceTiming?.('finish.act.end');
   expect(complete).toHaveBeenCalledTimes(1);
   expect(saveToGallery).not.toHaveBeenCalled();
+  traceTiming?.('test.end');
 });
 
 it('复制失败保留预览并显示错误，允许重试成功后返回', async () => {
