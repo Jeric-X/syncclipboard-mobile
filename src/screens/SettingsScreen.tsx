@@ -670,19 +670,35 @@ export const SettingsScreen = () => {
     }
   };
 
-  const handleToggleShizukuRecovery = async (enabled: boolean) => {
-    if (enabled && !isShizukuAvailable()) {
-      Alert.alert(t('settings.shizukuNotRunningTitle'), t('settings.shizukuNotRunningMessage'));
-      return;
+  /** 两个 Shizuku 开关共用运行检查、授权和引导；授权后需再次开启。 */
+  const ensureShizukuReady = (): boolean => {
+    if (Platform.OS !== 'android') return false;
+    if (!isShizukuAvailable()) {
+      Alert.alert(t('settings.shizukuNotRunningTitle'), t('settings.shizukuNotRunningMessage'), [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.learnMore'),
+          onPress: () => Linking.openURL('https://shizuku.rikka.app/guide/setup/'),
+        },
+      ]);
+      return false;
     }
-    if (enabled && !hasShizukuPermission()) {
-      if (requestShizukuPermission()) {
-        showMessage(t('settings.shizukuRecoveryAuthorize'), 'info');
-      } else {
-        showMessage(t('settings.shizukuPermissionRequestFailed'), 'error');
+    if (!hasShizukuPermission()) {
+      if (!requestShizukuPermission()) {
+        Alert.alert(
+          t('settings.permissionRequestFailed'),
+          t('settings.shizukuPermissionRequestFailed')
+        );
+        return false;
       }
-      return;
+      showMessage(t('settings.shizukuGrantThenEnable'), 'info');
+      return false;
     }
+    return true;
+  };
+
+  const handleToggleShizukuRecovery = async (enabled: boolean) => {
+    if (enabled && !ensureShizukuReady()) return;
     setLocalShizukuRecovery(enabled);
     try {
       await configService.updateConfig({ enableShizukuRecovery: enabled });
@@ -768,48 +784,7 @@ export const SettingsScreen = () => {
 
   // 处理切换 Shizuku 获取剪贴板
   const handleToggleShizukuClipboard = async (enabled: boolean) => {
-    if (enabled && Platform.OS === 'android') {
-      // 检查 Shizuku 是否可用
-      if (!isShizukuAvailable()) {
-        Alert.alert(t('settings.shizukuNotRunningTitle'), t('settings.shizukuNotRunningMessage'), [
-          { text: t('common.cancel'), style: 'cancel' },
-          {
-            text: t('common.learnMore'),
-            onPress: () => Linking.openURL('https://shizuku.rikka.app/guide/setup/'),
-          },
-        ]);
-        return;
-      }
-
-      // 检查 Shizuku 权限
-      if (!hasShizukuPermission()) {
-        const requested = requestShizukuPermission();
-        if (!requested) {
-          Alert.alert(
-            t('settings.permissionRequestFailed'),
-            t('settings.shizukuPermissionRequestFailed')
-          );
-          return;
-        }
-        showMessage(t('settings.shizukuGrantThenEnable'), 'info');
-        return;
-      }
-
-      setLocalShizukuClipboardEnabled(true);
-      try {
-        // 启用 Shizuku 时自动关闭悬浮窗方式
-        if (localClipboardOverlayEnabled) {
-          setLocalClipboardOverlayEnabled(false);
-          await setEnableClipboardOverlay(false);
-        }
-        await setEnableShizukuClipboard(true);
-        showMessage(t('settings.shizukuClipboardEnabled'), 'success');
-      } catch (error: unknown) {
-        setLocalShizukuClipboardEnabled(false);
-        showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
-      }
-      return;
-    }
+    if (enabled && !ensureShizukuReady()) return;
 
     setLocalShizukuClipboardEnabled(enabled);
     try {
@@ -1671,7 +1646,6 @@ export const SettingsScreen = () => {
 
             <SettingSwitch
               label={t('settings.shizukuRecovery')}
-              description={t('settings.shizukuRecoveryDesc')}
               value={localBackgroundTasksEnabled && localShizukuRecovery}
               onChange={handleToggleShizukuRecovery}
               disabled={!localBackgroundTasksEnabled}

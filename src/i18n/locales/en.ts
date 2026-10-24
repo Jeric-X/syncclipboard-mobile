@@ -249,9 +249,6 @@ const en: DeepString<typeof zh> = {
     backgroundUploadEnabled: 'Background upload enabled',
     backgroundUploadDisabled: 'Background upload disabled',
     shizukuRecovery: 'Restore background tasks via Shizuku',
-    shizukuRecoveryDesc:
-      'When Shizuku is running and authorized, attempt to restore background tasks after the app process exits unexpectedly, independently of background upload and download settings. Respects manual stops. With foreground notifications off, dismissing the app from Recents does not disable recovery; turn off Background Tasks or Shizuku recovery to disable it. On non-rooted devices, restart Shizuku after reboot.',
-    shizukuRecoveryAuthorize: 'Authorize Shizuku, then turn on recovery again',
     tileRecovery: 'Restore background tasks via Quick Settings tiles',
     tileRecoveryDesc:
       'No tap required. Expanding the Quick Settings panel to show the quick action buttons triggers an attempt to restore background tasks.',
