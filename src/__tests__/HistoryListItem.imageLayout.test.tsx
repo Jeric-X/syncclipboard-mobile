@@ -1,9 +1,14 @@
 import React from 'react';
 // @ts-expect-error React Native 的 Jest 依赖提供 renderer，但未附带类型声明。
 import TestRenderer, { act } from 'react-test-renderer';
-import { Image, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { HistoryListItem } from '../components/HistoryListItem';
 import { createHistoryItem } from '../types/clipboard';
+
+jest.mock('react-native/Libraries/Components/Pressable/Pressable', () => ({
+  __esModule: true,
+  default: 'Pressable',
+}));
 
 jest.mock('react-native-feather', () => ({
   Copy: 'Copy',
@@ -78,17 +83,17 @@ it.each([
         />
       );
     });
-    if (isMultiSelectMode) {
-      const card = root.root
-        .findAllByType(View)
-        .find(
-          (view: { props: React.ComponentProps<typeof View> }) =>
-            StyleSheet.flatten(view.props.style)?.borderWidth === 2
-        );
-      expect(card).toBeDefined();
-      // 多选行中的图片卡片必须能够收缩，不能由竖图测量尺寸撑出屏幕。
-      expect(StyleSheet.flatten(card.props.style).flexShrink).toBe(1);
-    }
+    const row = root.root.findByType(Pressable).props.children;
+    // 切换多选不能改变主轴，避免旧的高度缓存被用于计算宽度。
+    expect(StyleSheet.flatten(row.props.style)?.flexDirection).toBe('row');
+    const card = root.root
+      .findAllByType(View)
+      .find(
+        (view: { props: React.ComponentProps<typeof View> }) =>
+          (StyleSheet.flatten(view.props.style)?.borderWidth ?? 0) > 0
+      );
+    expect(card).toBeDefined();
+    expect(StyleSheet.flatten(card.props.style).flex).toBe(1);
     const style = StyleSheet.flatten(preview().props.style);
     expect(style.width).toBe('100%');
     // 高度应随本次原生布局的宽度变化，不能保留上一次 onLayout 计算的固定高度。
