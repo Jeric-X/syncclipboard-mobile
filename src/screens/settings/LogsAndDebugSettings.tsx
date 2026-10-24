@@ -37,7 +37,7 @@ export const LogsAndDebugSettings = ({ showMessage }: SettingsModuleProps) => {
 
   const statisticsFormatting = { t, locale: i18n.resolvedLanguage || i18n.language };
 
-  const { config, updateConfig, setLogLevel } = useSettingsStore();
+  const { config, updateModule, setLogLevel } = useSettingsStore();
 
   const [localDebugModeEnabled, setLocalDebugModeEnabled] = useState(config?.debugMode ?? false);
 
@@ -78,7 +78,7 @@ export const LogsAndDebugSettings = ({ showMessage }: SettingsModuleProps) => {
     setLocalDebugModeEnabled(enabled);
 
     try {
-      await updateConfig({ debugMode: enabled });
+      await updateModule('debug', { debugMode: enabled });
     } catch (error: unknown) {
       // 如果设置失败，恢复原来的状态
       setLocalDebugModeEnabled(!enabled);
@@ -90,7 +90,7 @@ export const LogsAndDebugSettings = ({ showMessage }: SettingsModuleProps) => {
   const handleToggleDebugOverlayVisible = async (enabled: boolean) => {
     setLocalDebugOverlayVisible(enabled);
     try {
-      await updateConfig({ debugOverlayVisible: enabled });
+      await updateModule('debug', { debugOverlayVisible: enabled });
     } catch (error: unknown) {
       setLocalDebugOverlayVisible(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
@@ -101,7 +101,7 @@ export const LogsAndDebugSettings = ({ showMessage }: SettingsModuleProps) => {
   const handleToggleDebugUrlScheme = async (enabled: boolean) => {
     setLocalDebugUrlScheme(enabled);
     try {
-      await updateConfig({ debugUrlScheme: enabled });
+      await updateModule('debug', { debugUrlScheme: enabled });
     } catch (error: unknown) {
       setLocalDebugUrlScheme(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
@@ -113,7 +113,7 @@ export const LogsAndDebugSettings = ({ showMessage }: SettingsModuleProps) => {
     setLocalDebugColdStartToast(enabled);
     try {
       // 通用 store 更新会吞掉保存异常；直接保存，成功后由订阅更新 store。
-      await configService.updateConfig({ debugColdStartToast: enabled });
+      await configService.updateModule('debug', { debugColdStartToast: enabled });
     } catch (error: unknown) {
       setLocalDebugColdStartToast(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
@@ -124,7 +124,7 @@ export const LogsAndDebugSettings = ({ showMessage }: SettingsModuleProps) => {
   const handleToggleDebugUpdateCheckNoLimit = async (enabled: boolean) => {
     setLocalDebugUpdateCheckNoLimit(enabled);
     try {
-      await updateConfig({ debugUpdateCheckNoLimit: enabled });
+      await updateModule('debug', { debugUpdateCheckNoLimit: enabled });
     } catch (error: unknown) {
       setLocalDebugUpdateCheckNoLimit(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');

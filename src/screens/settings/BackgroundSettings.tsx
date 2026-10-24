@@ -20,7 +20,7 @@ export const BackgroundSettings = ({ showMessage }: SettingsModuleProps) => {
 
   const {
     config,
-    updateConfig,
+    updateModule,
     setEnableBackgroundDownload,
     setEnableBackgroundUpload,
     setEnableClipboardOverlay,
@@ -201,7 +201,7 @@ export const BackgroundSettings = ({ showMessage }: SettingsModuleProps) => {
   const handleToggleForegroundServiceSticky = async (enabled: boolean) => {
     setLocalForegroundServiceSticky(enabled);
     try {
-      await configService.updateConfig({ enableForegroundServiceSticky: enabled });
+      await configService.updateModule('background', { enableForegroundServiceSticky: enabled });
     } catch (error: unknown) {
       setLocalForegroundServiceSticky(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
@@ -239,7 +239,7 @@ export const BackgroundSettings = ({ showMessage }: SettingsModuleProps) => {
     if (enabled && !ensureShizukuReady()) return;
     setLocalShizukuRecovery(enabled);
     try {
-      await configService.updateConfig({ enableShizukuRecovery: enabled });
+      await configService.updateModule('background', { enableShizukuRecovery: enabled });
     } catch (error: unknown) {
       setLocalShizukuRecovery(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
@@ -249,7 +249,7 @@ export const BackgroundSettings = ({ showMessage }: SettingsModuleProps) => {
   const handleToggleTileRecovery = async (enabled: boolean) => {
     setLocalTileRecovery(enabled);
     try {
-      await configService.updateConfig({ enableTileRecovery: enabled });
+      await configService.updateModule('background', { enableTileRecovery: enabled });
     } catch (error: unknown) {
       setLocalTileRecovery(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
@@ -266,7 +266,7 @@ export const BackgroundSettings = ({ showMessage }: SettingsModuleProps) => {
     }
     setLocalOverlayKeepAlive(enabled);
     try {
-      await configService.updateConfig({ enableOverlayKeepAlive: enabled });
+      await configService.updateModule('background', { enableOverlayKeepAlive: enabled });
     } catch (error: unknown) {
       setLocalOverlayKeepAlive(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
@@ -341,7 +341,7 @@ export const BackgroundSettings = ({ showMessage }: SettingsModuleProps) => {
             onPress: async () => {
               setLocalForegroundNotification(false);
               try {
-                await updateConfig({ enableForegroundNotification: false });
+                await updateModule('background', { enableForegroundNotification: false });
               } catch (error: unknown) {
                 setLocalForegroundNotification(true);
                 showMessage(
@@ -358,7 +358,7 @@ export const BackgroundSettings = ({ showMessage }: SettingsModuleProps) => {
 
     setLocalForegroundNotification(true);
     try {
-      await updateConfig({ enableForegroundNotification: true });
+      await updateModule('background', { enableForegroundNotification: true });
       await requestNotificationPermission();
     } catch (error: unknown) {
       setLocalForegroundNotification(false);

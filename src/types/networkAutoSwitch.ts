@@ -72,3 +72,8 @@ export const DEFAULT_NETWORK_AUTO_SWITCH_CONFIG: NetworkAutoSwitchConfig = {
   noMatchAction: 'keep',
   rules: [],
 };
+
+/** 模块更新可在保存队列内基于最新规则生成局部修改。 */
+export type NetworkAutoSwitchUpdate =
+  | Partial<NetworkAutoSwitchConfig>
+  | ((current: NetworkAutoSwitchConfig) => Partial<NetworkAutoSwitchConfig>);

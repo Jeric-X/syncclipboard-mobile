@@ -58,7 +58,7 @@ const initialState: UpdateServiceState = {
 const defaultDependencies: UpdateServiceDependencies = {
   getConfig: () => configService.getConfig(),
   setLastCheckDate: async (date) => {
-    await configService.updateConfig({ lastUpdateCheckDate: date });
+    await configService.updateModule('updates', { lastUpdateCheckDate: date });
   },
   check: checkForUpdate,
   cleanCache: cleanOldApkCache,

@@ -24,7 +24,7 @@ export const SyncAndHistorySettings = ({ showMessage }: SettingsModuleProps) => 
     config,
     setAutoSync,
     setAutoDownloadMaxSize,
-    updateConfig,
+    updateModule,
     setEnableHistorySync,
     setRemotePollingInterval,
     setLocalPollingInterval,
@@ -223,7 +223,7 @@ export const SyncAndHistorySettings = ({ showMessage }: SettingsModuleProps) => 
         showMessage(t('settings.numberMin10'), 'error');
         return;
       }
-      await updateConfig({ maxHistoryItems: maxItems });
+      await updateModule('history', { maxHistoryItems: maxItems });
       showMessage(t('settings.maxHistoryItemsSet', { count: maxItems }), 'success');
 
       // 更新历史记录存储的最大大小
@@ -295,7 +295,7 @@ export const SyncAndHistorySettings = ({ showMessage }: SettingsModuleProps) => 
       await setEnableHistorySync(enabled);
 
       if (!enabled) {
-        await updateConfig({ needsHistoryReorganize: true });
+        await updateModule('history', { needsHistoryReorganize: true });
       }
     } catch (error: unknown) {
       setLocalHistorySyncEnabled(!enabled);
@@ -307,7 +307,7 @@ export const SyncAndHistorySettings = ({ showMessage }: SettingsModuleProps) => 
   const handleImageAutoDownloadChange = async (value: 'wifi' | 'always' | 'off') => {
     setLocalImageAutoDownload(value);
     try {
-      await updateConfig({ historyImageAutoDownload: value });
+      await updateModule('history', { historyImageAutoDownload: value });
     } catch {
       setLocalImageAutoDownload(config?.historyImageAutoDownload ?? 'wifi');
     }
@@ -317,7 +317,7 @@ export const SyncAndHistorySettings = ({ showMessage }: SettingsModuleProps) => 
   const handleToggleSyncToast = async (enabled: boolean) => {
     setLocalSyncToastEnabled(enabled);
     try {
-      await updateConfig({ syncToastEnabled: enabled });
+      await updateModule('sync', { syncToastEnabled: enabled });
     } catch (error: unknown) {
       setLocalSyncToastEnabled(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
@@ -429,7 +429,7 @@ export const SyncAndHistorySettings = ({ showMessage }: SettingsModuleProps) => 
           label={t('settings.showImageCopyButton')}
           description={t('settings.showImageCopyButtonDesc')}
           value={config?.showImageCopyButton ?? false}
-          onChange={(enabled) => updateConfig({ showImageCopyButton: enabled })}
+          onChange={(enabled) => updateModule('history', { showImageCopyButton: enabled })}
         />
       </SettingsSection>
 
