@@ -42,6 +42,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
 
   // 保存操作状态
   const [isSaving, setIsSaving] = useState(false);
+  const [canCancelSave, setCanCancelSave] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
   const [copyError, setCopyError] = useState<string | undefined>();
   const activeActionRef = useRef<'copy' | 'save' | null>(null);
@@ -168,6 +169,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
 
       const abortController = new AbortController();
       saveAbortControllerRef.current = abortController;
+      setCanCancelSave(true);
       setSaveProgress(null);
 
       await saveContentDataToDirectory(
@@ -190,6 +192,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
       }
     } finally {
       setIsSaving(false);
+      setCanCancelSave(false);
       setSaveProgress(null);
       saveAbortControllerRef.current = null;
       activeActionRef.current = null;
@@ -199,7 +202,6 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
   // 动态保存按钮配置（根据保存状态切换 label 和行为）
   const saveButtonConfig = useMemo((): SuccessButtonConfig => {
     if (isSaving) {
-      const canCancelSave = !!saveAbortControllerRef.current;
       let label: string;
       if (saveProgress && saveProgress.totalBytes > 0) {
         const pct = (saveProgress.progress * 100).toFixed(0);
@@ -227,6 +229,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
     };
   }, [
     isSaving,
+    canCancelSave,
     isCopying,
     fileContent?.type,
     saveProgress,

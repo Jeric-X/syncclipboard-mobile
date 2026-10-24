@@ -11,6 +11,8 @@ import {
 import { saveToGallery } from '../utils/fileActions';
 import { SyncDirection } from '../types/sync';
 import type { ClipboardContent } from '../types/clipboard';
+import * as FileSystem from 'expo-file-system/legacy';
+import { saveContentDataToDirectory } from '../utils/clipboard/clipboardContentUtils';
 
 jest.mock('react-native-feather', () => ({
   Copy: 'Copy',
@@ -174,6 +176,46 @@ it('保存期间阻止复制和关闭，保存完成后恢复操作且保留预�
     await saving;
   });
   expect(button('quickTile.copyAndReturn').props.disabled).toBe(false);
+  expect(button('common.back').props.disabled).toBe(false);
+  expect(complete).not.toHaveBeenCalled();
+});
+
+it.each(['File', 'Group'] as const)('%s 选择目录后无需等待进度即可取消保存', async (type) => {
+  let selectDirectory!: (value: { granted: true; directoryUri: string }) => void;
+  jest
+    .mocked(FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync)
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          selectDirectory = resolve;
+        })
+    );
+  let saveSignal!: AbortSignal;
+  jest.mocked(saveContentDataToDirectory).mockImplementationOnce(
+    (_content, _uri, signal) =>
+      new Promise<void>((_resolve, reject) => {
+        saveSignal = signal!;
+        signal!.addEventListener('abort', () =>
+          reject(Object.assign(new Error('cancelled'), { name: 'AbortError' }))
+        );
+      })
+  );
+  await render({ ...imageContent, type });
+  let saving!: Promise<void>;
+  await act(async () => {
+    saving = button('clipboard.save').props.onPress();
+  });
+  expect(button('clipboard.saving').props.disabled).toBe(true);
+  await act(async () => {
+    selectDirectory({ granted: true, directoryUri: 'content://directory' });
+  });
+  expect(button('clipboard.saving').props.disabled).toBe(false);
+  await act(async () => {
+    button('clipboard.saving').props.onPress();
+    await saving;
+  });
+  expect(saveSignal.aborted).toBe(true);
+  expect(button('clipboard.save').props.disabled).toBe(false);
   expect(button('common.back').props.disabled).toBe(false);
   expect(complete).not.toHaveBeenCalled();
 });
