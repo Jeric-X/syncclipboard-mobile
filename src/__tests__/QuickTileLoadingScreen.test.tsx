@@ -22,6 +22,12 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { saveContentDataToDirectory } from '../utils/clipboard/clipboardContentUtils';
 import type { ProgressInfo } from 'native-util';
 
+// 此处验证按钮属性和业务操作，避免原生动画组件的冷启动转译占用首个用例的超时预算。
+jest.mock('react-native/Libraries/Components/Touchable/TouchableOpacity', () => ({
+  __esModule: true,
+  default: 'TouchableOpacity',
+}));
+
 jest.mock('react-native-feather', () => ({
   Copy: 'Copy',
   ExternalLink: 'ExternalLink',
