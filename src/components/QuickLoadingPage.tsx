@@ -45,7 +45,7 @@ export interface QuickLoadingPageProps {
   successContent?: ClipboardContent;
   successButtons?: SuccessButtonConfig[];
   successError?: string;
-  /** 提供字符串时预留单行状态区域，避免操作进度变化导致按钮布局跳动。 */
+  /** 有操作进度时显示单行状态，空闲时不占用空间。 */
   successStatus?: string;
   /** 成功后保留预览的时间；不设置时沿用原有关闭行为。 */
   autoCloseDelayMs?: number;
@@ -240,7 +240,9 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
             {(successContent !== undefined || !!successButtons?.length) && (
               <Text style={[styles.successTitle, { color: theme.colors.text }]}>{successText}</Text>
             )}
-            {successContent && <ContentPreview content={successContent} />}
+            {successContent && (
+              <ContentPreview key={successContent.fileUri} content={successContent} />
+            )}
             {successContent === undefined && !successButtons?.length && (
               <>
                 <Text style={[styles.successIcon, { color: theme.colors.success }]}>✓</Text>
@@ -305,7 +307,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
                       );
                     })}
                   </View>
-                  {successStatus !== undefined && (
+                  {!!successStatus && (
                     <Text
                       accessibilityLiveRegion="polite"
                       numberOfLines={1}
@@ -315,7 +317,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
                         { color: theme.colors.textSecondary, height: 20 * fontScale },
                       ]}
                     >
-                      {successStatus || ' '}
+                      {successStatus}
                     </Text>
                   )}
                   <TouchableOpacity
@@ -421,10 +423,21 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
 
 const ContentPreview: React.FC<{ content: ClipboardContent }> = ({ content }) => {
   const { theme } = useTheme();
+  const [imageAspectRatio, setImageAspectRatio] = useState(1);
 
   if (content.type === 'Image' && content.fileUri) {
     return (
-      <Image source={{ uri: content.fileUri }} style={styles.previewImage} resizeMode="contain" />
+      <Image
+        source={{ uri: content.fileUri }}
+        style={[styles.previewImage, { aspectRatio: imageAspectRatio }]}
+        resizeMode="contain"
+        onLoad={({ nativeEvent: { source } }) => {
+          const ratio = source.width / source.height;
+          if (source.width > 0 && source.height > 0 && Number.isFinite(ratio)) {
+            setImageAspectRatio(ratio);
+          }
+        }}
+      />
     );
   }
 
@@ -488,7 +501,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
   },
   successTitle: {
     fontSize: 18,
@@ -535,7 +548,7 @@ const styles = StyleSheet.create({
   },
   successActions: {
     width: '100%',
-    gap: 10,
+    gap: 8,
   },
   successButton: {
     paddingHorizontal: 8,
@@ -616,7 +629,6 @@ const styles = StyleSheet.create({
   },
   previewImage: {
     width: '100%',
-    aspectRatio: 1,
     maxHeight: 320,
     borderRadius: 12,
   },
@@ -657,7 +669,8 @@ const styles = StyleSheet.create({
   },
   overlayCard: {
     borderRadius: 16,
-    paddingVertical: 28,
+    paddingTop: 16,
+    paddingBottom: 8,
     paddingHorizontal: 24,
     width: '85%',
     alignSelf: 'center',
