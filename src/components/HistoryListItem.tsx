@@ -135,7 +135,6 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
       width: number;
       height: number;
     } | null>(null);
-    const [containerWidth, setContainerWidth] = useState<number>(0);
 
     const getTypeIcon = (type: string): string => {
       switch (type) {
@@ -221,7 +220,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
           pressed && !isMultiSelectMode && { opacity: 0.7 },
         ]}
       >
-        <View style={isMultiSelectMode ? styles.multiSelectRow : undefined}>
+        <View style={styles.itemRow}>
           {/* 多选模式勾选框 - 在 item 边框外 */}
           {isMultiSelectMode && (
             <View style={styles.checkboxContainer}>
@@ -240,7 +239,6 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                 borderColor: isSelected ? theme.colors.primary : theme.colors.divider,
               },
               isSelected && styles.containerSelected,
-              isMultiSelectMode && styles.containerMultiSelect,
             ]}
           >
             {/* 顶部内容区 */}
@@ -282,20 +280,14 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
 
             {/* 图片预览 - 占据整个宽度（仅当有本地文件时显示） */}
             {item.type === 'Image' && item.fileUri && (
-              <View
-                style={styles.imagePreviewContainer}
-                onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
-              >
+              <View style={styles.imagePreviewContainer}>
                 {showFullImage ? (
                   <Image
                     source={{ uri: item.fileUri }}
                     style={[
                       styles.imagePreview,
-                      imageDimensions && containerWidth > 0
-                        ? {
-                            height:
-                              (containerWidth / imageDimensions.width) * imageDimensions.height,
-                          }
+                      imageDimensions && imageDimensions.width > 0 && imageDimensions.height > 0
+                        ? { aspectRatio: imageDimensions.width / imageDimensions.height }
                         : styles.imagePreviewLimited,
                     ]}
                     resizeMode="cover"
@@ -700,19 +692,18 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   container: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'column',
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
   },
-  containerMultiSelect: {
-    flex: 1,
-    minWidth: 0,
-  },
   containerSelected: {
     borderWidth: 2,
   },
-  multiSelectRow: {
+  // 两种模式保持相同主轴，避免切换方向时复用旧的主轴尺寸缓存。
+  itemRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
