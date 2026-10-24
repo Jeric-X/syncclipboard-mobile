@@ -15,7 +15,10 @@ interface ShizukuClipboardModuleInterface {
   startPrimaryClipChangedListener(): Promise<boolean>;
   stopPrimaryClipChangedListener(): Promise<void>;
   addListener(
-    eventName: 'onPrimaryClipChanged' | 'onPrimaryClipListenerUnavailable',
+    eventName:
+      | 'onPrimaryClipChanged'
+      | 'onPrimaryClipListenerUnavailable'
+      | 'onPrimaryClipListenerAvailable',
     listener: () => void
   ): EventSubscription;
 }
@@ -94,33 +97,43 @@ export async function getImageUriViaShizuku(): Promise<string | null> {
 }
 
 /**
- * 在 Shizuku 的 shell UserService 中注册系统剪贴板事件；返回 null 表示无法启用。
+ * 订阅剪贴板及连接状态；暂时不可用时保留订阅用于重连，返回 null 表示平台不支持。
  */
 export async function subscribeToPrimaryClipChanges(
   callback: () => void,
-  onUnavailable?: () => void
+  onUnavailable?: () => void,
+  onAvailable?: () => void
 ): Promise<(() => Promise<void>) | null> {
   if (!NativeModule) return null;
 
   const subscription = NativeModule.addListener('onPrimaryClipChanged', callback);
-  const unavailableSubscription = onUnavailable
-    ? NativeModule.addListener('onPrimaryClipListenerUnavailable', onUnavailable)
-    : null;
-  try {
-    if (!(await NativeModule.startPrimaryClipChangedListener())) {
-      subscription.remove();
-      unavailableSubscription?.remove();
-      return null;
+  let receivedStateEvent = false;
+  const unavailableSubscription = NativeModule.addListener(
+    'onPrimaryClipListenerUnavailable',
+    () => {
+      receivedStateEvent = true;
+      onUnavailable?.();
     }
-  } catch (e) {
-    subscription.remove();
-    unavailableSubscription?.remove();
-    throw e;
+  );
+  const availableSubscription = NativeModule.addListener('onPrimaryClipListenerAvailable', () => {
+    receivedStateEvent = true;
+    onAvailable?.();
+  });
+  try {
+    const ready = await NativeModule.startPrimaryClipChangedListener();
+    if (!receivedStateEvent) {
+      if (ready) onAvailable?.();
+      else onUnavailable?.();
+    }
+  } catch (error) {
+    console.warn('[ShizukuClipboard] Listener unavailable; waiting for reconnection:', error);
+    if (!receivedStateEvent) onUnavailable?.();
   }
 
   return async () => {
     subscription.remove();
     unavailableSubscription?.remove();
+    availableSubscription?.remove();
     await NativeModule.stopPrimaryClipChangedListener();
   };
 }
