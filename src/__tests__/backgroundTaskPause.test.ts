@@ -1,4 +1,4 @@
-import { updateBackgroundTaskPause } from '../utils/backgroundTaskPause';
+import { updateBackgroundTaskPause } from '../services/BackgroundRuntimeState';
 
 describe('explicit background task resume', () => {
   function setup(initialReason: string | null) {
