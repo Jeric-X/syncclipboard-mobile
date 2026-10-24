@@ -9,12 +9,14 @@ import { AppConfig } from '../types/storage';
 import { ServerConfig } from '../types/api';
 import { ConflictResolution } from '../types/sync';
 import { configService } from '../services/ConfigService';
-import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
+import {
+  backgroundRuntimeState,
+  updateBackgroundTaskPause,
+} from '../services/BackgroundRuntimeState';
 import type { NetworkAutoSwitchUpdate, NetworkAutoSwitchRule } from '../types/networkAutoSwitch';
 import { createStableId } from '../utils/id';
 import { normalizeNetworkRule, validateNetworkRule } from '../utils/networkAutoSwitch';
 import { networkAutoSwitchService } from '../services/NetworkAutoSwitchService';
-import { updateBackgroundTaskPause } from '../utils/backgroundTaskPause';
 import { ConfigModule, ConfigModuleUpdates, pickModuleUpdates } from '../types/configModules';
 
 /**
