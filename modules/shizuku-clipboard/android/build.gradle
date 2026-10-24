@@ -21,6 +21,8 @@ dependencies {
   implementation 'com.facebook.react:react-native:0.83.2'
   implementation 'androidx.core:core-ktx:1.13.1'
   implementation project(':native-util')
+  implementation project(':foreground-service')
+  testImplementation 'junit:junit:4.13.2'
 
   // Shizuku API
   def shizuku_version = "13.1.5"
