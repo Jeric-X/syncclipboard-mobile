@@ -20,8 +20,7 @@ import { updateForegroundNotification } from '../notification/ForegroundNotifica
 import { historyService } from '../history/HistoryService';
 import { calculateTextHash } from '../../utils/hash';
 import i18n from '@/i18n';
-import { logStartupPoint } from '../../utils/startupTiming';
-import { getStartupElapsedMs } from '../../utils/startupClock';
+import { logStartupPoint, getStartupElapsedMs } from '../StartupTiming';
 
 const STARTUP_BASELINE_WINDOW_MS = 2_000;
 

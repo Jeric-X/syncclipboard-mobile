@@ -13,7 +13,7 @@ import { historyStorage } from '../../storage/HistoryStorage';
 import { prepareTempFilePath, CLIPBOARD_TEMP_DIR } from '@/utils/fileStorage';
 import { nativeSetClipboardImageFromFile } from 'native-util';
 import i18n from '@/i18n';
-import { measureStartup } from '@/utils/startupTiming';
+import { measureStartup } from '@/services/StartupTiming';
 
 /**
  * 剪贴板复制生命周期回调，由外部模块（如 ClipboardMonitor）注册

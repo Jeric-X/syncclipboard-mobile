@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getLocales } from 'expo-localization';
 import i18n from '../i18n';
 import {
+  resolveLanguagePreference,
   initializeRuntimeLanguage,
   getRuntimeLanguageState,
   setRuntimeLanguage,
@@ -81,4 +82,18 @@ it('存储失败时回退系统语言，仍允许启动后台任务', async () =
   } finally {
     error.mockRestore();
   }
+});
+
+it.each([
+  ['zh', 'en', 'zh'],
+  ['zh-CN', 'en', 'zh'],
+  ['zh_TW', 'en', 'zh'],
+  ['en', 'zh', 'en'],
+  ['en-US', 'zh', 'en'],
+  ['auto', 'zh-CN', 'zh'],
+  ['auto', 'en', 'en'],
+  [null, 'zh', 'zh'],
+  [null, null, 'zh'],
+])('语言偏好 %s、系统 %s 解析为 %s', (saved, system, expected) => {
+  expect(resolveLanguagePreference(saved, system)).toBe(expected);
 });

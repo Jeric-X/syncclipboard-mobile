@@ -9,7 +9,7 @@ import { ClipboardContent, ClipboardChangeCallback, ClipboardMonitorOptions } fr
 import { setTimer, clearTimer } from 'native-timer';
 import { subscribeToPrimaryClipChanges } from 'shizuku-clipboard';
 import { isShizukuClipboardRequested } from '@/utils/clipboardProxy';
-import { logStartupPoint, measureStartup } from '@/utils/startupTiming';
+import { logStartupPoint, measureStartup } from '@/services/StartupTiming';
 
 /**
  * 剪贴板监听器类

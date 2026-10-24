@@ -14,7 +14,7 @@ import { profileDtoToContent } from '../../utils/clipboard/convert';
 import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
 import { DedupedOperation } from '../../utils/DedupedOperation';
-import { logStartupPoint, measureStartup } from '../../utils/startupTiming';
+import { logStartupPoint, measureStartup } from '../StartupTiming';
 
 /** 远程剪贴板变化回调：仅在内容哈希变化时触发 */
 export type RemoteClipboardChangedCallback = (content: ClipboardContent) => void;

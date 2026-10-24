@@ -11,8 +11,7 @@ import { longRunningTaskManager } from '../longRunningTask/LongRunningTaskManage
 import { useSettingsStore } from '../stores/settingsStore';
 import { initLogger } from '../utils/Logger';
 import { dismissOverlay } from '../utils/clipboardProxy';
-import { logStartupPoint, measureStartup } from '../utils/startupTiming';
-import { getStartupElapsedMs } from '../utils/startupClock';
+import { logStartupPoint, measureStartup, getStartupElapsedMs } from './StartupTiming';
 import { prepareAppFoundation } from './AppFoundation';
 
 let initializing: Promise<void> | null = null;
