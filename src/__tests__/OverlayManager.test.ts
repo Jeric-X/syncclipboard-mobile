@@ -41,7 +41,11 @@ test('headless startup loads settings, live toggles update the window, and stop 
     showing = false;
     return true;
   });
-  const config = { ...DEFAULT_APP_CONFIG, enableOverlayKeepAlive: true };
+  const config = {
+    ...DEFAULT_APP_CONFIG,
+    enableBackgroundTasks: true,
+    enableOverlayKeepAlive: true,
+  };
   let load!: (value: typeof config) => void;
   jest.mocked(configService.getConfig).mockReturnValueOnce(
     new Promise((resolve) => {
@@ -59,6 +63,12 @@ test('headless startup loads settings, live toggles update the window, and stop 
   await settle();
   expect(showing).toBe(true);
   expect(await acquireClipboardOverlay()).toBeNull();
+  update({ ...config, enableBackgroundTasks: false });
+  await settle();
+  expect(showing).toBe(false);
+  update(config);
+  await settle();
+  expect(showing).toBe(true);
   update({ ...config, debugMode: true, debugOverlayVisible: true });
   await settle();
   expect(overlayModule.setDebugMode).toHaveBeenLastCalledWith(true);

@@ -1,5 +1,6 @@
 /** 共享悬浮窗的配置；保活与剪贴板读取分别持有使用权。 */
 export interface OverlayConfig {
+  enableBackgroundTasks: boolean;
   enableClipboardOverlay: boolean;
   enableOverlayKeepAlive: boolean;
   debugMode: boolean;
@@ -43,7 +44,9 @@ export class OverlayLifecycle {
       this.startups.size > 0 ||
       this.reads > 0 ||
       this.clipboardIdle ||
-      (!!this.config?.enableOverlayKeepAlive && this.sessions.size > 0);
+      (!!this.config?.enableBackgroundTasks &&
+        !!this.config?.enableOverlayKeepAlive &&
+        this.sessions.size > 0);
     if (needed && this.deps.hasPermission()) {
       if (!this.deps.isShowing()) await this.deps.show();
     } else if (this.deps.isShowing()) {
