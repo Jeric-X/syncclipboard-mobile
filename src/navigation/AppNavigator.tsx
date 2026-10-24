@@ -11,11 +11,11 @@ import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from 'react-i18next';
 import { HomeScreen } from '@/screens/HomeScreen';
 import { HistoryScreen } from '@/screens/HistoryScreen';
-import { SettingsScreen } from '@/screens/SettingsScreen';
+import { SettingsScreen } from '@/screens/settings/SettingsScreen';
 import { createStackNavigator, type StackCardStyleInterpolator } from '@react-navigation/stack';
-import { NetworkAutoSwitchScreen } from '@/screens/NetworkAutoSwitchScreen';
-import { NetworkRuleEditorScreen } from '@/screens/NetworkRuleEditorScreen';
-import { CurrentNetworkScreen } from '@/screens/CurrentNetworkScreen';
+import { NetworkAutoSwitchScreen } from '@/screens/settings/NetworkAutoSwitchScreen';
+import { NetworkRuleEditorScreen } from '@/screens/settings/NetworkRuleEditorScreen';
+import { CurrentNetworkScreen } from '@/screens/settings/CurrentNetworkScreen';
 import type { SettingsStackParamList } from './types';
 
 const Tab = createBottomTabNavigator();
@@ -46,6 +46,7 @@ const SettingsStackNavigator = () => {
     <SettingsStack.Navigator
       screenOptions={{
         headerStyle: { backgroundColor: theme.colors.surface },
+        headerShadowVisible: false,
         headerTintColor: theme.colors.text,
         cardStyle: { backgroundColor: theme.colors.background },
         cardStyleInterpolator: forHorizontalSlide,
@@ -58,6 +59,11 @@ const SettingsStackNavigator = () => {
         name="SettingsMain"
         component={SettingsScreen}
         options={{ title: t('nav.settings') }}
+      />
+      <SettingsStack.Screen
+        name="SettingsDetail"
+        component={SettingsScreen}
+        options={({ route }) => ({ title: t(`settings.${route.params.section}`) })}
       />
       <SettingsStack.Screen
         name="NetworkAutoSwitch"

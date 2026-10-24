@@ -41,6 +41,9 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
 
+      - name: Run Kotlin unit tests
+        run: cd android && ./gradlew -I ../.github/gradle/local-unit-tests.gradle testLocalReleaseUnitTest --console=plain
+
       - name: Build Release APK
         run: cd android && ./gradlew assembleRelease
 

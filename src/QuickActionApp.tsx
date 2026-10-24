@@ -21,7 +21,7 @@ import { DirectShareReceiveScreen } from './screens/DirectShareReceiveScreen';
 import { SyncDirection } from './types/sync';
 import { useSettingsStore } from './stores';
 import { initLogger } from './utils/Logger';
-import { longRunningTaskManager } from './longRunningTask/LongRunningTaskManager';
+import { requestServiceRuntime } from './services/ServiceRuntime';
 import { networkAutoSwitchService } from './services/NetworkAutoSwitchService';
 
 export interface ShareData {
@@ -52,7 +52,9 @@ export default function QuickActionApp({
 }: QuickActionAppProps) {
   const syncDirection = direction === 'upload' ? SyncDirection.Upload : SyncDirection.Download;
   const { loadConfig, isLoaded } = useSettingsStore();
-  const [isRuntimeReady, setIsRuntimeReady] = useState(Platform.OS !== 'android');
+  const [isServerSelectionComplete, setIsServerSelectionComplete] = useState(
+    Platform.OS !== 'android'
+  );
 
   useEffect(() => {
     initLogger();
@@ -69,7 +71,7 @@ export default function QuickActionApp({
     if (!isLoaded || Platform.OS !== 'android') return;
 
     let cancelled = false;
-    const initializeRuntime = async (): Promise<void> => {
+    const prepareQuickAction = async (): Promise<void> => {
       try {
         await networkAutoSwitchService.ensureCurrentServer();
       } catch (error) {
@@ -77,12 +79,15 @@ export default function QuickActionApp({
       }
 
       if (cancelled) return;
-      longRunningTaskManager.startAll().catch(() => {});
-      setIsRuntimeReady(true);
+      // 后台任务由 Headless 初始化；请求失败或未就绪不阻塞用户操作界面。
+      void requestServiceRuntime().catch((error) => {
+        console.error('[QuickActionApp] Runtime initialization failed:', error);
+      });
+      setIsServerSelectionComplete(true);
     };
 
-    initializeRuntime().catch(() => {
-      if (!cancelled) setIsRuntimeReady(true);
+    prepareQuickAction().catch(() => {
+      if (!cancelled) setIsServerSelectionComplete(true);
     });
 
     return () => {
@@ -94,7 +99,7 @@ export default function QuickActionApp({
     BackHandler.exitApp();
   }, []);
 
-  if (!isLoaded || !isRuntimeReady) return null;
+  if (!isLoaded || !isServerSelectionComplete) return null;
 
   // Share mode: receive shared content from other apps (direct data, not via expo-sharing)
   if (shareMode && shareData) {

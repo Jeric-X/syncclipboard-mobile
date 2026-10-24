@@ -99,6 +99,14 @@ export interface AppConfig {
   /** 是否在后台时使用悬浮窗获取剪贴板（仅 Android） */
   enableClipboardOverlay: boolean;
 
+  /** 在 Headless 服务运行期间通过共享悬浮窗保活（仅 Android） */
+  enableOverlayKeepAlive: boolean;
+
+  /** 显示快捷设置磁贴时尝试恢复后台任务（仅 Android） */
+  enableTileRecovery: boolean;
+  /** 通过 Shizuku 独立进程在应用意外退出后恢复后台同步 */
+  enableShizukuRecovery: boolean;
+
   /** 是否使用 Shizuku 在后台获取剪贴板（仅 Android） */
   enableShizukuClipboard: boolean;
 
@@ -111,11 +119,17 @@ export interface AppConfig {
   /** 调试时显示 URL Scheme 调用（Toast 通知） */
   debugUrlScheme: boolean;
 
+  /** 冷启动时显示 Toast，包括无界面的 Headless 启动（仅 Android）。 */
+  debugColdStartToast: boolean;
+
   /** 调试时跳过更新检查每日一次的限制，每次启动都检查 */
   debugUpdateCheckNoLimit: boolean;
 
   /** 启用前台服务常驻通知 */
   enableForegroundNotification: boolean;
+
+  /** 前台服务被系统回收后是否允许 Sticky 重建 */
+  enableForegroundServiceSticky: boolean;
 
   /** 同步后发送 Toast 通知（上传/下载完成时） */
   syncToastEnabled: boolean;
@@ -329,13 +343,18 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   enableBackgroundTasks: false, // 默认关闭后台任务总开关
   enableBackgroundDownload: false, // 默认关闭后台下载远程
   enableBackgroundUpload: false, // 默认关闭后台上传本地
+  enableOverlayKeepAlive: false, // 默认关闭悬浮窗保活
+  enableShizukuRecovery: false, // 默认关闭 Shizuku 恢复
+  enableTileRecovery: false, // 默认关闭快捷设置被动恢复
   enableClipboardOverlay: false, // 默认关闭悬浮窗获取剪贴板
   enableShizukuClipboard: false, // 默认关闭 Shizuku 获取剪贴板
   enableSmsForwarding: false, // 默认关闭自动上传短信验证码
   debugOverlayVisible: false, // 默认不显示悬浮窗
   debugUrlScheme: false, // 默认不显示 URL Scheme 调用
+  debugColdStartToast: false,
   debugUpdateCheckNoLimit: false, // 默认不跳过每日更新检查限制
   enableForegroundNotification: true, // 默认启用前台服务常驻通知
+  enableForegroundServiceSticky: true, // 保持既有 Sticky 行为
   syncToastEnabled: true, // 默认开启同步 Toast 通知
   hideFromRecents: false, // 默认不隐藏最近任务
   historyImageAutoDownload: 'wifi', // 默认 Wi-Fi 网络自动下载

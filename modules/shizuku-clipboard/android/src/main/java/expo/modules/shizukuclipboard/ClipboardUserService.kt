@@ -1,5 +1,6 @@
 package expo.modules.shizukuclipboard
 
+import android.app.PendingIntent
 import android.content.ClipData
 import android.content.ClipDescription
 import android.os.Binder
@@ -425,7 +426,26 @@ class ClipboardUserService : IClipboardUserService.Stub() {
         }
     }
 
+    private val recoveryWatch = RecoveryWatch()
+
+    override fun watchRecovery(callerToken: IBinder, recovery: PendingIntent) {
+        recoveryWatch.watch(callerToken, recovery)
+    }
+
+    override fun clearRecoveryWatch(callerToken: IBinder) {
+        recoveryWatch.clear(callerToken)
+    }
+
+    override fun reportRecoveryStartupFailed(callerToken: IBinder) {
+        recoveryWatch.startupFailed(callerToken)
+    }
+
+    override fun acknowledgeRecoveryReady(callerToken: IBinder) {
+        recoveryWatch.ready(callerToken)
+    }
+
     override fun destroy() {
+        recoveryWatch.close()
         android.util.Log.i(TAG, "UserService destroy called, exiting process")
         synchronized(clientLifecycleLock) {
             clients.values.toList().forEach { client ->

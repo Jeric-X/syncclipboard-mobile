@@ -15,6 +15,7 @@ import {
   TouchableWithoutFeedback,
   BackHandler,
   ScrollView,
+  useWindowDimensions,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '@/hooks/useTheme';
@@ -29,6 +30,10 @@ export interface SuccessButtonConfig {
   label: string;
   onPress: () => void;
   primary?: boolean;
+  icon?: React.ComponentType<{ width: number; height: number; color: string }>;
+  disabled?: boolean;
+  busy?: boolean;
+  fullWidth?: boolean;
 }
 
 export interface QuickLoadingPageProps {
@@ -39,13 +44,18 @@ export interface QuickLoadingPageProps {
   onComplete: () => void;
   successContent?: ClipboardContent;
   successButtons?: SuccessButtonConfig[];
+  successError?: string;
+  /** 提供字符串时预留单行状态区域，避免操作进度变化导致按钮布局跳动。 */
+  successStatus?: string;
+  /** 成功后保留预览的时间；不设置时沿用原有关闭行为。 */
+  autoCloseDelayMs?: number;
   progress?: ProgressInfo | null;
   previewText?: string;
   previewImage?: string;
   /** When true, renders as a floating card over a semi-transparent backdrop (for transparent Activity). */
   overlayMode?: boolean;
-  /** When true, tapping the backdrop does nothing (used during active save operations). */
-  disableBackdropClose?: boolean;
+  /** 保存或复制期间，禁止通过返回按钮、系统返回键或背景关闭。 */
+  disableDismiss?: boolean;
 }
 
 export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
@@ -56,14 +66,19 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
   onComplete,
   successContent,
   successButtons,
+  successError,
+  successStatus,
+  autoCloseDelayMs,
   progress,
   previewText,
   previewImage,
   overlayMode,
-  disableBackdropClose,
+  disableDismiss,
 }) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
+  const { fontScale } = useWindowDimensions();
+  const secondaryButtonSize = { minWidth: 44 + 40 * fontScale };
   const [state, setState] = useState<LoadingState>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -111,18 +126,23 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
     onComplete();
   }, [onComplete]);
 
-  // 成功后：无 successContent 且无 successButtons 时自动关闭
+  // 成功后：指定延迟时先展示预览，否则无内容、无操作时立即关闭。
   // 放在独立 useEffect 中，确保在 React 批处理完成、父组件更新 successButtons prop 后再判断
   useEffect(() => {
     if (state !== 'success') return;
+    if (autoCloseDelayMs !== undefined) {
+      const timer = setTimeout(onComplete, autoCloseDelayMs);
+      return () => clearTimeout(timer);
+    }
     if (successContent !== undefined || (successButtons && successButtons.length > 0)) return;
     // 无需显示成功界面，直接退出
     onComplete();
-  }, [state, successContent, successButtons, onComplete]);
+  }, [state, successContent, successButtons, onComplete, autoCloseDelayMs]);
 
   // 返回键：loading 时允许取消；error / success-with-content/extra 时允许离开
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (disableDismiss) return true;
       if (state === 'loading') {
         handleCancel();
         return true;
@@ -138,7 +158,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
       return false;
     });
     return () => sub.remove();
-  }, [state, successContent, successButtons, onComplete, handleCancel]);
+  }, [state, successContent, successButtons, onComplete, handleCancel, disableDismiss]);
 
   const containerBg = overlayMode
     ? { backgroundColor: 'transparent' }
@@ -157,6 +177,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
 
   const contentView = (
     <View
+      onStartShouldSetResponder={() => true}
       style={[
         styles.content,
         overlayMode && [
@@ -166,98 +187,199 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
         ],
       ]}
     >
-      {state === 'loading' && (
-        <>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.statusText, { color: theme.colors.text }]}>{loadingText}</Text>
-          {previewImage && (
-            <Image source={{ uri: previewImage }} style={styles.loadingPreviewImage} />
-          )}
-          {previewText && (
-            <Text style={[styles.loadingPreviewText, { color: theme.colors.textSecondary }]}>
-              {previewText}
-            </Text>
-          )}
-          {progress && (progress.totalBytes > 0 || progress.bytesTransferred > 0) && (
-            <View style={styles.progressContainer}>
-              <View style={[styles.progressBar, { backgroundColor: theme.colors.border }]}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    progressFillDynamic,
-                    progress.totalBytes <= 0 && styles.progressFillIndeterminate,
-                  ]}
-                />
-              </View>
-              <Text style={[styles.progressText, { color: theme.colors.textSecondary }]}>
-                {progress.totalBytes > 0
-                  ? `${(progress.progress * 100).toFixed(0)}% ${formatFileSize(
-                      progress.bytesTransferred
-                    )} / ${formatFileSize(progress.totalBytes)}`
-                  : formatFileSize(progress.bytesTransferred)}
+      <ScrollView style={styles.contentScroll} contentContainerStyle={styles.scrollContent}>
+        {state === 'loading' && (
+          <>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={[styles.statusText, { color: theme.colors.text }]}>{loadingText}</Text>
+            {previewImage && (
+              <Image source={{ uri: previewImage }} style={styles.loadingPreviewImage} />
+            )}
+            {previewText && (
+              <Text style={[styles.loadingPreviewText, { color: theme.colors.textSecondary }]}>
+                {previewText}
               </Text>
-            </View>
-          )}
-          <TouchableOpacity
-            style={[
-              styles.button,
-              styles.buttonOutline,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-            ]}
-            onPress={handleCancel}
-          >
-            <Text style={[styles.buttonText, { color: theme.colors.text }]}>
-              {t('common.cancel')}
-            </Text>
-          </TouchableOpacity>
-        </>
-      )}
+            )}
+            {progress && (progress.totalBytes > 0 || progress.bytesTransferred > 0) && (
+              <View style={styles.progressContainer}>
+                <View style={[styles.progressBar, { backgroundColor: theme.colors.border }]}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      progressFillDynamic,
+                      progress.totalBytes <= 0 && styles.progressFillIndeterminate,
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.progressText, { color: theme.colors.textSecondary }]}>
+                  {progress.totalBytes > 0
+                    ? `${(progress.progress * 100).toFixed(0)}% ${formatFileSize(
+                        progress.bytesTransferred
+                      )} / ${formatFileSize(progress.totalBytes)}`
+                    : formatFileSize(progress.bytesTransferred)}
+                </Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={[
+                styles.button,
+                styles.buttonOutline,
+                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+              ]}
+              onPress={handleCancel}
+            >
+              <Text style={[styles.buttonText, { color: theme.colors.text }]}>
+                {t('common.cancel')}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
 
-      {state === 'success' && (
-        <>
-          {successContent && <ContentPreview content={successContent} />}
-          {!(successButtons && successButtons.length > 0) && (
-            <>
-              <Text style={[styles.successIcon, { color: theme.colors.success }]}>✓</Text>
-              <Text style={[styles.statusText, { color: theme.colors.text }]}>{successText}</Text>
-            </>
-          )}
-          {(successContent !== undefined || (successButtons && successButtons.length > 0)) && (
-            <View style={styles.successButtonRow}>
-              {successButtons?.map((btn, index) => (
+        {state === 'success' && (
+          <>
+            {(successContent !== undefined || !!successButtons?.length) && (
+              <Text style={[styles.successTitle, { color: theme.colors.text }]}>{successText}</Text>
+            )}
+            {successContent && <ContentPreview content={successContent} />}
+            {successContent === undefined && !successButtons?.length && (
+              <>
+                <Text style={[styles.successIcon, { color: theme.colors.success }]}>✓</Text>
+                <Text style={[styles.statusText, { color: theme.colors.text }]}>{successText}</Text>
+              </>
+            )}
+            {autoCloseDelayMs !== undefined ? (
+              <Text style={[styles.autoReturnText, { color: theme.colors.textSecondary }]}>
+                {t('common.autoReturning')}
+              </Text>
+            ) : (
+              (successContent !== undefined || (successButtons && successButtons.length > 0)) && (
+                <View style={styles.successActions}>
+                  {successError && (
+                    <Text
+                      accessibilityRole="alert"
+                      style={[styles.errorDetailText, { color: theme.colors.error }]}
+                    >
+                      {successError}
+                    </Text>
+                  )}
+                  <View style={styles.successButtonRow}>
+                    {successButtons?.map((btn, index) => {
+                      const Icon = btn.icon;
+                      const fullWidth = btn.primary || btn.fullWidth;
+                      const color = btn.primary ? theme.colors.white : theme.colors.text;
+                      return (
+                        <TouchableOpacity
+                          key={index}
+                          accessibilityRole="button"
+                          accessibilityLabel={btn.label}
+                          accessibilityState={{ disabled: btn.disabled, busy: btn.busy }}
+                          disabled={btn.disabled}
+                          style={[
+                            styles.button,
+                            styles.successButton,
+                            fullWidth
+                              ? styles.fullWidthButton
+                              : [styles.secondaryButton, secondaryButtonSize],
+                            btn.disabled && styles.disabledButton,
+                            btn.primary
+                              ? { backgroundColor: theme.colors.primary }
+                              : [
+                                  styles.buttonOutline,
+                                  {
+                                    backgroundColor: theme.colors.surface,
+                                    borderColor: theme.colors.border,
+                                  },
+                                ],
+                          ]}
+                          onPress={btn.onPress}
+                        >
+                          {btn.busy ? (
+                            <ActivityIndicator size="small" color={color} />
+                          ) : (
+                            Icon && <Icon width={18} height={18} color={color} />
+                          )}
+                          <Text style={[styles.buttonText, styles.actionButtonText, { color }]}>
+                            {btn.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  {successStatus !== undefined && (
+                    <Text
+                      accessibilityLiveRegion="polite"
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      style={[
+                        styles.actionStatus,
+                        { color: theme.colors.textSecondary, height: 20 * fontScale },
+                      ]}
+                    >
+                      {successStatus || ' '}
+                    </Text>
+                  )}
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={t('common.back')}
+                    accessibilityState={{ disabled: disableDismiss }}
+                    disabled={disableDismiss}
+                    style={[
+                      styles.button,
+                      styles.backButton,
+                      disableDismiss && styles.disabledButton,
+                    ]}
+                    onPress={onComplete}
+                  >
+                    <Text style={[styles.buttonText, { color: theme.colors.textSecondary }]}>
+                      {t('common.back')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )
+            )}
+          </>
+        )}
+
+        {state === 'error' && (
+          <>
+            <Text style={[styles.errorIcon, { color: theme.colors.error }]}>✗</Text>
+            <Text style={[styles.statusText, { color: theme.colors.text }]}>{failureText}</Text>
+            {errorMessage && (
+              <ScrollView
+                style={[styles.errorDetailScroll, { borderColor: theme.colors.border }]}
+                contentContainerStyle={styles.errorDetailScrollContent}
+              >
+                <Text style={[styles.errorDetailText, { color: theme.colors.textTertiary }]}>
+                  {errorMessage}
+                </Text>
+              </ScrollView>
+            )}
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: theme.colors.primary }]}
+                onPress={run}
+              >
+                <Text style={[styles.buttonText, { color: theme.colors.white }]}>
+                  {t('common.retry')}
+                </Text>
+              </TouchableOpacity>
+              {errorMessage && (
                 <TouchableOpacity
-                  key={index}
                   style={[
                     styles.button,
-                    styles.successButton,
-                    btn.primary
-                      ? { backgroundColor: theme.colors.primary }
-                      : [
-                          styles.buttonOutline,
-                          {
-                            backgroundColor: theme.colors.surface,
-                            borderColor: theme.colors.border,
-                          },
-                        ],
+                    styles.buttonOutline,
+                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
                   ]}
-                  onPress={btn.onPress}
+                  onPress={() => Clipboard.setStringAsync(errorMessage)}
                 >
-                  <Text
-                    style={[
-                      styles.buttonText,
-                      { color: btn.primary ? theme.colors.white : theme.colors.text },
-                    ]}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                  >
-                    {btn.label}
+                  <Text style={[styles.buttonText, { color: theme.colors.text }]}>
+                    {t('common.copy')}
                   </Text>
                 </TouchableOpacity>
-              ))}
+              )}
               <TouchableOpacity
                 style={[
                   styles.button,
-                  styles.successButton,
                   styles.buttonOutline,
                   { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
                 ]}
@@ -268,62 +390,9 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
                 </Text>
               </TouchableOpacity>
             </View>
-          )}
-        </>
-      )}
-
-      {state === 'error' && (
-        <>
-          <Text style={[styles.errorIcon, { color: theme.colors.error }]}>✗</Text>
-          <Text style={[styles.statusText, { color: theme.colors.text }]}>{failureText}</Text>
-          {errorMessage && (
-            <ScrollView
-              style={[styles.errorDetailScroll, { borderColor: theme.colors.border }]}
-              contentContainerStyle={styles.errorDetailScrollContent}
-            >
-              <Text style={[styles.errorDetailText, { color: theme.colors.textTertiary }]}>
-                {errorMessage}
-              </Text>
-            </ScrollView>
-          )}
-          <View style={styles.buttonRow}>
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: theme.colors.primary }]}
-              onPress={run}
-            >
-              <Text style={[styles.buttonText, { color: theme.colors.white }]}>
-                {t('common.retry')}
-              </Text>
-            </TouchableOpacity>
-            {errorMessage && (
-              <TouchableOpacity
-                style={[
-                  styles.button,
-                  styles.buttonOutline,
-                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-                ]}
-                onPress={() => Clipboard.setStringAsync(errorMessage)}
-              >
-                <Text style={[styles.buttonText, { color: theme.colors.text }]}>
-                  {t('common.copy')}
-                </Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={[
-                styles.button,
-                styles.buttonOutline,
-                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-              ]}
-              onPress={onComplete}
-            >
-              <Text style={[styles.buttonText, { color: theme.colors.text }]}>
-                {t('common.back')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
+          </>
+        )}
+      </ScrollView>
     </View>
   );
 
@@ -331,8 +400,9 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
     <View style={[styles.container, containerBg]}>
       {overlayMode ? (
         <TouchableWithoutFeedback
+          accessible={false}
           onPress={() => {
-            if (disableBackdropClose) return;
+            if (disableDismiss) return;
             if (state !== 'loading') onComplete();
           }}
         >
@@ -410,7 +480,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'stretch',
     paddingHorizontal: 24,
+    maxHeight: '90%',
+  },
+  contentScroll: {
+    width: '100%',
+    flexGrow: 0,
+  },
+  scrollContent: {
+    alignItems: 'center',
     gap: 16,
+  },
+  successTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  autoReturnText: {
+    fontSize: 13,
+    textAlign: 'center',
   },
   statusText: {
     fontSize: 16,
@@ -442,15 +529,46 @@ const styles = StyleSheet.create({
   },
   successButtonRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
+    flexWrap: 'wrap',
+    gap: 8,
     width: '100%',
   },
+  successActions: {
+    width: '100%',
+    gap: 10,
+  },
   successButton: {
-    flex: 1,
     paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  fullWidthButton: {
+    width: '100%',
+  },
+  secondaryButton: {
+    flexGrow: 1,
+    flexBasis: 0,
+  },
+  actionButtonText: {
+    flexShrink: 1,
+  },
+  actionStatus: {
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+    width: '100%',
+  },
+  backButton: {
+    width: '100%',
+    justifyContent: 'center',
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
   button: {
+    minHeight: 48,
     paddingHorizontal: 28,
     paddingVertical: 10,
     borderRadius: 8,
@@ -503,8 +621,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   previewTextBox: {
-    width: 280,
-    maxHeight: 160,
+    width: '100%',
     borderRadius: 8,
     borderWidth: 1,
     padding: 12,
@@ -514,7 +631,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   previewFileBox: {
-    width: 280,
+    width: '100%',
     borderRadius: 8,
     borderWidth: 1,
     padding: 12,

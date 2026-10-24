@@ -11,6 +11,7 @@
  */
 
 import { Platform } from 'react-native';
+import { setStaticReceiverEnabled } from 'sms-forwarder';
 import { LongRunningTask } from './LongRunningTask';
 import { configService } from '../services/ConfigService';
 
@@ -32,12 +33,7 @@ class SmsForwardingTask extends LongRunningTask {
     if (!this._running) return;
     this._running = false;
 
-    try {
-      const { setStaticReceiverEnabled } = require('sms-forwarder');
-      setStaticReceiverEnabled(false);
-    } catch (e) {
-      console.error('[SmsForwardingTask] Failed to disable SMS receiver on stop:', e);
-    }
+    // 静态短信接收器独立于同步运行时，停止 JS 任务不能撤销已保存的短信设置。
   }
 
   isRunning(): boolean {
@@ -53,7 +49,6 @@ class SmsForwardingTask extends LongRunningTask {
   private async _applyConfig(): Promise<void> {
     try {
       const config = await configService.getConfig();
-      const { setStaticReceiverEnabled } = require('sms-forwarder');
       setStaticReceiverEnabled(!!config?.enableSmsForwarding);
     } catch (e) {
       console.error('[SmsForwardingTask] Failed to toggle SMS receiver:', e);

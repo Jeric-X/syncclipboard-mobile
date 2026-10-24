@@ -1,6 +1,6 @@
 /**
  * ServiceRestartApp
- * 极简 RN 根组件，用于后台服务被系统重启后引导 JS 运行时启动。
+ * 恢复失败时由用户点击通知打开的备用入口；正常系统重启由 Headless JS 直接恢复。
  * 显示一个短暂的"✓ 服务已恢复"提示，0.5 秒后自动关闭。
  * 注册为 "serviceRestart"（独立于 "main" 入口）。
  */
@@ -12,7 +12,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { I18nProvider } from './contexts/I18nContext';
 import { useSettingsStore } from './stores';
 import { initLogger } from './utils/Logger';
-import { longRunningTaskManager } from './longRunningTask/LongRunningTaskManager';
+import { requestServiceRuntime } from './services/ServiceRuntime';
 import { useTranslation } from 'react-i18next';
 
 interface ServiceRestartAppProps {
@@ -39,7 +39,11 @@ function ServiceRestartContent({ systemTheme }: ServiceRestartAppProps) {
   useEffect(() => {
     if (!isLoaded || Platform.OS !== 'android') return;
 
-    longRunningTaskManager.startAll().finally(() => setReady(true));
+    requestServiceRuntime(true)
+      .catch((error) => {
+        console.error('[ServiceRestartApp] Runtime initialization failed:', error);
+      })
+      .finally(() => setReady(true));
   }, [isLoaded]);
 
   // 自动关闭：短暂展示"服务已恢复"后退出，后台服务持续运行（JS 运行时由前台服务保持存活）

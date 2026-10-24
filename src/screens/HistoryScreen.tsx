@@ -648,7 +648,9 @@ export function HistoryScreen() {
 
           if (!shouldReorganize) {
             console.log('[HistoryScreen] Skipped history reorganization (sync re-enabled)');
-            await useSettingsStore.getState().updateConfig({ needsHistoryReorganize: false });
+            await useSettingsStore
+              .getState()
+              .updateModule('history', { needsHistoryReorganize: false });
           } else {
             setIsReorganizing(true);
             console.log('[HistoryScreen] Starting history reorganization...');
@@ -667,7 +669,9 @@ export function HistoryScreen() {
               await syncService.cleanupRemoteHistorys(abortController.signal);
               await historyStorage.cleanupByCount();
               console.log('[HistoryScreen] History reorganization completed');
-              await useSettingsStore.getState().updateConfig({ needsHistoryReorganize: false });
+              await useSettingsStore
+                .getState()
+                .updateModule('history', { needsHistoryReorganize: false });
             } catch (error) {
               if (error instanceof DOMException && error.name === 'AbortError') {
                 console.log('[HistoryScreen] History reorganization cancelled');

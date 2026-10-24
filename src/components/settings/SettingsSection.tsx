@@ -12,6 +12,9 @@ export interface SettingsSectionProps {
   /** 组标题 */
   title: string;
 
+  /** 组内设置共用的说明 */
+  description?: string;
+
   /** 标题右侧内容，如刷新按钮 */
   headerRight?: React.ReactNode;
 
@@ -21,6 +24,7 @@ export interface SettingsSectionProps {
 
 export const SettingsSection: React.FC<SettingsSectionProps> = ({
   title,
+  description,
   headerRight,
   children,
 }) => {
@@ -46,6 +50,11 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{title}</Text>
         {headerRight}
       </View>
+      {description && (
+        <Text style={[styles.sectionDescription, { color: theme.colors.textTertiary }]}>
+          {description}
+        </Text>
+      )}
       <View
         style={[
           styles.card,
@@ -79,6 +88,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  sectionDescription: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    fontSize: 13,
+    lineHeight: 18,
   },
   card: {
     marginHorizontal: 16,
