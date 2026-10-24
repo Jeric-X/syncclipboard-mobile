@@ -135,7 +135,6 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
       width: number;
       height: number;
     } | null>(null);
-    const [containerWidth, setContainerWidth] = useState<number>(0);
 
     const getTypeIcon = (type: string): string => {
       switch (type) {
@@ -282,20 +281,14 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
 
             {/* 图片预览 - 占据整个宽度（仅当有本地文件时显示） */}
             {item.type === 'Image' && item.fileUri && (
-              <View
-                style={styles.imagePreviewContainer}
-                onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
-              >
+              <View style={styles.imagePreviewContainer}>
                 {showFullImage ? (
                   <Image
                     source={{ uri: item.fileUri }}
                     style={[
                       styles.imagePreview,
-                      imageDimensions && containerWidth > 0
-                        ? {
-                            height:
-                              (containerWidth / imageDimensions.width) * imageDimensions.height,
-                          }
+                      imageDimensions && imageDimensions.width > 0 && imageDimensions.height > 0
+                        ? { aspectRatio: imageDimensions.width / imageDimensions.height }
                         : styles.imagePreviewLimited,
                     ]}
                     resizeMode="cover"
@@ -707,6 +700,8 @@ const styles = StyleSheet.create({
   },
   containerMultiSelect: {
     flex: 1,
+    // 竖图的测量宽度可能大于可用空间，多选时必须允许卡片收缩。
+    flexShrink: 1,
     minWidth: 0,
   },
   containerSelected: {
