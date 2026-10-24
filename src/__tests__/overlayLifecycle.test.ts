@@ -27,6 +27,7 @@ function setup() {
   };
   const lifecycle = new OverlayLifecycle(deps);
   const config: OverlayConfig = {
+    enableBackgroundTasks: true,
     enableClipboardOverlay: true,
     enableOverlayKeepAlive: true,
     debugMode: false,
@@ -223,4 +224,45 @@ test('failed startup acquisition leaves no window demand behind', async () => {
   await expect(lifecycle.acquireStartup()).rejects.toThrow('cannot attach');
   await lifecycle.updateConfig(config);
   expect(showing()).toBe(false);
+});
+
+test('background master toggle removes and restores keep-alive for an existing session', async () => {
+  const { lifecycle, config, showing } = setup();
+  await lifecycle.updateConfig(config);
+  const stop = lifecycle.acquireKeepAlive();
+  await lifecycle.updateConfig(config);
+  expect(showing()).toBe(true);
+  await lifecycle.updateConfig({ ...config, enableBackgroundTasks: false });
+  expect(showing()).toBe(false);
+  await lifecycle.setForeground(true);
+  expect(showing()).toBe(false);
+  await lifecycle.updateConfig(config);
+  expect(showing()).toBe(true);
+  await stop();
+});
+
+test('master disabled before a session prevents keep-alive but permits temporary startup', async () => {
+  const { lifecycle, config, showing } = setup();
+  await lifecycle.updateConfig({ ...config, enableBackgroundTasks: false });
+  const stop = lifecycle.acquireKeepAlive();
+  await lifecycle.setForeground(false);
+  expect(showing()).toBe(false);
+  const release = await lifecycle.acquireStartup();
+  expect(showing()).toBe(true);
+  await release!();
+  expect(showing()).toBe(false);
+  await stop();
+});
+
+test('master disable preserves an active clipboard read until its normal release', async () => {
+  const { lifecycle, config, showing } = setup();
+  await lifecycle.updateConfig(config);
+  const stop = lifecycle.acquireKeepAlive();
+  const release = await lifecycle.acquireClipboard();
+  await lifecycle.updateConfig({ ...config, enableBackgroundTasks: false });
+  await lifecycle.dismissClipboard();
+  expect(showing()).toBe(true);
+  await release!();
+  expect(showing()).toBe(false);
+  await stop();
 });

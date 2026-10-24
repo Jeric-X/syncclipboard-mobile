@@ -5,7 +5,7 @@
 
 import type { IHistoryAPI } from '@/api/history';
 import { HistoryRecordDto, HistoryRecordUpdateDto, ProfileTypeFilter } from '@/types/history';
-import { dtoToHistoryItem } from '@/utils/clipboard/convert';
+import { dtoToHistoryItem, historyItemToDto } from '@/utils/clipboard/convert';
 import { HistoryAPINotInitializedError, SyncConflictError, RecordNotFoundError } from '@/errors';
 import { HistoryStorage } from '../../storage/HistoryStorage';
 import { HistoryItem, HistorySyncStatus, isLocalFileReady } from '@/types/clipboard';
@@ -18,6 +18,10 @@ import {
   setHistoryLastSyncTime,
   removeHistoryLastSyncTime,
 } from '../../storage/SyncStateStorage';
+
+import { configStorage } from '../../storage/ConfigStorage';
+import { getHistoryTransferQueue } from './HistoryTransferQueue';
+import { createHistoryAPI } from '../../api/history/HistoryAPIFactory';
 
 const MAX_TIME_DIFFERENCE_MS = 5 * 60 * 1000; // 5 分钟
 
@@ -44,6 +48,8 @@ export class HistorySyncService {
   private serverConfig: ServerConfig | null = null;
   private lastSyncTime: number | null = null;
   private isSyncing = false;
+  private syncOperation: Promise<void> | null = null;
+  private syncVersion = 0;
   private syncAbortController: AbortController | null = null;
   private reorganizeAbortController: AbortController | null = null;
   private progressCallbacks: Set<SyncProgressCallback> = new Set();
@@ -59,7 +65,6 @@ export class HistorySyncService {
    * 检查历史记录同步是否启用
    */
   private async isHistorySyncEnabled(): Promise<boolean> {
-    const { configStorage } = await import('../../storage/ConfigStorage');
     const config = await configStorage.getConfig();
     return config?.enableHistorySync ?? false;
   }
@@ -83,7 +88,6 @@ export class HistorySyncService {
     await this.loadLastSyncTime();
 
     // 初始化传输队列
-    const { getHistoryTransferQueue } = await import('./HistoryTransferQueue');
     const transferQueue = getHistoryTransferQueue();
     transferQueue.setHistoryAPI(config.historyAPI);
     await transferQueue.start();
@@ -116,7 +120,6 @@ export class HistorySyncService {
     this.cancelSync();
 
     // 停止传输队列
-    const { getHistoryTransferQueue } = await import('./HistoryTransferQueue');
     const transferQueue = getHistoryTransferQueue();
     await transferQueue.stop();
   }
@@ -128,6 +131,8 @@ export class HistorySyncService {
     // 取消当前同步
     this.cancelSync();
 
+    const version = this.syncVersion;
+
     // 重置同步时间，触发全量同步
     this.lastSyncTime = null;
     await this.saveLastSyncTime();
@@ -137,23 +142,38 @@ export class HistorySyncService {
     this.serverConfig = config.serverConfig;
 
     // 更新传输队列 API
-    const { getHistoryTransferQueue } = await import('./HistoryTransferQueue');
     const transferQueue = getHistoryTransferQueue();
     transferQueue.setHistoryAPI(config.historyAPI);
 
-    // 触发同步
-    await this.syncAll();
+    // 生命周期只等待本地配置；旧同步退出后在后台同步最新服务器。
+    const previous = this.syncOperation;
+    void (async () => {
+      await previous?.catch(() => {});
+      if (version !== this.syncVersion || this.historyAPI !== config.historyAPI) return;
+      await this.syncAll();
+    })().catch((error) => {
+      console.error('[HistorySyncService] Background server sync failed:', error);
+    });
   }
 
   /**
    * 全量同步
    */
   async syncAll(progressCallback?: SyncProgressCallback): Promise<void> {
-    return this.executeSync(true, progressCallback);
+    return this.runSync(true, progressCallback);
   }
 
   async syncIncremental(progressCallback?: SyncProgressCallback): Promise<void> {
-    return this.executeSync(false, progressCallback);
+    return this.runSync(false, progressCallback);
+  }
+
+  private runSync(isFullSync: boolean, progressCallback?: SyncProgressCallback): Promise<void> {
+    if (this.syncOperation) return this.syncOperation;
+    const operation = this.executeSync(isFullSync, progressCallback).finally(() => {
+      if (this.syncOperation === operation) this.syncOperation = null;
+    });
+    this.syncOperation = operation;
+    return operation;
   }
 
   private async executeSync(
@@ -171,60 +191,62 @@ export class HistorySyncService {
       throw new HistoryAPINotInitializedError();
     }
 
-    if (!(await this.isHistorySyncEnabled())) {
-      console.log('[HistorySyncService] Sync is disabled');
-      return;
-    }
-
     this.isSyncing = true;
-    this.syncAbortController = new AbortController();
+    const controller = new AbortController();
+    this.syncAbortController = controller;
 
     if (progressCallback) {
       this.progressCallbacks.add(progressCallback);
     }
 
     try {
+      if (!(await this.isHistorySyncEnabled()) || controller.signal.aborted) return;
       await this.notifyProgress({ phase: 'fetching', message: '校验服务器时间...' });
-      await this.validateServerTime(this.syncAbortController.signal);
+      await this.validateServerTime(controller.signal);
 
+      this.throwIfSyncAborted(controller.signal);
       await this.notifyProgress({ phase: 'fetching', message: '获取远程记录...' });
-      const remoteRecords = await this.fetchRemoteRecords(
-        this.syncAbortController.signal,
-        lastSyncTime
-      );
+      const remoteRecords = await this.fetchRemoteRecords(controller.signal, lastSyncTime);
 
+      this.throwIfSyncAborted(controller.signal);
       if (remoteRecords.length > 0) {
         await this.notifyProgress({
           phase: 'merging',
           message: '合并记录...',
           total: remoteRecords.length,
         });
-        await this.mergeRemoteRecords(remoteRecords, this.syncAbortController.signal);
+        await this.mergeRemoteRecords(remoteRecords, controller.signal);
       }
 
       if (isFullSync) {
+        this.throwIfSyncAborted(controller.signal);
         await this.notifyProgress({ phase: 'merging', message: '检测孤儿数据...' });
-        await this.detectOrphanData(remoteRecords, this.syncAbortController.signal);
+        await this.detectOrphanData(remoteRecords, controller.signal);
       }
 
+      this.throwIfSyncAborted(controller.signal);
       await this.notifyProgress({ phase: 'pushing', message: '推送本地变更...' });
-      await this.pushLocalChanges(this.syncAbortController.signal);
+      await this.pushLocalChanges(controller.signal);
 
+      this.throwIfSyncAborted(controller.signal);
       await this.notifyProgress({ phase: 'pushing', message: '上传本地记录...' });
-      await this.pushLocalOnlyRecords(this.syncAbortController.signal);
+      await this.pushLocalOnlyRecords(controller.signal);
 
+      this.throwIfSyncAborted(controller.signal);
       await this.notifyProgress({ phase: 'pushing', message: '清理过期记录...' });
       const cleanedCount = await this.historyStorage.cleanupExpiredSoftDeletes();
       if (cleanedCount > 0) {
         console.log(`[HistorySyncService] Cleaned ${cleanedCount} expired soft-deleted records`);
       }
 
+      this.throwIfSyncAborted(controller.signal);
       this.lastSyncTime = Date.now();
       await this.saveLastSyncTime();
 
+      this.throwIfSyncAborted(controller.signal);
       await this.notifyProgress({ phase: 'completed', message: '同步完成' });
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
         console.log('[HistorySyncService] Sync cancelled');
         await this.notifyProgress({ phase: 'error', message: '同步已取消' });
       } else {
@@ -245,10 +267,15 @@ export class HistorySyncService {
     }
   }
 
+  private throwIfSyncAborted(signal: AbortSignal): void {
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+  }
+
   /**
    * 取消同步
    */
   cancelSync(): void {
+    this.syncVersion += 1;
     if (this.syncAbortController) {
       this.syncAbortController.abort();
     }
@@ -652,7 +679,6 @@ export class HistorySyncService {
 
       // hasData === false: 上传元数据
       try {
-        const { historyItemToDto } = await import('@/utils/clipboard/convert');
         const dto = historyItemToDto(item);
 
         console.log(`[HistorySyncService] Uploading LocalOnly record: ${item.profileHash}`);
@@ -757,7 +783,6 @@ export class HistorySyncService {
     }
 
     try {
-      const { historyItemToDto } = await import('@/utils/clipboard/convert');
       const dto = historyItemToDto(item);
 
       const createdRecord = await this.historyAPI.uploadRecord(dto);
@@ -1093,7 +1118,6 @@ export class HistorySyncService {
   }
 
   async ensureInitialized(serverConfig: ServerConfig): Promise<boolean> {
-    const { createHistoryAPI } = await import('../../api/history/HistoryAPIFactory');
     const historyAPI = createHistoryAPI(serverConfig);
 
     if (!historyAPI) {
