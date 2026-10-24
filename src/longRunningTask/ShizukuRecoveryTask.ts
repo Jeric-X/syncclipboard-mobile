@@ -6,7 +6,7 @@ import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
 import type { AppConfig } from '../types/storage';
 
-/** 守护只恢复用户允许的后台同步；原生注册与剪贴板读取方式无关。 */
+/** 守护只恢复用户允许的后台任务；原生注册与上传下载、剪贴板读取方式无关。 */
 export class ShizukuRecoveryTask extends LongRunningTask {
   readonly name = 'shizukuRecovery';
   private running = false;
@@ -71,11 +71,7 @@ export class ShizukuRecoveryTask extends LongRunningTask {
   }
 
   private isConfigEnabled(config: AppConfig): boolean {
-    return (
-      config.enableShizukuRecovery === true &&
-      config.enableBackgroundTasks &&
-      (config.enableBackgroundUpload || config.enableBackgroundDownload)
-    );
+    return config.enableShizukuRecovery === true && config.enableBackgroundTasks;
   }
 
   private apply(): void {

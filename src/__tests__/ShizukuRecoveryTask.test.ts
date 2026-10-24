@@ -21,7 +21,7 @@ const enabledConfig: AppConfig = {
   enableBackgroundTasks: true,
   enableShizukuRecovery: true,
   enableForegroundNotification: true,
-  enableBackgroundDownload: true,
+  enableBackgroundDownload: false,
   enableBackgroundUpload: false,
   enableShizukuClipboard: false,
 };
@@ -69,6 +69,22 @@ it('guards independently of clipboard, foreground notification and Sticky settin
   expect(setRecoveryEnabled).toHaveBeenLastCalledWith(true);
 });
 
+it('arms recovery when both background upload and download are disabled', async () => {
+  await task.start();
+  expect(setRecoveryEnabled).toHaveBeenLastCalledWith(true);
+});
+
+it('keeps watching when both sync directions are disabled while running', async () => {
+  (configService.getConfig as jest.Mock).mockResolvedValue({
+    ...enabledConfig,
+    enableBackgroundUpload: true,
+    enableBackgroundDownload: true,
+  });
+  await task.start();
+  changed(enabledConfig);
+  expect(setRecoveryEnabled).toHaveBeenLastCalledWith(true);
+});
+
 it('keeps watching when foreground notifications are disabled while running', async () => {
   await task.start();
   changed({ ...enabledConfig, enableForegroundNotification: false });
@@ -79,7 +95,6 @@ it.each([
   { enableShizukuRecovery: false },
   { enableShizukuRecovery: undefined },
   { enableBackgroundTasks: false },
-  { enableBackgroundDownload: false, enableBackgroundUpload: false },
 ])('immediately revokes on saved configuration changes: %j', async (flags) => {
   await task.start();
   changed({ ...enabledConfig, ...flags } as AppConfig);
