@@ -31,7 +31,7 @@ export const ServerSettings = ({ showMessage }: SettingsModuleProps) => {
     updateServer,
     deleteServer,
     setActiveServer,
-    updateConfig,
+    updateModule,
     updateNetworkAutoSwitch,
   } = useSettingsStore();
 
@@ -111,7 +111,7 @@ export const ServerSettings = ({ showMessage }: SettingsModuleProps) => {
 
     try {
       await setActiveServer(index);
-      await updateConfig({ needsHistoryReorganize: true });
+      await updateModule('history', { needsHistoryReorganize: true });
       showMessage(t('settings.serverSwitched'), 'success');
     } catch (error: unknown) {
       showMessage(error instanceof Error ? error.message : t('common.operationFailed'), 'error');

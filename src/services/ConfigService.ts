@@ -12,6 +12,9 @@ import { configStorage } from '../storage/ConfigStorage';
 import type { AppConfig } from '../types/storage';
 import type { ServerConfig } from '../types/api';
 
+import type { ConfigModule, ConfigModuleUpdates } from '../types/configModules';
+import type { NetworkAutoSwitchUpdate } from '../types/networkAutoSwitch';
+
 type ConfigChangeListener = (config: AppConfig) => void;
 
 class ConfigServiceClass {
@@ -44,8 +47,19 @@ class ConfigServiceClass {
   // ─── 写入（均返回最新 AppConfig 并通知订阅者）────────────────
 
   /** 更新配置字段 */
-  async updateConfig(updates: Partial<AppConfig>): Promise<AppConfig> {
-    await configStorage.updateConfig(updates);
+  async updateModule<K extends ConfigModule>(
+    module: K,
+    updates: ConfigModuleUpdates<K>
+  ): Promise<AppConfig> {
+    await configStorage.updateModule(module, updates);
+    const config = await configStorage.getConfig();
+    this._emit(config);
+    return config;
+  }
+
+  /** 网络自动切换只合并提交的子字段，不回写其他配置。 */
+  async updateNetworkAutoSwitch(updates: NetworkAutoSwitchUpdate): Promise<AppConfig> {
+    await configStorage.updateNetworkAutoSwitch(updates);
     const config = await configStorage.getConfig();
     this._emit(config);
     return config;

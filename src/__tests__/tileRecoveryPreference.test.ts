@@ -6,7 +6,12 @@ import { DEFAULT_APP_CONFIG, type AppConfig } from '../types/storage';
 jest.mock('foreground-service', () => ({ setTileRecoveryEnabled: jest.fn() }));
 jest.mock('../services/NetworkAutoSwitchService', () => ({ networkAutoSwitchService: {} }));
 jest.mock('../services/ConfigService', () => ({
-  configService: { getConfig: jest.fn(), updateConfig: jest.fn(), subscribe: jest.fn() },
+  configService: {
+    getConfig: jest.fn(),
+    updateModule: jest.fn(),
+    updateNetworkAutoSwitch: jest.fn(),
+    subscribe: jest.fn(),
+  },
 }));
 
 // 使用真实 settingsStore 的配置加载和服务订阅，验证原生冷启动许可。
@@ -56,7 +61,20 @@ it('配置保存失败时 UI 乐观更新不能启用原生恢复', async () => 
   useSettingsStore.setState({
     config: { ...DEFAULT_APP_CONFIG, enableBackgroundTasks: true },
   });
-  (configService.updateConfig as jest.Mock).mockRejectedValue(new Error('disk full'));
-  await useSettingsStore.getState().updateConfig({ enableTileRecovery: true });
+  (configService.updateModule as jest.Mock).mockRejectedValue(new Error('disk full'));
+  await useSettingsStore.getState().updateModule('background', { enableTileRecovery: true });
   expect(ForegroundService.setTileRecoveryEnabled).not.toHaveBeenCalled();
+});
+
+it('网络设置保存失败通过 store 记录错误，不产生未处理拒绝', async () => {
+  useSettingsStore.setState({ config: { ...DEFAULT_APP_CONFIG }, error: null });
+  (configService.updateNetworkAutoSwitch as jest.Mock).mockRejectedValueOnce(
+    new Error('disk full')
+  );
+  await expect(
+    useSettingsStore.getState().updateNetworkAutoSwitch({ enabled: true })
+  ).resolves.toBeUndefined();
+  expect(useSettingsStore.getState().error).toBe('disk full');
+  expect(useSettingsStore.getState().isSaving).toBe(false);
+  expect(useSettingsStore.getState().config?.networkAutoSwitch.enabled).toBe(false);
 });

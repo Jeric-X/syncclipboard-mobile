@@ -11,7 +11,7 @@ jest.mock('foreground-service', () => ({
   finishHeadlessRuntime: jest.fn(),
 }));
 jest.mock('../services/ConfigService', () => ({
-  configService: { getConfig: jest.fn(), updateConfig: jest.fn() },
+  configService: { getConfig: jest.fn(), updateModule: jest.fn() },
 }));
 jest.mock('../services/BackgroundRuntimeState', () => ({
   backgroundRuntimeState: { setTempDisabled: jest.fn() },
@@ -66,7 +66,7 @@ describe('service runtime bootstrap', () => {
       return 'runtime-1';
     });
     (configService.getConfig as jest.Mock).mockResolvedValue({ enableBackgroundTasks: true });
-    (configService.updateConfig as jest.Mock).mockResolvedValue({ enableBackgroundTasks: false });
+    (configService.updateModule as jest.Mock).mockResolvedValue({ enableBackgroundTasks: false });
     (longRunningTaskManager.startAll as jest.Mock).mockResolvedValue(undefined);
   });
 
@@ -100,8 +100,10 @@ describe('service runtime bootstrap', () => {
   it('persists a stop received before JS was ready before starting any tasks', async () => {
     stopReason = 'stop';
     await startServiceRuntime();
-    expect(configService.updateConfig).toHaveBeenCalledWith({ enableBackgroundTasks: false });
-    expect((configService.updateConfig as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
+    expect(configService.updateModule).toHaveBeenCalledWith('background', {
+      enableBackgroundTasks: false,
+    });
+    expect((configService.updateModule as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
       (longRunningTaskManager.startAll as jest.Mock).mock.invocationCallOrder[0]
     );
     expect(stopReason).toBe('stop');
@@ -304,7 +306,7 @@ describe('Headless controlled shutdown', () => {
     AppState.currentState = 'active';
     (ForegroundService.getSessionId as jest.Mock).mockReturnValue('control-1');
     (ForegroundService.getStopReason as jest.Mock).mockReturnValue(null);
-    (configService.updateConfig as jest.Mock).mockResolvedValue({ enableBackgroundTasks: false });
+    (configService.updateModule as jest.Mock).mockResolvedValue({ enableBackgroundTasks: false });
     (longRunningTaskManager.stopAll as jest.Mock).mockResolvedValue(undefined);
     (ForegroundService.finishHeadlessRuntime as jest.Mock).mockResolvedValue(undefined);
   });
@@ -312,7 +314,9 @@ describe('Headless controlled shutdown', () => {
   it('lets Headless persist stop, clean tasks, then finish its own session even with UI active', async () => {
     await stopServiceRuntime('control-1', 'stop');
     expect(backgroundRuntimeState.setTempDisabled).toHaveBeenCalledWith(true);
-    expect(configService.updateConfig).toHaveBeenCalledWith({ enableBackgroundTasks: false });
+    expect(configService.updateModule).toHaveBeenCalledWith('background', {
+      enableBackgroundTasks: false,
+    });
     expect(longRunningTaskManager.stopAll).toHaveBeenCalledTimes(1);
     expect(ForegroundService.finishHeadlessRuntime).toHaveBeenCalledWith('control-1');
     expect((longRunningTaskManager.stopAll as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
@@ -326,7 +330,7 @@ describe('Headless controlled shutdown', () => {
     const second = stopServiceRuntime('control-1', 'temporary');
     expect(first).toBe(second);
     await first;
-    expect(configService.updateConfig).not.toHaveBeenCalled();
+    expect(configService.updateModule).not.toHaveBeenCalled();
     expect(longRunningTaskManager.stopAll).toHaveBeenCalledTimes(1);
   });
 
@@ -338,7 +342,7 @@ describe('Headless controlled shutdown', () => {
   });
 
   it('cleans tasks and ends the session even when saving the preference fails', async () => {
-    (configService.updateConfig as jest.Mock).mockRejectedValueOnce(new Error('disk failed'));
+    (configService.updateModule as jest.Mock).mockRejectedValueOnce(new Error('disk failed'));
     await expect(stopServiceRuntime('control-1', 'stop')).rejects.toThrow('disk failed');
     expect(longRunningTaskManager.stopAll).toHaveBeenCalledTimes(1);
     expect(ForegroundService.finishHeadlessRuntime).toHaveBeenCalledWith('control-1');
@@ -349,7 +353,9 @@ describe('Headless controlled shutdown', () => {
       (ForegroundService.getStopReason as jest.Mock).mockReturnValue('stop');
     });
     await stopServiceRuntime('control-1', 'temporary');
-    expect(configService.updateConfig).toHaveBeenCalledWith({ enableBackgroundTasks: false });
+    expect(configService.updateModule).toHaveBeenCalledWith('background', {
+      enableBackgroundTasks: false,
+    });
   });
 
   it('waits for controlled shutdown before an explicit foreground request can resume', async () => {
