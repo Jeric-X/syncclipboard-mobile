@@ -8,7 +8,7 @@ import { LocalClipboard } from './LocalClipboard';
 import { ClipboardContent, ClipboardChangeCallback, ClipboardMonitorOptions } from '@/types';
 import { setTimer, clearTimer } from 'native-timer';
 import { subscribeToPrimaryClipChanges } from 'shizuku-clipboard';
-import { isShizukuClipboardEnabled } from '@/utils/clipboardProxy';
+import { isShizukuClipboardRequested } from '@/utils/clipboardProxy';
 import { logStartupPoint, measureStartup } from '@/utils/startupTiming';
 
 /**
@@ -20,6 +20,10 @@ export class ClipboardMonitor {
   private isMonitoring: boolean = false;
   private pollingTimerTag: string | null = null;
   private nativeClipboardListenerCleanup: (() => Promise<void>) | null = null;
+  private nativeClipboardListenerReady = false;
+  private nativeClipboardListenerGeneration = 0;
+  private nativeClipboardListenerOperation: Promise<unknown> = Promise.resolve();
+  private monitoringGeneration = 0;
   private lastContent: ClipboardContent | null = null;
 
   /**
@@ -35,6 +39,7 @@ export class ClipboardMonitor {
   };
 
   private isChecking: boolean = false;
+  private recheckAfterReconnect = false;
   private checkGeneration: number = 0;
 
   constructor(clipboardManager: LocalClipboard, options?: ClipboardMonitorOptions) {
@@ -83,12 +88,14 @@ export class ClipboardMonitor {
    * 启动或恢复剪贴板监控传输层，不检查当前是否已处于监控状态。
    */
   async startMonitoring(): Promise<void> {
+    const generation = ++this.monitoringGeneration;
     // 事件监听在非 Android 平台会直接返回 false，统一回退至轮询。
     const eventListening = await measureStartup('local.installListener', () =>
       this.startNativeClipboardListener()
     );
+    if (!this.isMonitoring || generation !== this.monitoringGeneration) return;
     logStartupPoint('local.listenerReady', { eventListening });
-    if (!eventListening) this.startPolling();
+    if (this.isMonitoring && !eventListening && !this.pollingTimerTag) this.startPolling();
     void this.checkClipboard();
   }
 
@@ -109,6 +116,8 @@ export class ClipboardMonitor {
   }
 
   async stopMonitoring(): Promise<void> {
+    this.monitoringGeneration++;
+    this.recheckAfterReconnect = false;
     // 停止轮询与事件监听
     this.checkGeneration++;
     this.stopPolling();
@@ -167,50 +176,83 @@ export class ClipboardMonitor {
     }
   }
 
-  private async startNativeClipboardListener(): Promise<boolean> {
-    if (Platform.OS !== 'android') return false;
-    if (this.nativeClipboardListenerCleanup) return true;
+  /** 原生 start/stop 串行执行，避免旧订阅清理误取消新订阅。 */
+  private queueNativeListenerOperation<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = this.nativeClipboardListenerOperation.then(operation);
+    this.nativeClipboardListenerOperation = pending.catch(() => undefined);
+    return pending;
+  }
 
+  private startNativeClipboardListener(): Promise<boolean> {
+    const generation = this.nativeClipboardListenerGeneration;
+    return this.queueNativeListenerOperation(() => this.installNativeClipboardListener(generation));
+  }
+
+  private async installNativeClipboardListener(generation: number): Promise<boolean> {
+    if (Platform.OS !== 'android') return false;
+    const isCurrent = () =>
+      this.isMonitoring && generation === this.nativeClipboardListenerGeneration;
+
+    if (!isCurrent()) return false;
+    if (this.nativeClipboardListenerCleanup) return this.nativeClipboardListenerReady;
     try {
-      if (!(await isShizukuClipboardEnabled())) {
+      if (!(await isShizukuClipboardRequested())) {
         return false;
       }
+      if (!isCurrent()) return false;
       const cleanup = await subscribeToPrimaryClipChanges(
         () => {
+          if (!isCurrent()) return;
           console.log('[ClipboardMonitor] Shizuku primary-clip event received');
           // 系统回调只表示“可能变更”；读取并使用既有哈希逻辑去重。
           void this.checkClipboard();
         },
         () => {
-          void this.fallbackToPollingAfterNativeListenerLoss();
+          if (isCurrent()) this.fallbackToPollingAfterNativeListenerLoss();
+        },
+        () => {
+          if (!isCurrent()) return;
+          this.nativeClipboardListenerReady = true;
+          this.stopPolling();
+          console.log('[ClipboardMonitor] Shizuku primary-clip event listener restored');
+          // 重新注册不会补发断线期间的事件；已有读取在途时，结束后补读。
+          this.recheckAfterReconnect = true;
+          void this.checkClipboard();
         }
       );
       if (!cleanup) {
         return false;
       }
+      if (!isCurrent()) {
+        await cleanup();
+        return false;
+      }
       this.nativeClipboardListenerCleanup = cleanup;
-      this.stopPolling();
-      console.log('[ClipboardMonitor] Using Shizuku primary-clip event listener');
-      return true;
+      return this.nativeClipboardListenerReady;
     } catch (e) {
       console.warn('[ClipboardMonitor] Failed to start Shizuku event listener:', e);
       return false;
     }
   }
 
-  private async stopNativeClipboardListener(): Promise<void> {
-    const cleanup = this.nativeClipboardListenerCleanup;
-    this.nativeClipboardListenerCleanup = null;
-    if (!cleanup) return;
-    try {
-      await cleanup();
-    } catch (e) {
-      console.warn('[ClipboardMonitor] Failed to stop Shizuku event listener:', e);
-    }
+  private stopNativeClipboardListener(): Promise<void> {
+    this.nativeClipboardListenerGeneration++;
+    this.nativeClipboardListenerReady = false;
+    return this.queueNativeListenerOperation(async () => {
+      const cleanup = this.nativeClipboardListenerCleanup;
+      this.nativeClipboardListenerCleanup = null;
+      if (!cleanup) return;
+      try {
+        await cleanup();
+      } catch (e) {
+        console.warn('[ClipboardMonitor] Failed to stop Shizuku event listener:', e);
+      }
+    });
   }
 
-  private async fallbackToPollingAfterNativeListenerLoss(): Promise<void> {
-    await this.stopNativeClipboardListener();
+  private fallbackToPollingAfterNativeListenerLoss(): void {
+    // 保留订阅和原生连接需求；只有停止监控或关闭获取开关才注销。
+    this.nativeClipboardListenerReady = false;
     if (this.isMonitoring && !this.pollingTimerTag) {
       console.warn('[ClipboardMonitor] Shizuku listener unavailable; falling back to polling');
       this.startPolling();
@@ -221,14 +263,18 @@ export class ClipboardMonitor {
   async refreshListeningMode(): Promise<void> {
     if (!this.isMonitoring || Platform.OS !== 'android') return;
 
-    const shouldUseEvents = await isShizukuClipboardEnabled();
+    const generation = this.monitoringGeneration;
+    const shouldUseEvents = await isShizukuClipboardRequested();
+    if (!this.isMonitoring || generation !== this.monitoringGeneration) return;
     if (shouldUseEvents) {
       if (await this.startNativeClipboardListener()) return;
     } else {
       await this.stopNativeClipboardListener();
     }
 
-    if (!this.pollingTimerTag) this.startPolling();
+    if (this.isMonitoring && generation === this.monitoringGeneration && !this.pollingTimerTag) {
+      this.startPolling();
+    }
   }
 
   /**
@@ -239,6 +285,7 @@ export class ClipboardMonitor {
     // 互斥锁：如果上一次检查还在进行中（大图片 hash 计算耗时），跳过本次
     if (this.isChecking) return;
     this.isChecking = true;
+    this.recheckAfterReconnect = false;
     const gen = this.checkGeneration;
     try {
       const content = await measureStartup('local.readContent', () =>
@@ -263,6 +310,10 @@ export class ClipboardMonitor {
       console.error('[ClipboardMonitor] Failed to check clipboard:', error);
     } finally {
       this.isChecking = false;
+      if (this.recheckAfterReconnect) {
+        this.recheckAfterReconnect = false;
+        void this.checkClipboard();
+      }
     }
   }
 

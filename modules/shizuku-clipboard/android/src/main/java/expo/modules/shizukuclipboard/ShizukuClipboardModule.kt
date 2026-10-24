@@ -55,14 +55,14 @@ class ShizukuClipboardModule : Module() {
     private val recoveryOwner = UUID.randomUUID().toString()
     private val recoveryLock = Any()
     @Volatile private var recoveryRequested = false
-    private val recoveryRebind = RecoveryRebind(
+    private val userServiceRebind = UserServiceRebind(
         schedule = { delayMs, callback ->
             val runnable = Runnable { callback() }
             mainHandler.postDelayed(runnable, delayMs)
             val cancel: () -> Unit = { mainHandler.removeCallbacks(runnable) }
             cancel
         },
-        canBind = { recoveryRequested && hasPermission() && !serviceConnected && !isBinding },
+        canBind = { hasPermission() && !serviceConnected && !isBinding },
         bind = { bindUserService(); Unit }
     )
 
@@ -101,7 +101,7 @@ class ShizukuClipboardModule : Module() {
             override fun onServiceDisconnected(name: ComponentName?) {
                 NativeLogger.w(TAG, "UserService disconnected")
                 if (markConnectionFailed(this)) {
-                    recoveryRebind.disconnected()
+                    userServiceRebind.disconnected()
                     if (clipboardListenerRequested) sendClipboardListenerUnavailable()
                 }
             }
@@ -171,13 +171,14 @@ class ShizukuClipboardModule : Module() {
         val publishedService = connectedService
         if (publishedService != null) {
             NativeLogger.i(TAG, "UserService bound successfully")
-            recoveryRebind.cancel()
             restoreRecoveryWatch(publishedService)
-            if (clipboardListenerRequested) {
-                restoreClipboardListenerAfterConnection(publishedService)
+            restoreClipboardListenerAfterConnection(publishedService)
+            // 监听 API 不可用时仍保留读取连接，让 JS 轮询兜底。
+            synchronized(connectionOperationLock) {
+                if (serviceConnected && clipboardService === publishedService) userServiceRebind.cancel()
             }
         } else if (notifyUnavailable) {
-            recoveryRebind.failed()
+            userServiceRebind.failed()
             if (clipboardListenerRequested) sendClipboardListenerUnavailable()
         }
     }
@@ -186,7 +187,7 @@ class ShizukuClipboardModule : Module() {
         Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
             if (requestCode == REQUEST_CODE_PERMISSION) {
                 if (grantResult == PackageManager.PERMISSION_GRANTED) {
-                    recoveryRebind.cancel()
+                    userServiceRebind.cancel()
                     bindUserService()
                 }
             }
@@ -196,7 +197,7 @@ class ShizukuClipboardModule : Module() {
         NativeLogger.i(TAG, "Shizuku binder received")
         // 当 Shizuku 连接时，如果已有权限，绑定或复用 daemon UserService。
         if (hasPermission()) {
-            recoveryRebind.cancel()
+            userServiceRebind.cancel()
             bindUserService()
         }
     }
@@ -204,7 +205,7 @@ class ShizukuClipboardModule : Module() {
     private val binderDeadListener = Shizuku.OnBinderDeadListener {
         NativeLogger.w(TAG, "Shizuku binder dead")
         markConnectionFailed()
-        recoveryRebind.cancel()
+        userServiceRebind.cancel()
         if (clipboardListenerRequested) sendClipboardListenerUnavailable()
     }
 
@@ -264,8 +265,20 @@ class ShizukuClipboardModule : Module() {
             try {
                 NativeLogger.i(TAG, "Binding UserService...")
                 Shizuku.bindUserService(userServiceArgs, connection)
+                mainHandler.postDelayed({
+                    val timedOut = synchronized(connectionOperationLock) {
+                        val pending = synchronized(connectionStateLock) {
+                            activeServiceConnection === connection && isBinding
+                        }
+                        pending && resetUserServiceConnection("connection callback timeout", connection)
+                    }
+                    if (timedOut) {
+                        userServiceRebind.failed()
+                        if (clipboardListenerRequested) sendClipboardListenerUnavailable()
+                    }
+                }, TimeUnit.SECONDS.toMillis(CONNECTION_TIMEOUT_SECONDS))
             } catch (e: Exception) {
-                if (markConnectionFailed(connection)) recoveryRebind.failed()
+                if (markConnectionFailed(connection)) userServiceRebind.failed()
                 NativeLogger.e(TAG, "Failed to bind UserService", e)
             }
             return latch
@@ -387,6 +400,8 @@ class ShizukuClipboardModule : Module() {
     private fun registerClipboardListener(): Boolean {
         synchronized(listenerRegistrationLock) {
             clipboardListenerRequested = true
+            userServiceRebind.setClipboardRequested(true)
+            if (!hasPermission()) return false
             for (attempt in 0 until 2) {
                 val service = ensureServiceConnected()
                 if (service == null) {
@@ -406,6 +421,12 @@ class ShizukuClipboardModule : Module() {
             if (!clipboardListenerRequested) return
             if (!tryRegisterClipboardListener(service)) {
                 sendClipboardListenerUnavailable()
+                return
+            }
+            mainHandler.post {
+                if (clipboardListenerRequested && clipboardService === service && serviceConnected) {
+                    sendEvent("onPrimaryClipListenerAvailable", emptyMap<String, Any>())
+                }
             }
         }
     }
@@ -432,11 +453,13 @@ class ShizukuClipboardModule : Module() {
             Thread.currentThread().interrupt()
             NativeLogger.w(TAG, "Interrupted while waiting for UserService connection")
             resetUserServiceConnection("connection wait interrupted")
+            userServiceRebind.failed()
             return null
         }
         if (!connectionCompleted) {
             NativeLogger.w(TAG, "Timed out waiting for UserService connection callback")
             resetUserServiceConnection("connection callback timeout")
+            userServiceRebind.failed()
             return null
         }
 
@@ -444,6 +467,7 @@ class ShizukuClipboardModule : Module() {
         if (connectedService != null && serviceConnected) {
             if (isUserServiceHealthy(connectedService)) return connectedService
             resetUserServiceConnection("newly connected UserService health check failed")
+            userServiceRebind.failed()
         }
         return null
     }
@@ -502,10 +526,9 @@ class ShizukuClipboardModule : Module() {
             val context = appContext.reactContext ?: return
             // 仅失败清理可保留已有授权；设置关闭和用户停止永远走撤销路径。
             if (!enabled && preserveStartupFailure && ServiceRuntimeSession.hasFailedStartup()) return
-            if (enabled && !recoveryRequested) recoveryRebind.cancel()
             recoveryRequested = enabled
+            userServiceRebind.setRecoveryRequested(enabled)
             if (!enabled) {
-                recoveryRebind.cancel()
                 ShizukuRecovery.disable(context, if (disposing) recoveryOwner else null)
                 try {
                     clipboardService?.clearRecoveryWatch(recoveryToken)
@@ -546,7 +569,7 @@ class ShizukuClipboardModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("ShizukuClipboardModule")
 
-        Events("onPrimaryClipChanged", "onPrimaryClipListenerUnavailable")
+        Events("onPrimaryClipChanged", "onPrimaryClipListenerUnavailable", "onPrimaryClipListenerAvailable")
 
         OnCreate {
             try {
@@ -560,7 +583,9 @@ class ShizukuClipboardModule : Module() {
 
         OnDestroy {
             recoveryRequested = false
-            recoveryRebind.cancel()
+            clipboardListenerRequested = false
+            userServiceRebind.setClipboardRequested(false)
+            userServiceRebind.setRecoveryRequested(false)
             try {
                 setRecoveryEnabled(false, disposing = true)
                 clipboardListenerRequested = false
@@ -661,6 +686,7 @@ class ShizukuClipboardModule : Module() {
         AsyncFunction("stopPrimaryClipChangedListener") { promise: Promise ->
             synchronized(listenerRegistrationLock) {
                 clipboardListenerRequested = false
+                userServiceRebind.setClipboardRequested(false)
                 try {
                     clipboardService?.clearClipboardChangedCallback(callerToken)
                 } catch (e: Exception) {

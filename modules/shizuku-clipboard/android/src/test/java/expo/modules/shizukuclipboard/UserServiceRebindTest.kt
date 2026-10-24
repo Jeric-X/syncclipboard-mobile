@@ -3,18 +3,69 @@ package expo.modules.shizukuclipboard
 import org.junit.Assert.*
 import org.junit.Test
 
-class RecoveryRebindTest {
+class UserServiceRebindTest {
     private var allowed = true
     private var bindings = 0
     private val delays = mutableListOf<Long>()
     private val queued = mutableListOf<() -> Unit>()
-    private val rebind = RecoveryRebind(
+    private val rebind = UserServiceRebind(
         schedule = { delayMs, callback -> delays.add(delayMs); queued.add(callback); {} },
         canBind = { allowed },
         bind = { bindings++ }
     )
 
-    @Test fun disconnectedRecoveryRebindsWithoutClipboardOperations() {
+    private fun updateRequests(clipboard: Boolean, recovery: Boolean) {
+        rebind.setClipboardRequested(clipboard)
+        rebind.setRecoveryRequested(recovery)
+    }
+
+    init { updateRequests(clipboard = false, recovery = true) }
+
+    @Test fun clipboardAloneCanReconnectWithoutHeadlessRecovery() {
+        updateRequests(clipboard = true, recovery = false)
+        rebind.disconnected()
+        queued.single()()
+        assertEquals(1, bindings)
+    }
+
+    @Test fun disablingRecoveryDoesNotCancelClipboardRetry() {
+        updateRequests(clipboard = true, recovery = true)
+        rebind.disconnected()
+        updateRequests(clipboard = true, recovery = false)
+        queued.single()()
+        assertEquals(1, bindings)
+    }
+
+    @Test fun disablingClipboardCancelsRetryWhenRecoveryIsOff() {
+        updateRequests(clipboard = true, recovery = false)
+        rebind.disconnected()
+        updateRequests(clipboard = false, recovery = false)
+        queued.single()()
+        rebind.failed()
+        assertEquals(0, bindings)
+        assertEquals(1, queued.size)
+    }
+
+    @Test fun disablingClipboardPreservesRecoveryRetry() {
+        updateRequests(clipboard = true, recovery = true)
+        rebind.disconnected()
+        updateRequests(clipboard = false, recovery = true)
+        queued.single()()
+        assertEquals(1, bindings)
+    }
+
+    @Test fun reEnablingClipboardStartsANewRetryBudget() {
+        updateRequests(clipboard = true, recovery = false)
+        repeat(3) { rebind.failed(); queued.last()() }
+        updateRequests(clipboard = false, recovery = false)
+        updateRequests(clipboard = true, recovery = false)
+        rebind.failed()
+        queued.last()()
+        assertEquals(4, bindings)
+        assertEquals(2_000L, delays.last())
+    }
+
+    @Test fun disconnectedUserServiceRebindsWithoutClipboardOperations() {
         rebind.disconnected()
         assertEquals(0, bindings)
         queued.single()()
@@ -37,11 +88,12 @@ class RecoveryRebindTest {
         assertEquals(0, bindings)
     }
 
-    @Test fun newerDisconnectSupersedesAnOlderPendingCallback() {
+    @Test fun duplicateFailureSignalsShareThePendingRetry() {
         rebind.disconnected()
         rebind.disconnected()
+        assertEquals(1, queued.size)
+        assertEquals(listOf(2_000L), delays)
         queued.first()()
-        assertEquals(0, bindings)
         queued.last()()
         assertEquals(1, bindings)
     }
