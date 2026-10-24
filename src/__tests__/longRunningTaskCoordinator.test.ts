@@ -1,4 +1,4 @@
-import { LongRunningTaskCoordinator } from '../utils/longRunningTaskCoordinator';
+import { LongRunningTaskCoordinator } from '../longRunningTask/LongRunningTaskCoordinator';
 import { LongRunningTask } from '../longRunningTask/LongRunningTask';
 
 class TestTask extends LongRunningTask {

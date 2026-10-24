@@ -1,5 +1,5 @@
-import type { ILongRunningTask } from '../longRunningTask/LongRunningTask';
-import { measureStartup } from './startupTiming';
+import type { ILongRunningTask } from './LongRunningTask';
+import { measureStartup } from '../services/StartupTiming';
 
 /** UI 与 Headless 共用的任务策略；未知 AppState 按后台处理。 */
 export interface TaskRuntimePolicy {

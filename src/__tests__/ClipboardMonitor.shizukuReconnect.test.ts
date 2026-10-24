@@ -24,7 +24,7 @@ jest.mock('expo-modules-core', () => ({
 }));
 jest.mock('clipboard-overlay', () => ({}));
 jest.mock('../services/overlay/OverlayManager', () => ({}));
-jest.mock('../utils/startupTiming', () => ({
+jest.mock('../services/StartupTiming', () => ({
   logStartupPoint: jest.fn(),
   measureStartup: (_stage: string, action: () => unknown) => action(),
 }));

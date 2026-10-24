@@ -15,7 +15,7 @@ import { networkAutoSwitchTask } from './NetworkAutoSwitchTask';
 import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
 import { AppState } from 'react-native';
-import { LongRunningTaskCoordinator } from '../utils/longRunningTaskCoordinator';
+import { LongRunningTaskCoordinator } from './LongRunningTaskCoordinator';
 
 class LongRunningTaskManager extends LongRunningTaskCoordinator {
   constructor() {

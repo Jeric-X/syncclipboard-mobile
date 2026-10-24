@@ -64,7 +64,7 @@ import { historyService } from '../services/history/HistoryService';
 import { clipboardSyncState } from '../services/sync/SyncState';
 import { uploadLocalClipboard } from '../services/sync/ClipboardSyncActions';
 import { getClipboardChangedHandler } from '../services/sync/ClipboardChangedHandler';
-import * as startupClock from '../utils/startupClock';
+import * as startupClock from '../services/StartupTiming';
 
 const SYSTEM_START_TIME_MS = 2_728_733_964;
 

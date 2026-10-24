@@ -3,7 +3,7 @@ import {
   getHistorySyncService,
   resetHistorySyncService,
 } from '../services/history/HistorySyncService';
-import { LongRunningTaskCoordinator } from '../utils/longRunningTaskCoordinator';
+import { LongRunningTaskCoordinator } from '../longRunningTask/LongRunningTaskCoordinator';
 import type { ServerConfig } from '../types/api';
 
 jest.mock('../storage/HistoryStorage', () => ({

@@ -1,4 +1,4 @@
-import { createStartupClock } from '../utils/startupClock';
+import { createStartupClock } from '../services/StartupTiming';
 
 describe('启动计时器', () => {
   it('系统已运行很久时，仍从本次启动的零点计时', () => {
