@@ -45,6 +45,8 @@ export interface QuickLoadingPageProps {
   successContent?: ClipboardContent;
   successButtons?: SuccessButtonConfig[];
   successError?: string;
+  /** 提供字符串时预留单行状态区域，避免操作进度变化导致按钮布局跳动。 */
+  successStatus?: string;
   /** 成功后保留预览的时间；不设置时沿用原有关闭行为。 */
   autoCloseDelayMs?: number;
   progress?: ProgressInfo | null;
@@ -65,6 +67,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
   successContent,
   successButtons,
   successError,
+  successStatus,
   autoCloseDelayMs,
   progress,
   previewText,
@@ -302,6 +305,19 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
                       );
                     })}
                   </View>
+                  {successStatus !== undefined && (
+                    <Text
+                      accessibilityLiveRegion="polite"
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      style={[
+                        styles.actionStatus,
+                        { color: theme.colors.textSecondary, height: 20 * fontScale },
+                      ]}
+                    >
+                      {successStatus || ' '}
+                    </Text>
+                  )}
                   <TouchableOpacity
                     accessibilityRole="button"
                     accessibilityLabel={t('common.back')}
@@ -537,6 +553,12 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     flexShrink: 1,
+  },
+  actionStatus: {
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+    width: '100%',
   },
   backButton: {
     width: '100%',

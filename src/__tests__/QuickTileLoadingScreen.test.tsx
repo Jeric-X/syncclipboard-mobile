@@ -1,7 +1,14 @@
 import React from 'react';
 // @ts-expect-error React Native 的 Jest 依赖提供 renderer，但未附带类型声明。
 import TestRenderer, { act } from 'react-test-renderer';
-import { BackHandler, Platform, ToastAndroid, TouchableOpacity } from 'react-native';
+import {
+  BackHandler,
+  Platform,
+  StyleSheet,
+  Text,
+  ToastAndroid,
+  TouchableOpacity,
+} from 'react-native';
 import { QuickTileLoadingScreen } from '../screens/QuickTileLoadingScreen';
 import { localClipboard } from '../services/clipboard/LocalClipboard';
 import {
@@ -13,6 +20,7 @@ import { SyncDirection } from '../types/sync';
 import type { ClipboardContent } from '../types/clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 import { saveContentDataToDirectory } from '../utils/clipboard/clipboardContentUtils';
+import type { ProgressInfo } from 'native-util';
 
 jest.mock('react-native-feather', () => ({
   Copy: 'Copy',
@@ -108,6 +116,13 @@ function button(label: string) {
     );
 }
 
+function buttonLayout(node: { props: { style: unknown } }) {
+  const { width, minWidth, flexBasis, flexGrow, flexDirection } = StyleSheet.flatten(
+    node.props.style as never
+  );
+  return { width, minWidth, flexBasis, flexGrow, flexDirection };
+}
+
 it('图片复制完成后才返回；复制期间禁用其他操作、返回和重复点击', async () => {
   let finish!: () => void;
   jest.mocked(localClipboard.setClipboardContent).mockImplementation(
@@ -163,12 +178,14 @@ it('保存期间阻止复制和关闭，保存完成后恢复操作且保留预�
       })
   );
   await render(imageContent);
+  const saveLayout = buttonLayout(button('clipboard.save'));
   let saving!: Promise<void>;
   await act(async () => {
     saving = button('clipboard.save').props.onPress();
   });
   expect(button('quickTile.copyAndReturn').props.disabled).toBe(true);
   expect(button('common.back').props.disabled).toBe(true);
+  expect(buttonLayout(button('clipboard.save'))).toEqual(saveLayout);
   expect(backPress()).toBe(true);
   expect(complete).not.toHaveBeenCalled();
   await act(async () => {
@@ -191,27 +208,42 @@ it.each(['File', 'Group'] as const)('%s 选择目录后无需等待进度即可�
         })
     );
   let saveSignal!: AbortSignal;
+  let reportProgress!: (info: ProgressInfo) => void;
   jest.mocked(saveContentDataToDirectory).mockImplementationOnce(
-    (_content, _uri, signal) =>
+    (_content, _uri, signal, onProgress) =>
       new Promise<void>((_resolve, reject) => {
         saveSignal = signal!;
+        reportProgress = onProgress!;
         signal!.addEventListener('abort', () =>
           reject(Object.assign(new Error('cancelled'), { name: 'AbortError' }))
         );
       })
   );
   await render({ ...imageContent, type });
+  const saveLayout = buttonLayout(button('clipboard.save'));
   let saving!: Promise<void>;
   await act(async () => {
     saving = button('clipboard.save').props.onPress();
   });
-  expect(button('clipboard.saving').props.disabled).toBe(true);
+  expect(button('clipboard.save').props.disabled).toBe(true);
+  expect(buttonLayout(button('clipboard.save'))).toEqual(saveLayout);
   await act(async () => {
     selectDirectory({ granted: true, directoryUri: 'content://directory' });
   });
-  expect(button('clipboard.saving').props.disabled).toBe(false);
+  expect(button('common.cancel').props.disabled).toBe(false);
+  expect(buttonLayout(button('common.cancel'))).toEqual(saveLayout);
   await act(async () => {
-    button('clipboard.saving').props.onPress();
+    reportProgress({ bytesTransferred: 50, totalBytes: 100, progress: 0.5 });
+  });
+  expect(buttonLayout(button('common.cancel'))).toEqual(saveLayout);
+  expect(
+    root.root
+      .findAllByType(Text)
+      .some((node: { props: { children: unknown } }) => node.props.children === '50% 50 B / 100 B')
+  ).toBe(true);
+  expect(button('50% 50 B / 100 B')).toBeUndefined();
+  await act(async () => {
+    button('common.cancel').props.onPress();
     await saving;
   });
   expect(saveSignal.aborted).toBe(true);

@@ -202,20 +202,11 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
   // 动态保存按钮配置（根据保存状态切换 label 和行为）
   const saveButtonConfig = useMemo((): SuccessButtonConfig => {
     if (isSaving) {
-      let label: string;
-      if (saveProgress && saveProgress.totalBytes > 0) {
-        const pct = (saveProgress.progress * 100).toFixed(0);
-        const transferred = formatFileSize(saveProgress.bytesTransferred);
-        const total = formatFileSize(saveProgress.totalBytes);
-        label = `${pct}% ${transferred} / ${total}`;
-      } else {
-        label = t('clipboard.saving');
-      }
       return {
-        label,
+        label: canCancelSave ? t('common.cancel') : t('clipboard.save'),
         primary: fileContent?.type === 'Group',
         icon: Download,
-        fullWidth: true,
+        busy: !canCancelSave,
         disabled: !canCancelSave,
         onPress: canCancelSave ? handleCancelSave : handleSavingPress,
       };
@@ -232,12 +223,22 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
     canCancelSave,
     isCopying,
     fileContent?.type,
-    saveProgress,
     handleCancelSave,
     handleSavingPress,
     handleSave,
     t,
   ]);
+
+  let saveStatus: string | undefined;
+  if (fileContent && fileContent.type !== 'Text') {
+    saveStatus = '';
+    if (isSaving) {
+      saveStatus =
+        saveProgress && saveProgress.totalBytes > 0
+          ? `${(saveProgress.progress * 100).toFixed(0)}% ${formatFileSize(saveProgress.bytesTransferred)} / ${formatFileSize(saveProgress.totalBytes)}`
+          : t('clipboard.saving');
+    }
+  }
 
   const copyButton: SuccessButtonConfig = {
     label: t('quickTile.copyAndReturn'),
@@ -315,6 +316,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
       successContent={fileContent ?? undefined}
       successButtons={successButtons}
       successError={copyError}
+      successStatus={saveStatus}
       autoCloseDelayMs={fileContent?.type === 'Text' && !textUrl ? 1200 : undefined}
       progress={progress}
       previewText={previewText}
