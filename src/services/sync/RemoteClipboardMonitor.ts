@@ -25,10 +25,13 @@ class RemoteClipboardMonitor {
   private callbacks = new Set<RemoteClipboardChangedCallback>();
   private pollingTag: string | null = null;
   private _signalRConnected = false;
+  private connectionVersion = 0;
+  private connecting: Promise<void> | null = null;
+  private unsubscribeSignalR: (() => void) | null = null;
   /** 上次触发回调时的内容哈希，用于过滤重复通知 */
   private _lastContentHash: string | null = null;
   /** 对 fetchLatest 进行去重：并发调用共享同一次请求；配置变更时通过 abort() 取消 */
-  private readonly _fetchOp = new DedupedOperation<true, ClipboardContent>(() => true);
+  private _fetchOp = new DedupedOperation<true, ClipboardContent>(() => true);
   /**
    * 注入的后台运行检测函数集合。
    * 只要任意一个函数返回 true，后台时就继续监听而不断开。
@@ -90,18 +93,28 @@ class RemoteClipboardMonitor {
 
   /**
    * 建立远程监听（SignalR 或轮询）。
-   * 不触发初始获取，由调用方负责。
+   * 并发入口复用连接和首次拉取；调用方可在后台执行，不作为运行时就绪条件。
    */
-  async connect(): Promise<void> {
-    const server = await configService.getActiveServer();
-    if (!server) return;
-    const config = await configService.getConfig();
-    logStartupPoint('remote.connect', { serverType: server.type });
-    if (server.type === 'syncclipboard') {
-      await this._connectSignalR(server);
-    } else {
-      this._startPolling(config?.remotePollingInterval);
-    }
+  connect(): Promise<void> {
+    if (this.connecting) return this.connecting;
+    const version = this.connectionVersion;
+    const operation = (async () => {
+      const server = await configService.getActiveServer();
+      if (!server || version !== this.connectionVersion) return;
+      const config = await configService.getConfig();
+      if (version !== this.connectionVersion) return;
+      logStartupPoint('remote.connect', { serverType: server.type });
+      if (server.type === 'syncclipboard') {
+        await this._connectSignalR(server, version);
+      } else {
+        this._startPolling(config?.remotePollingInterval);
+      }
+      if (version === this.connectionVersion) await this.refresh();
+    })().finally(() => {
+      if (this.connecting === operation) this.connecting = null;
+    });
+    this.connecting = operation;
+    return operation;
   }
 
   /**
@@ -110,8 +123,9 @@ class RemoteClipboardMonitor {
    * 无需区分服务器类型，内部统一处理。
    */
   async resumeAndRefresh(): Promise<void> {
-    if (!this.isConnected()) {
+    if (this.connecting || !this.isConnected()) {
       await this.connect();
+      return;
     }
     await this.refresh();
   }
@@ -125,7 +139,10 @@ class RemoteClipboardMonitor {
   }
 
   async disconnect(): Promise<void> {
+    this.connectionVersion++;
+    this.connecting = null;
     this._fetchOp.abort();
+    this._fetchOp = new DedupedOperation<true, ClipboardContent>(() => true);
     this._lastContentHash = null;
     this._stopPolling();
     await this._disconnectSignalR();
@@ -206,9 +223,11 @@ class RemoteClipboardMonitor {
    * 与轮询逻辑复用同一实现，会自动跳过内容未变化的情况。
    */
   async refresh(): Promise<void> {
+    const version = this.connectionVersion;
     try {
       await this.fetchLatest();
     } catch (e) {
+      if (version !== this.connectionVersion) return;
       if (e instanceof Error && e.name === 'AbortError') return;
       console.error('[RemoteClipboardMonitor] Failed to fetch latest:', e);
       clipboardSyncState.setSyncError({ title: '服务器连接断开' });
@@ -225,9 +244,11 @@ class RemoteClipboardMonitor {
   async fetchLatest(signal?: AbortSignal): Promise<ClipboardContent> {
     return this._fetchOp.execute(true, undefined, signal ?? null, async (sig) => {
       const apiClient = await measureStartup('remote.getClient', () => getAPIClient());
+      if (sig.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
       const profile = await measureStartup('remote.getClipboard', () =>
         apiClient.getClipboard(sig)
       );
+      if (sig.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
       if (!profile) throw new Error('No clipboard data returned');
       const content: ClipboardContent = profileDtoToContent(profile);
       logStartupPoint('remote.firstContent', { type: content.type, hasData: content.hasData });
@@ -250,33 +271,43 @@ class RemoteClipboardMonitor {
     console.log('[RemoteClipboardMonitor] Polling stopped');
   }
 
-  private async _connectSignalR(server: ServerConfig): Promise<void> {
+  private async _connectSignalR(server: ServerConfig, version: number): Promise<void> {
     if (this._signalRConnected) return;
     try {
       await measureStartup('remote.connectSignalR', async () => {
         const client = getSignalRClient();
-        client.onRemoteClipboardChanged(this._signalREventCallback);
-        client.onConnectionStateChanged(this._signalRStateCallback);
+        const onProfile = (event: ProfileChangedEvent) => {
+          if (version === this.connectionVersion) this._signalREventCallback(event);
+        };
+        const onState = (state: ConnectionState) => {
+          if (version === this.connectionVersion) this._signalRStateCallback(state);
+        };
+        this.unsubscribeSignalR?.();
+        client.onRemoteClipboardChanged(onProfile);
+        client.onConnectionStateChanged(onState);
+        this.unsubscribeSignalR = () => {
+          client.offRemoteClipboardChanged(onProfile);
+          client.offConnectionStateChanged(onState);
+        };
         await client.connect(server);
       });
+      if (version !== this.connectionVersion) return;
       this._signalRConnected = true;
       console.log('[RemoteClipboardMonitor] SignalR connected');
-      await this.refresh().catch((e) => {
-        console.error('[RemoteClipboardMonitor] Initial refresh failed:', e);
-      });
     } catch (e) {
+      if (version !== this.connectionVersion) return;
       console.error('[RemoteClipboardMonitor] Failed to connect SignalR:', e);
       clipboardSyncState.setSyncError({ title: '服务器连接断开' });
     }
   }
 
   private async _disconnectSignalR(): Promise<void> {
-    if (!this._signalRConnected) return;
     this._signalRConnected = false;
+    if (!this.unsubscribeSignalR) return;
     try {
       const client = getSignalRClient();
-      client.offRemoteClipboardChanged(this._signalREventCallback);
-      client.offConnectionStateChanged(this._signalRStateCallback);
+      this.unsubscribeSignalR();
+      this.unsubscribeSignalR = null;
       await client.disconnect();
       console.log('[RemoteClipboardMonitor] SignalR disconnected');
     } catch {}
