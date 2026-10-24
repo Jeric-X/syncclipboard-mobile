@@ -8,10 +8,10 @@ import { HistoryAPINotInitializedError, RecordNotFoundError } from '@/errors';
 import { HistoryStorage } from '../../storage/HistoryStorage';
 import { HistorySyncStatus, type ClipboardContent, isLocalFileReady } from '@/types/clipboard';
 import { getHistoryFileDir } from '@/utils/fileStorage';
-import { historyItemToContent } from '@/utils/clipboard/convert';
+import { historyItemToContent, historyItemToDto } from '@/utils/clipboard/convert';
 import { File } from 'expo-file-system';
 import type { ProgressDetail } from '@/types/progress';
-import { parseProfileId } from '@/utils/clipboard/profileId';
+import { getProfileId, parseProfileId } from '@/utils/clipboard/profileId';
 
 export type TransferType = 'upload' | 'download';
 export type TransferTaskStatus =
@@ -213,7 +213,6 @@ export class HistoryTransferQueue {
       return existingTask;
     }
 
-    const { parseProfileId } = await import('@/utils');
     const parsed = parseProfileId(profileId);
     const item = parsed ? await this.historyStorage.getItem(parsed.hash) : null;
     const displayName = item?.text || profileId;
@@ -256,7 +255,6 @@ export class HistoryTransferQueue {
     progress?: ProgressCallback,
     signal?: AbortSignal
   ): Promise<ClipboardContent> {
-    const { getProfileId } = await import('@/utils');
     const profileId = getProfileId(content.type, content.profileHash!);
 
     const existingTask = this.findTask(profileId, 'download');
@@ -269,7 +267,6 @@ export class HistoryTransferQueue {
       return existingTask.awaiter;
     }
 
-    const { parseProfileId } = await import('@/utils');
     const parsed = parseProfileId(profileId);
     const item = parsed ? await this.historyStorage.getItem(parsed.hash) : null;
     const displayName = item?.text || profileId;
@@ -329,7 +326,6 @@ export class HistoryTransferQueue {
     progress?: ProgressCallback,
     signal?: AbortSignal
   ): Promise<ClipboardContent> {
-    const { getProfileId } = await import('@/utils');
     const profileId = getProfileId(content.type, content.profileHash!);
 
     const existingTask = this.findTask(profileId, 'upload');
@@ -342,7 +338,6 @@ export class HistoryTransferQueue {
       return existingTask.awaiter;
     }
 
-    const { parseProfileId } = await import('@/utils');
     const parsed = parseProfileId(profileId);
     const item = parsed ? await this.historyStorage.getItem(parsed.hash) : null;
     const displayName = item?.text || profileId;
@@ -596,7 +591,6 @@ export class HistoryTransferQueue {
     console.log(`[HistoryTransferQueue] ProfileId: ${task.profileId}`);
     console.log(`[HistoryTransferQueue] Task created: ${new Date(task.createdTime).toISOString()}`);
 
-    const { parseProfileId } = await import('@/utils');
     const parsed = parseProfileId(task.profileId);
     if (!parsed) {
       console.error(`[HistoryTransferQueue] Invalid profileId format: ${task.profileId}`);
@@ -635,12 +629,19 @@ export class HistoryTransferQueue {
       task.abortController.signal,
       (info) => {
         task.bytesTransferred = info.bytesTransferred;
-        task.totalBytes = info.totalBytes;
-        if (info.progress >= 0) {
-          task.progress = Math.round(info.progress * 100);
-        } else {
-          task.progress = -1;
-        }
+        // 优先使用响应长度；未提供有效长度时，用历史记录的文件大小兜底。
+        const totalBytes =
+          Number.isFinite(info.totalBytes) && info.totalBytes > 0
+            ? info.totalBytes
+            : (item.size ?? 0);
+        task.totalBytes = Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : 0;
+        task.progress =
+          task.totalBytes > 0
+            ? Math.min(
+                100,
+                Math.max(0, Math.round((info.bytesTransferred / task.totalBytes) * 100))
+              )
+            : -1;
         this.notifyStatusChanged(task);
 
         if (task.externalProgressReporter) {
@@ -728,7 +729,6 @@ export class HistoryTransferQueue {
       throw new Error(`No file to upload: ${task.profileId}`);
     }
 
-    const { historyItemToDto } = await import('@/utils/clipboard/convert');
     const dto = historyItemToDto(item);
 
     await this.historyAPI.uploadRecord(dto, item.fileUri, task.abortController.signal, (info) => {
