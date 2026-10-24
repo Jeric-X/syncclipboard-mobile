@@ -1,6 +1,7 @@
 import { SettingsSection, SettingSwitch } from '@/components/settings';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { configService } from '@/services/ConfigService';
+import { requestServiceRuntime } from '@/services/ServiceRuntime';
 import { useSettingsStore } from '@/stores';
 import { requestNotificationPermission } from '@/utils/notificationPermission';
 import { hasOverlayPermission, requestOverlayPermission } from 'clipboard-overlay';
@@ -96,13 +97,24 @@ export const BackgroundSettings = ({ showMessage }: SettingsModuleProps) => {
     setLocalForegroundNotification(config?.enableForegroundNotification ?? true);
   }, [config?.enableForegroundNotification]);
 
+  /** 用户主动恢复必须重新请求 Headless；共享入口负责等待上一轮停止完成。 */
+  const enableBackgroundTasks = async () => {
+    try {
+      await requestServiceRuntime(true);
+      await setEnableBackgroundTasks(true);
+      setLocalBackgroundTasksEnabled(true);
+    } catch (error: unknown) {
+      setTempDisabledBackgroundTasks(true);
+      setLocalBackgroundTasksEnabled(false);
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
+    }
+  };
+
   // 处理切换后台任务总开关
   const handleToggleBackgroundTasks = async (enabled: boolean) => {
     if (enabled) {
-      // 如果是临时停止状态，直接清除标志，不需要弹窗确认
       if (isTempDisabledBackgroundTasks) {
-        setLocalBackgroundTasksEnabled(true);
-        setTempDisabledBackgroundTasks(false);
+        await enableBackgroundTasks();
         return;
       }
       Alert.alert(
@@ -110,21 +122,7 @@ export const BackgroundSettings = ({ showMessage }: SettingsModuleProps) => {
         t('settings.enableBackgroundTasksMessage'),
         [
           { text: t('common.cancel'), style: 'cancel' },
-          {
-            text: t('common.confirmEnable'),
-            onPress: async () => {
-              setLocalBackgroundTasksEnabled(true);
-              try {
-                await setEnableBackgroundTasks(true);
-              } catch (error: unknown) {
-                setLocalBackgroundTasksEnabled(false);
-                showMessage(
-                  error instanceof Error ? error.message : t('common.setFailed'),
-                  'error'
-                );
-              }
-            },
-          },
+          { text: t('common.confirmEnable'), onPress: enableBackgroundTasks },
         ]
       );
       return;
