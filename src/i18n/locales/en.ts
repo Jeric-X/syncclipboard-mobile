@@ -606,6 +606,10 @@ const en: DeepString<typeof zh> = {
   },
 
   quickTile: {
+    copyAndReturn: 'Copy and return',
+    imageDownloaded: 'Image downloaded',
+    fileDownloaded: 'File downloaded',
+    textCopied: 'Text copied',
     upload: 'Upload',
     download: 'Download',
     sync: 'Sync',

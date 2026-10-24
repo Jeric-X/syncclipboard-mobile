@@ -590,6 +590,10 @@ const zh = {
   },
 
   quickTile: {
+    copyAndReturn: '复制并返回',
+    imageDownloaded: '图片已下载',
+    fileDownloaded: '文件已下载',
+    textCopied: '文字已复制',
     upload: '上传',
     download: '下载',
     sync: '同步',
