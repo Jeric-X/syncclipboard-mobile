@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,8 @@ import {
   Pressable,
   TouchableOpacity,
   FlatList,
-  ActivityIndicator,
+  Animated,
+  Easing,
 } from 'react-native';
 import { X, Upload, Download, AlertCircle, Clock, CheckCircle } from 'react-native-feather';
 import { useTheme } from '@/hooks/useTheme';
@@ -28,6 +29,62 @@ const statusColors: Record<string, string> = {
   failed: '#F44336',
   cancelled: '#9E9E9E',
   waitForRetry: '#FF9800',
+};
+
+/** 总大小未知时只表示正在传输，不用固定宽度冒充百分比。 */
+const IndeterminateTransferProgress = ({
+  color,
+  trackColor,
+  label,
+}: {
+  color: string;
+  trackColor: string;
+  label: string;
+}) => {
+  const [width, setWidth] = useState(0);
+  const position = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (width <= 0) return;
+    position.setValue(0);
+    const animation = Animated.loop(
+      Animated.timing(position, {
+        toValue: 1,
+        duration: 1200,
+        easing: Easing.linear,
+        useNativeDriver: true,
+        isInteraction: false,
+      })
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [position, width]);
+
+  return (
+    <View
+      accessibilityRole="progressbar"
+      accessibilityValue={{ text: label }}
+      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+      style={[styles.progressBar, { backgroundColor: trackColor }]}
+    >
+      <Animated.View
+        style={[
+          styles.progressFillIndeterminate,
+          {
+            backgroundColor: color,
+            transform: [
+              {
+                translateX: position.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-width * 0.3, width],
+                }),
+              },
+            ],
+          },
+        ]}
+      />
+    </View>
+  );
 };
 
 export const TransferQueueModal: React.FC<TransferQueueModalProps> = ({ visible, onClose }) => {
@@ -67,11 +124,11 @@ export const TransferQueueModal: React.FC<TransferQueueModalProps> = ({ visible,
         ]}
       >
         <View style={styles.taskHeader}>
-          <View style={[styles.taskTypeIcon, { backgroundColor: theme.colors.primaryLight }]}>
+          <View style={[styles.taskTypeIcon, { backgroundColor: theme.colors.primary }]}>
             {task.type === 'upload' ? (
-              <Upload width={16} height={16} color={theme.colors.primary} />
+              <Upload width={20} height={20} strokeWidth={2.5} color={theme.colors.white} />
             ) : (
-              <Download width={16} height={16} color={theme.colors.success || '#4CAF50'} />
+              <Download width={20} height={20} strokeWidth={2.5} color={theme.colors.white} />
             )}
           </View>
           <View style={styles.taskInfo}>
@@ -80,9 +137,6 @@ export const TransferQueueModal: React.FC<TransferQueueModalProps> = ({ visible,
             </Text>
             <View style={styles.taskStatusRow}>
               <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
-                {task.status === 'running' && (
-                  <ActivityIndicator size="small" color={statusColor} />
-                )}
                 {task.status === 'failed' && (
                   <AlertCircle width={12} height={12} color={statusColor} />
                 )}
@@ -134,12 +188,12 @@ export const TransferQueueModal: React.FC<TransferQueueModalProps> = ({ visible,
             />
           </View>
         )}
-        {task.status === 'running' && task.progress < 0 && (
-          <View style={[styles.progressBar, { backgroundColor: theme.colors.border }]}>
-            <View
-              style={[styles.progressFillIndeterminate, { backgroundColor: theme.colors.primary }]}
-            />
-          </View>
+        {visible && task.status === 'running' && task.progress < 0 && (
+          <IndeterminateTransferProgress
+            color={theme.colors.primary}
+            trackColor={theme.colors.border}
+            label={t('transfer.unknownTotalSize')}
+          />
         )}
         {task.errorMessage && (
           <Text style={[styles.errorText, { color: theme.colors.error || '#F44336' }]}>
