@@ -5,6 +5,7 @@ const zh = {
     save: '保存',
     close: '关闭',
     back: '返回',
+    autoReturning: '即将自动返回…',
     copy: '复制',
     delete: '删除',
     add: '添加',

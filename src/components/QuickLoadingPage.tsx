@@ -45,6 +45,8 @@ export interface QuickLoadingPageProps {
   successContent?: ClipboardContent;
   successButtons?: SuccessButtonConfig[];
   successError?: string;
+  /** 成功后保留预览的时间；不设置时沿用原有关闭行为。 */
+  autoCloseDelayMs?: number;
   progress?: ProgressInfo | null;
   previewText?: string;
   previewImage?: string;
@@ -63,6 +65,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
   successContent,
   successButtons,
   successError,
+  autoCloseDelayMs,
   progress,
   previewText,
   previewImage,
@@ -120,14 +123,18 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
     onComplete();
   }, [onComplete]);
 
-  // 成功后：无 successContent 且无 successButtons 时自动关闭
+  // 成功后：指定延迟时先展示预览，否则无内容、无操作时立即关闭。
   // 放在独立 useEffect 中，确保在 React 批处理完成、父组件更新 successButtons prop 后再判断
   useEffect(() => {
     if (state !== 'success') return;
+    if (autoCloseDelayMs !== undefined) {
+      const timer = setTimeout(onComplete, autoCloseDelayMs);
+      return () => clearTimeout(timer);
+    }
     if (successContent !== undefined || (successButtons && successButtons.length > 0)) return;
     // 无需显示成功界面，直接退出
     onComplete();
-  }, [state, successContent, successButtons, onComplete]);
+  }, [state, successContent, successButtons, onComplete, autoCloseDelayMs]);
 
   // 返回键：loading 时允许取消；error / success-with-content/extra 时允许离开
   useEffect(() => {
@@ -227,86 +234,92 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
 
         {state === 'success' && (
           <>
-            {!!successButtons?.length && (
+            {(successContent !== undefined || !!successButtons?.length) && (
               <Text style={[styles.successTitle, { color: theme.colors.text }]}>{successText}</Text>
             )}
             {successContent && <ContentPreview content={successContent} />}
-            {!(successButtons && successButtons.length > 0) && (
+            {successContent === undefined && !successButtons?.length && (
               <>
                 <Text style={[styles.successIcon, { color: theme.colors.success }]}>✓</Text>
                 <Text style={[styles.statusText, { color: theme.colors.text }]}>{successText}</Text>
               </>
             )}
-            {(successContent !== undefined || (successButtons && successButtons.length > 0)) && (
-              <View style={styles.successActions}>
-                {successError && (
-                  <Text
-                    accessibilityRole="alert"
-                    style={[styles.errorDetailText, { color: theme.colors.error }]}
+            {autoCloseDelayMs !== undefined ? (
+              <Text style={[styles.autoReturnText, { color: theme.colors.textSecondary }]}>
+                {t('common.autoReturning')}
+              </Text>
+            ) : (
+              (successContent !== undefined || (successButtons && successButtons.length > 0)) && (
+                <View style={styles.successActions}>
+                  {successError && (
+                    <Text
+                      accessibilityRole="alert"
+                      style={[styles.errorDetailText, { color: theme.colors.error }]}
+                    >
+                      {successError}
+                    </Text>
+                  )}
+                  <View style={styles.successButtonRow}>
+                    {successButtons?.map((btn, index) => {
+                      const Icon = btn.icon;
+                      const fullWidth = btn.primary || btn.fullWidth;
+                      const color = btn.primary ? theme.colors.white : theme.colors.text;
+                      return (
+                        <TouchableOpacity
+                          key={index}
+                          accessibilityRole="button"
+                          accessibilityLabel={btn.label}
+                          accessibilityState={{ disabled: btn.disabled, busy: btn.busy }}
+                          disabled={btn.disabled}
+                          style={[
+                            styles.button,
+                            styles.successButton,
+                            fullWidth
+                              ? styles.fullWidthButton
+                              : [styles.secondaryButton, secondaryButtonSize],
+                            btn.disabled && styles.disabledButton,
+                            btn.primary
+                              ? { backgroundColor: theme.colors.primary }
+                              : [
+                                  styles.buttonOutline,
+                                  {
+                                    backgroundColor: theme.colors.surface,
+                                    borderColor: theme.colors.border,
+                                  },
+                                ],
+                          ]}
+                          onPress={btn.onPress}
+                        >
+                          {btn.busy ? (
+                            <ActivityIndicator size="small" color={color} />
+                          ) : (
+                            Icon && <Icon width={18} height={18} color={color} />
+                          )}
+                          <Text style={[styles.buttonText, styles.actionButtonText, { color }]}>
+                            {btn.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={t('common.back')}
+                    accessibilityState={{ disabled: disableDismiss }}
+                    disabled={disableDismiss}
+                    style={[
+                      styles.button,
+                      styles.backButton,
+                      disableDismiss && styles.disabledButton,
+                    ]}
+                    onPress={onComplete}
                   >
-                    {successError}
-                  </Text>
-                )}
-                <View style={styles.successButtonRow}>
-                  {successButtons?.map((btn, index) => {
-                    const Icon = btn.icon;
-                    const fullWidth = btn.primary || btn.fullWidth;
-                    const color = btn.primary ? theme.colors.white : theme.colors.text;
-                    return (
-                      <TouchableOpacity
-                        key={index}
-                        accessibilityRole="button"
-                        accessibilityLabel={btn.label}
-                        accessibilityState={{ disabled: btn.disabled, busy: btn.busy }}
-                        disabled={btn.disabled}
-                        style={[
-                          styles.button,
-                          styles.successButton,
-                          fullWidth
-                            ? styles.fullWidthButton
-                            : [styles.secondaryButton, secondaryButtonSize],
-                          btn.disabled && styles.disabledButton,
-                          btn.primary
-                            ? { backgroundColor: theme.colors.primary }
-                            : [
-                                styles.buttonOutline,
-                                {
-                                  backgroundColor: theme.colors.surface,
-                                  borderColor: theme.colors.border,
-                                },
-                              ],
-                        ]}
-                        onPress={btn.onPress}
-                      >
-                        {btn.busy ? (
-                          <ActivityIndicator size="small" color={color} />
-                        ) : (
-                          Icon && <Icon width={18} height={18} color={color} />
-                        )}
-                        <Text style={[styles.buttonText, styles.actionButtonText, { color }]}>
-                          {btn.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+                    <Text style={[styles.buttonText, { color: theme.colors.textSecondary }]}>
+                      {t('common.back')}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel={t('common.back')}
-                  accessibilityState={{ disabled: disableDismiss }}
-                  disabled={disableDismiss}
-                  style={[
-                    styles.button,
-                    styles.backButton,
-                    disableDismiss && styles.disabledButton,
-                  ]}
-                  onPress={onComplete}
-                >
-                  <Text style={[styles.buttonText, { color: theme.colors.textSecondary }]}>
-                    {t('common.back')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              )
             )}
           </>
         )}
@@ -464,6 +477,10 @@ const styles = StyleSheet.create({
   successTitle: {
     fontSize: 18,
     fontWeight: '600',
+    textAlign: 'center',
+  },
+  autoReturnText: {
+    fontSize: 13,
     textAlign: 'center',
   },
   statusText: {

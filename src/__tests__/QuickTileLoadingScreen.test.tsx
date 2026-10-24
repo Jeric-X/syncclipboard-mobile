@@ -81,6 +81,7 @@ afterEach(async () => {
   jest.restoreAllMocks();
   Platform.OS = previousPlatform;
   testGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+  jest.useRealTimers();
 });
 
 async function render(content: ClipboardContent) {
@@ -178,6 +179,7 @@ it('保存期间阻止复制和关闭，保存完成后恢复操作且保留预�
 });
 
 it('带链接文字通过完整内容复制接口再次复制并返回', async () => {
+  jest.useFakeTimers();
   const content: ClipboardContent = {
     type: 'Text',
     text: '说明 https://example.com',
@@ -186,6 +188,7 @@ it('带链接文字通过完整内容复制接口再次复制并返回', async (
     timestamp: 1,
   };
   await render(content);
+  await act(async () => jest.advanceTimersByTime(5000));
   expect(complete).not.toHaveBeenCalled();
   expect(button('clipboard.openLink')).toBeDefined();
   expect(button('quickTile.copyAndReturn')).toBeDefined();
@@ -194,10 +197,30 @@ it('带链接文字通过完整内容复制接口再次复制并返回', async (
   expect(complete).toHaveBeenCalledTimes(1);
 });
 
-it('普通文字保持下载后自动返回', async () => {
+it('普通文字复制成功后显示预览和自动返回提示，停留 1.2 秒再关闭', async () => {
+  jest.useFakeTimers();
   await render({ type: 'Text', text: '普通文字', timestamp: 1, hasData: false });
   expect(setLocalClipboardFromRemote).toHaveBeenCalled();
+  expect(JSON.stringify(root.toJSON())).toContain('普通文字');
+  expect(JSON.stringify(root.toJSON())).toContain('quickTile.textCopied');
+  expect(JSON.stringify(root.toJSON())).toContain('common.autoReturning');
+  expect(button('clipboard.open')).toBeUndefined();
+  expect(button('clipboard.save')).toBeUndefined();
+  expect(button('common.back')).toBeUndefined();
+  expect(complete).not.toHaveBeenCalled();
+  await act(async () => jest.advanceTimersByTime(1199));
+  expect(complete).not.toHaveBeenCalled();
+  await act(async () => jest.advanceTimersByTime(1));
   expect(complete).toHaveBeenCalledTimes(1);
+});
+
+it('文字预览提前退出后清理自动关闭定时器', async () => {
+  jest.useFakeTimers();
+  await render({ type: 'Text', text: '普通文字', timestamp: 1, hasData: false });
+  await act(async () => root.unmount());
+  root = undefined;
+  await act(async () => jest.advanceTimersByTime(5000));
+  expect(complete).not.toHaveBeenCalled();
 });
 
 it.each(['File', 'Group'] as const)('%s 不显示图片复制操作，保留对应文件操作', async (type) => {

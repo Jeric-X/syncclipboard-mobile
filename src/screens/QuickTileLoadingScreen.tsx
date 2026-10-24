@@ -85,17 +85,13 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
 
         if (content && content.type !== 'Text' && content.fileUri) {
           setFileContent(content);
-        } else if (content && content.type === 'Text') {
-          const urlRegex = /https?:\/\/[^\s<>"'()\]\[{}]+/i;
-          const urlMatch = content.text.match(urlRegex);
-          if (urlMatch) {
-            setFileContent(content);
-          }
+        } else if (content?.type === 'Text' && !isTextInvalid(content.text)) {
+          setFileContent(content);
         }
       }
 
-      // 只有文本类型才显示 Toast 提示
-      if (content && content.type === 'Text' && !isTextInvalid(content.text)) {
+      // 下载文字在成功页预览，上传文字仍使用 Toast 提示。
+      if (isUpload && content?.type === 'Text' && !isTextInvalid(content.text)) {
         const preview = content.text.trim().replace(/\s+/g, ' ');
         const toastMessage = preview.length > 40 ? preview.slice(0, 40) + '…' : preview;
         if (Platform.OS === 'android') ToastAndroid.show(toastMessage, ToastAndroid.SHORT);
@@ -250,21 +246,23 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
   };
 
   const successButtons: SuccessButtonConfig[] | undefined = fileContent
-    ? fileContent.type === 'Text' && textUrl
-      ? [
-          copyButton,
-          {
-            label: t('clipboard.openLink'),
-            fullWidth: true,
-            icon: ExternalLink,
-            disabled: isCopying,
-            onPress: async () => {
-              try {
-                await Linking.openURL(textUrl);
-              } catch {}
+    ? fileContent.type === 'Text'
+      ? textUrl
+        ? [
+            copyButton,
+            {
+              label: t('clipboard.openLink'),
+              fullWidth: true,
+              icon: ExternalLink,
+              disabled: isCopying,
+              onPress: async () => {
+                try {
+                  await Linking.openURL(textUrl);
+                } catch {}
+              },
             },
-          },
-        ]
+          ]
+        : undefined
       : fileContent.type === 'Group'
         ? [saveButtonConfig]
         : [
@@ -314,6 +312,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
       successContent={fileContent ?? undefined}
       successButtons={successButtons}
       successError={copyError}
+      autoCloseDelayMs={fileContent?.type === 'Text' && !textUrl ? 1200 : undefined}
       progress={progress}
       previewText={previewText}
       overlayMode={overlayMode}
