@@ -88,6 +88,7 @@ export class HistoryTransferQueue {
    */
   setHistoryAPI(api: IHistoryAPI): void {
     this.historyAPI = api;
+    this.signalQueue();
   }
 
   /**
@@ -481,6 +482,7 @@ export class HistoryTransferQueue {
   private async processPendingTasks(): Promise<void> {
     while (
       this.isRunning &&
+      this.historyAPI !== null &&
       this.pendingTasks.length > 0 &&
       this.activeTasks.size < this.config.maxConcurrency
     ) {

@@ -129,3 +129,38 @@ it('记录大小小于实际传输大小时，进度不超出 100%', async () =>
   expect(task.progress).toBe(100);
   expect(report.mock.calls[0][0].progress).toBe(1);
 });
+
+it('keeps early image downloads pending until the history API is bound, then drains them', async () => {
+  jest.useFakeTimers();
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+  mockStorage.getItem.mockResolvedValue(
+    createHistoryItem({
+      type: 'Image',
+      profileHash: 'early',
+      timestamp: 100,
+      text: 'image',
+      hasData: true,
+      dataName: 'image.png',
+    })
+  );
+  const queue = new HistoryTransferQueue();
+  const states: string[] = [];
+  queue.onTaskStatusChanged((task) => states.push(task.status));
+  await queue.start();
+  const task = await queue.addDownloadTask('Image-early');
+  void task.awaiter.catch(() => {});
+  try {
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(task.status).toBe('pending');
+    expect(task.failureCount).toBe(0);
+    expect(states).not.toContain('failed');
+    const downloadData = jest.fn().mockResolvedValue('file://history/image.png');
+    queue.setHistoryAPI({ downloadData } as unknown as IHistoryAPI);
+    await jest.advanceTimersByTimeAsync(0);
+    await expect(task.awaiter).resolves.toMatchObject({ fileUri: 'file://history/image.png' });
+    expect(downloadData).toHaveBeenCalledTimes(1);
+  } finally {
+    await queue.stop();
+    jest.useRealTimers();
+  }
+});

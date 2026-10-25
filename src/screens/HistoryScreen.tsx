@@ -57,6 +57,10 @@ import { createContentFromFile } from '@/utils/clipboard/clipboardContentUtils';
 import { isHistorySyncEnabled } from '@/utils/config';
 import { updateScopedSelection } from '@/utils/historySelection';
 import { getHistorySyncService } from '@/services/history/HistorySyncService';
+import { getReadyHistorySyncService } from '@/services/history/historySyncReadiness';
+import { getHistoryTransferQueue } from '@/services/history/HistoryTransferQueue';
+import { getProfileId } from '@/utils/clipboard/profileId';
+import { File } from 'expo-file-system';
 
 export function HistoryScreen() {
   const navigation = useNavigation();
@@ -578,16 +582,15 @@ export function HistoryScreen() {
   const handleResyncHistory = useCallback(async () => {
     if (isSyncing) return;
 
-    const syncService = getHistorySyncService();
-    if (!syncService.isInitialized()) {
-      showMessage(t('history.syncNotInitialized'), 'error');
-      return;
-    }
-
     setIsSyncing(true);
     showMessage(t('history.syncStarted'), 'info');
 
     try {
+      const syncService = await getReadyHistorySyncService();
+      if (!syncService) {
+        showMessage(t('history.syncNotEnabled'), 'error');
+        return;
+      }
       await syncService.syncAll((progress: { message?: string }) => {
         if (progress.message) {
           console.log(`[HistoryScreen] Sync progress: ${progress.message}`);
@@ -611,17 +614,14 @@ export function HistoryScreen() {
     async (isPullToRefresh = false) => {
       if (isSyncing) return;
 
-      const syncService = getHistorySyncService();
-      if (!syncService.isInitialized()) {
-        return;
-      }
-
       setIsSyncing(true);
       if (isPullToRefresh) {
         setIsRefreshing(true);
       }
 
       try {
+        const syncService = await getReadyHistorySyncService();
+        if (!syncService) return;
         await syncService.syncIncremental();
       } catch (error) {
         console.error('[HistoryScreen] Failed to incremental sync:', error);
@@ -642,6 +642,7 @@ export function HistoryScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      let active = true;
       const onScreenFocus = async () => {
         const currentConfig = useSettingsStore.getState().config;
         if (currentConfig?.needsHistoryReorganize) {
@@ -691,8 +692,9 @@ export function HistoryScreen() {
 
         if (historySyncEnabled) {
           console.log('[HistoryScreen] Screen focused, starting incremental sync');
-          const syncService = getHistorySyncService();
-          if (syncService.isInitialized()) {
+          const syncService = await getReadyHistorySyncService();
+          if (!active) return;
+          if (syncService) {
             if (syncService.isSyncInProgress()) {
               console.log('[HistoryScreen] Sync already in progress, showing indicator');
               setIsSyncing(true);
@@ -723,8 +725,18 @@ export function HistoryScreen() {
         }
       };
 
-      onScreenFocus();
-    }, [historySyncEnabled])
+      void onScreenFocus().catch((error) => {
+        if (!active) return;
+        console.error('[HistoryScreen] Failed to prepare history sync:', error);
+        setError({
+          title: t('history.incrementalSyncFailedTitle'),
+          message: error instanceof Error ? error.message : t('common.unknownError'),
+        });
+      });
+      return () => {
+        active = false;
+      };
+    }, [historySyncEnabled, setError, t])
   );
 
   const generateRandomDebugText = useCallback(() => {
@@ -808,6 +820,19 @@ export function HistoryScreen() {
     await setShowHistoryDebugInfo(!showHistoryDebugInfo);
   }, [showHistoryDebugInfo, setShowHistoryDebugInfo]);
 
+  const prepareTransfer = useCallback(async () => {
+    try {
+      if (await getReadyHistorySyncService()) return true;
+      showMessage(t('history.syncNotEnabled'), 'error');
+    } catch (error) {
+      showMessage(
+        error instanceof Error ? error.message : t('history.syncNotInitialized'),
+        'error'
+      );
+    }
+    return false;
+  }, [showMessage, t]);
+
   const handleDownload = useCallback(
     async (item: HistoryItem) => {
       console.log(`[HistoryScreen] ========== Download Button Clicked ==========`);
@@ -816,13 +841,7 @@ export function HistoryScreen() {
       console.log(`[HistoryScreen] Item dataName: ${item.dataName}`);
       console.log(`[HistoryScreen] Item isLocalFileReady: ${isLocalFileReady(item)}`);
 
-      if (!getHistorySyncService().isInitialized()) {
-        showMessage(t('history.syncNotEnabled'), 'error');
-        return;
-      }
-
-      const { getHistoryTransferQueue } = await import('@/services/history/HistoryTransferQueue');
-      const { getProfileId } = await import('@/utils');
+      if (!(await prepareTransfer())) return;
 
       const profileId = getProfileId(item.type, item.profileHash);
       console.log(`[HistoryScreen] Generated profileId: ${profileId}`);
@@ -831,7 +850,7 @@ export function HistoryScreen() {
       queue.start();
       await queue.addDownloadTask(profileId);
     },
-    [showMessage]
+    [prepareTransfer]
   );
 
   const handleUpload = useCallback(
@@ -842,14 +861,10 @@ export function HistoryScreen() {
       console.log(`[HistoryScreen] Item isLocalFileReady: ${isLocalFileReady(item)}`);
       console.log(`[HistoryScreen] Item syncStatus: ${item.syncStatus}`);
 
-      if (!getHistorySyncService().isInitialized()) {
-        showMessage(t('history.syncNotEnabled'), 'error');
-        return;
-      }
+      if (!(await prepareTransfer())) return;
 
       // 验证本地文件是否存在
       if (item.fileUri) {
-        const { File } = await import('expo-file-system');
         const file = new File(item.fileUri);
         if (!file.exists) {
           console.warn(`[HistoryScreen] Local file not found: ${item.fileUri}`);
@@ -858,9 +873,6 @@ export function HistoryScreen() {
         }
       }
 
-      const { getHistoryTransferQueue } = await import('@/services/history/HistoryTransferQueue');
-      const { getProfileId } = await import('@/utils');
-
       const profileId = getProfileId(item.type, item.profileHash);
       console.log(`[HistoryScreen] Generated profileId: ${profileId}`);
 
@@ -868,7 +880,7 @@ export function HistoryScreen() {
       queue.start();
       await queue.addUploadTask(profileId);
     },
-    [showMessage]
+    [prepareTransfer, showMessage, t]
   );
 
   const renderItem = useCallback(

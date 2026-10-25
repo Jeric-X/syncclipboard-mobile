@@ -139,8 +139,13 @@ object ServiceRuntimeSession {
                 .apply { setReferenceCounted(false); acquire(STARTUP_TIMEOUT_MS) }
             handler.postDelayed(timeout, STARTUP_TIMEOUT_MS)
             val readyContext = host.currentReactContext
-            logStartupTiming(if (readyContext == null) "reactHostStart" else "reactContextAlreadyReady")
-            if (readyContext != null) {
+            logStartupTiming(when {
+                readyContext == null -> "reactHostStart"
+                readyContext.hasActiveReactInstance() -> "reactContextAlreadyReady"
+                else -> "reactContextPending"
+            })
+            // ReactContext 可先于 ReactInstance 创建；此时 startTask 会登记任务但不调用 JS。
+            if (readyContext?.hasActiveReactInstance() == true) {
                 launch(readyContext)
                 return
             }
