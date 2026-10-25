@@ -65,11 +65,17 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
       let content: ClipboardContent | null | undefined;
 
       if (isUpload) {
+        // 控制中心收起期间可能暂时读不到内容，最多在 5 秒内每 500ms 重试。
+        const retryDeadline = Date.now() + 5000;
         content = await localClipboard.getClipboardContent();
-        if (!content) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
+        while (!content && !signal.aborted && Date.now() < retryDeadline) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.min(500, retryDeadline - Date.now()))
+          );
+          if (signal.aborted || Date.now() > retryDeadline) break;
           content = await localClipboard.getClipboardContent();
         }
+        if (signal.aborted) return;
         if (!content) throw new Error(t('quickTile.clipboardEmpty'));
         await setRemoteClipboard(content, signal, (info) => setProgress(info));
       } else {
