@@ -359,7 +359,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
             )}
             <View style={styles.buttonRow}>
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: theme.colors.primary }]}
+                style={[styles.button, styles.rowButton, { backgroundColor: theme.colors.primary }]}
                 onPress={run}
               >
                 <Text style={[styles.buttonText, { color: theme.colors.white }]}>
@@ -370,6 +370,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
                 <TouchableOpacity
                   style={[
                     styles.button,
+                    styles.rowButton,
                     styles.buttonOutline,
                     { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
                   ]}
@@ -383,6 +384,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
               <TouchableOpacity
                 style={[
                   styles.button,
+                  styles.rowButton,
                   styles.buttonOutline,
                   { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
                 ]}
@@ -543,8 +545,14 @@ const styles = StyleSheet.create({
   },
   buttonRow: {
     flexDirection: 'row',
+    width: '100%',
     gap: 12,
     marginTop: 8,
+  },
+  rowButton: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 0,
   },
   successButtonRow: {
     flexDirection: 'row',
@@ -588,6 +596,7 @@ const styles = StyleSheet.create({
   },
   button: {
     minHeight: 48,
+    justifyContent: 'center',
     paddingHorizontal: 28,
     paddingVertical: 10,
     borderRadius: 8,
