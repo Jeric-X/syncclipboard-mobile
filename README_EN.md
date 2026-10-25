@@ -81,29 +81,30 @@ npm run plugin:build
 
 ### JavaScript / TypeScript Dependencies
 
-| Repository                                                                                                        | Description                               |
-| ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| [facebook/react-native](https://github.com/facebook/react-native)                                                 | Cross-platform mobile framework           |
-| [expo/expo](https://github.com/expo/expo)                                                                         | React Native toolchain and native modules |
-| [react-navigation/react-navigation](https://github.com/react-navigation/react-navigation)                         | Navigation library                        |
-| [pmndrs/zustand](https://github.com/pmndrs/zustand)                                                               | Lightweight state management              |
-| [Shopify/flash-list](https://github.com/Shopify/flash-list)                                                       | High-performance list rendering           |
-| [software-mansion/react-native-reanimated](https://github.com/software-mansion/react-native-reanimated)           | Animation library                         |
-| [software-mansion/react-native-gesture-handler](https://github.com/software-mansion/react-native-gesture-handler) | Gesture handling                          |
-| [software-mansion/react-native-screens](https://github.com/software-mansion/react-native-screens)                 | Native navigation screen container        |
-| [th3rdwave/react-native-safe-area-context](https://github.com/th3rdwave/react-native-safe-area-context)           | Safe area adaptation                      |
-| [callstack/react-native-pager-view](https://github.com/callstack/react-native-pager-view)                         | Native pager view                         |
-| [satya164/react-native-tab-view](https://github.com/satya164/react-native-tab-view)                               | Tab view                                  |
-| [react-native-async-storage/async-storage](https://github.com/react-native-async-storage/async-storage)           | Local key-value storage                   |
-| [react-native-netinfo/react-native-netinfo](https://github.com/react-native-netinfo/react-native-netinfo)         | Network state listener                    |
-| [axios/axios](https://github.com/axios/axios)                                                                     | HTTP client                               |
-| [dotnet/aspnetcore (SignalR)](https://github.com/dotnet/aspnetcore)                                               | Real-time push client                     |
-| [expo/vector-icons](https://github.com/expo/vector-icons)                                                         | Vector icon library                       |
-| [jiang0508/react-native-feather](https://github.com/jiang0508/react-native-feather)                               | Feather icon components                   |
-| [onubo/react-native-logs](https://github.com/onubo/react-native-logs)                                             | Logging utility                           |
-| [margelo/react-native-worklets](https://github.com/margelo/react-native-worklets)                                 | JS Worklets runtime                       |
-| [emn178/js-sha256](https://github.com/emn178/js-sha256)                                                           | SHA-256 hash calculation                  |
-| [linonetwo/segmentit](https://github.com/linonetwo/segmentit)                                                     | Chinese word segmentation                 |
+| Repository                                                                                                        | Description                                                                                                   |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| [facebook/react-native](https://github.com/facebook/react-native)                                                 | Cross-platform mobile framework                                                                               |
+| [expo/expo](https://github.com/expo/expo)                                                                         | React Native toolchain and native modules                                                                     |
+| [react-navigation/react-navigation](https://github.com/react-navigation/react-navigation)                         | Navigation library                                                                                            |
+| [pmndrs/zustand](https://github.com/pmndrs/zustand)                                                               | Lightweight state management                                                                                  |
+| [Shopify/flash-list](https://github.com/Shopify/flash-list)                                                       | High-performance list rendering                                                                               |
+| [software-mansion/react-native-reanimated](https://github.com/software-mansion/react-native-reanimated)           | Animation library                                                                                             |
+| [software-mansion/react-native-gesture-handler](https://github.com/software-mansion/react-native-gesture-handler) | Gesture handling                                                                                              |
+| [software-mansion/react-native-screens](https://github.com/software-mansion/react-native-screens)                 | Native navigation screen container                                                                            |
+| [th3rdwave/react-native-safe-area-context](https://github.com/th3rdwave/react-native-safe-area-context)           | Safe area adaptation                                                                                          |
+| [callstack/react-native-pager-view](https://github.com/callstack/react-native-pager-view)                         | Native pager view                                                                                             |
+| [satya164/react-native-tab-view](https://github.com/satya164/react-native-tab-view)                               | Tab view                                                                                                      |
+| [react-native-async-storage/async-storage](https://github.com/react-native-async-storage/async-storage)           | Local key-value storage                                                                                       |
+| [react-native-netinfo/react-native-netinfo](https://github.com/react-native-netinfo/react-native-netinfo)         | Network state listener                                                                                        |
+| [axios/axios](https://github.com/axios/axios)                                                                     | HTTP client                                                                                                   |
+| [dotnet/aspnetcore (SignalR)](https://github.com/dotnet/aspnetcore)                                               | Real-time push client                                                                                         |
+| [expo/vector-icons](https://github.com/expo/vector-icons)                                                         | Vector icon library                                                                                           |
+| [jiang0508/react-native-feather](https://github.com/jiang0508/react-native-feather)                               | Feather icon components                                                                                       |
+| [hugeicons/hugeicons](https://github.com/hugeicons/hugeicons)                                                     | Content type icons (Hugeicons Free Stroke Rounded) · [MIT](https://hugeicons.com/docs/faqs/license-questions) |
+| [onubo/react-native-logs](https://github.com/onubo/react-native-logs)                                             | Logging utility                                                                                               |
+| [margelo/react-native-worklets](https://github.com/margelo/react-native-worklets)                                 | JS Worklets runtime                                                                                           |
+| [emn178/js-sha256](https://github.com/emn178/js-sha256)                                                           | SHA-256 hash calculation                                                                                      |
+| [linonetwo/segmentit](https://github.com/linonetwo/segmentit)                                                     | Chinese word segmentation                                                                                     |
 
 ### Android Dependencies
 

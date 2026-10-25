@@ -8,6 +8,7 @@ import { View, Text, StyleSheet, Pressable, Image, TouchableOpacity, Linking } f
 import { Copy, Download, Share, Link2, Scissors } from 'react-native-feather';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { StarIcon } from './StarIcon';
+import { ClipboardTypeIcon } from './ClipboardTypeIcon';
 import { useTheme } from '@/hooks/useTheme';
 import { HistoryItem, isLocalFileReady } from '@/types/clipboard';
 import { useTransferQueueStore } from '@/stores/transferQueueStore';
@@ -136,20 +137,6 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
       height: number;
     } | null>(null);
 
-    const getTypeIcon = (type: string): string => {
-      switch (type) {
-        case 'Text':
-          return '📝';
-        case 'Image':
-          return '🖼️';
-        case 'File':
-        case 'Group':
-          return '📄';
-        default:
-          return '📋';
-      }
-    };
-
     const getTypeLabel = (type: string): string => {
       switch (type) {
         case 'Text':
@@ -245,7 +232,12 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
             <View style={styles.topContent}>
               {/* 左侧图标 */}
               <View style={styles.iconContainer}>
-                <Text style={styles.typeIcon}>{getTypeIcon(item.type)}</Text>
+                <ClipboardTypeIcon
+                  type={item.type}
+                  fileName={item.text || item.dataName}
+                  size={16}
+                  color={theme.colors.primary}
+                />
               </View>
 
               {/* 类型标签和时间 */}
@@ -731,9 +723,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 6,
     overflow: 'hidden',
-  },
-  typeIcon: {
-    fontSize: 13,
   },
   imagePreviewContainer: {
     marginTop: 8,

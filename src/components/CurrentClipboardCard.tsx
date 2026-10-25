@@ -24,6 +24,7 @@ import { formatFileSize, formatSizeWithType, isTextInvalid } from '@/utils';
 import { saveContentDataToDirectory } from '@/utils/clipboard/clipboardContentUtils';
 import * as FileSystem from 'expo-file-system/legacy';
 import type { ProgressInfo } from 'native-util';
+import { ClipboardTypeIcon } from './ClipboardTypeIcon';
 
 interface DownloadProgress {
   progress: number;
@@ -128,20 +129,6 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
       </View>
     );
   }
-
-  const getTypeIcon = (type: string): string => {
-    switch (type) {
-      case 'Text':
-        return '📝';
-      case 'Image':
-        return '🖼️';
-      case 'File':
-      case 'Group':
-        return '📄';
-      default:
-        return '📋';
-    }
-  };
 
   const getTypeLabel = (type: string): string => {
     switch (type) {
@@ -334,7 +321,14 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
       {/* 标题栏 */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.typeIcon}>{getTypeIcon(clipboard.type)}</Text>
+          <View style={styles.typeIcon}>
+            <ClipboardTypeIcon
+              type={clipboard.type}
+              fileName={clipboard.text || clipboard.fileName}
+              size={24}
+              color={theme.colors.primary}
+            />
+          </View>
           <View style={styles.headerInfo}>
             <Text style={[styles.typeLabel, { color: theme.colors.text }]}>
               {getTypeLabel(clipboard.type)}
@@ -640,7 +634,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   typeIcon: {
-    fontSize: 24,
     marginRight: 12,
   },
   headerInfo: {

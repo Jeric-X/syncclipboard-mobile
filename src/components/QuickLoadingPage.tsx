@@ -23,6 +23,7 @@ import { useTranslation } from 'react-i18next';
 import type { ClipboardContent } from '@/types/clipboard';
 import type { ProgressInfo } from 'native-util';
 import { formatFileSize, isTextInvalid } from '@/utils';
+import { ClipboardTypeIcon } from './ClipboardTypeIcon';
 
 type LoadingState = 'loading' | 'success' | 'error';
 
@@ -470,7 +471,12 @@ const ContentPreview: React.FC<{ content: ClipboardContent }> = ({ content }) =>
         { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
       ]}
     >
-      <Text style={[styles.previewFileIcon, { color: theme.colors.primary }]}>📄</Text>
+      <ClipboardTypeIcon
+        type={content.type}
+        fileName={content.text || content.fileName}
+        size={32}
+        color={theme.colors.primary}
+      />
       <Text style={[styles.previewFileName, { color: theme.colors.text }]} numberOfLines={10}>
         {label}
       </Text>
@@ -649,9 +655,6 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center',
     gap: 6,
-  },
-  previewFileIcon: {
-    fontSize: 32,
   },
   previewFileName: {
     fontSize: 14,
