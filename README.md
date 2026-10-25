@@ -81,29 +81,30 @@ npm run plugin:build
 
 ### JavaScript / TypeScript 依赖
 
-| 仓库                                                                                                              | 说明                          |
-| ----------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| [facebook/react-native](https://github.com/facebook/react-native)                                                 | 跨平台移动框架                |
-| [expo/expo](https://github.com/expo/expo)                                                                         | React Native 工具链与原生模块 |
-| [react-navigation/react-navigation](https://github.com/react-navigation/react-navigation)                         | 导航库                        |
-| [pmndrs/zustand](https://github.com/pmndrs/zustand)                                                               | 轻量状态管理                  |
-| [Shopify/flash-list](https://github.com/Shopify/flash-list)                                                       | 高性能列表渲染                |
-| [software-mansion/react-native-reanimated](https://github.com/software-mansion/react-native-reanimated)           | 动画库                        |
-| [software-mansion/react-native-gesture-handler](https://github.com/software-mansion/react-native-gesture-handler) | 手势处理                      |
-| [software-mansion/react-native-screens](https://github.com/software-mansion/react-native-screens)                 | 原生导航屏幕容器              |
-| [th3rdwave/react-native-safe-area-context](https://github.com/th3rdwave/react-native-safe-area-context)           | 安全区域适配                  |
-| [callstack/react-native-pager-view](https://github.com/callstack/react-native-pager-view)                         | 原生分页视图                  |
-| [satya164/react-native-tab-view](https://github.com/satya164/react-native-tab-view)                               | Tab 切换视图                  |
-| [react-native-async-storage/async-storage](https://github.com/react-native-async-storage/async-storage)           | 本地键值存储                  |
-| [react-native-netinfo/react-native-netinfo](https://github.com/react-native-netinfo/react-native-netinfo)         | 网络状态监听                  |
-| [axios/axios](https://github.com/axios/axios)                                                                     | HTTP 客户端                   |
-| [dotnet/aspnetcore (SignalR)](https://github.com/dotnet/aspnetcore)                                               | 实时推送客户端                |
-| [expo/vector-icons](https://github.com/expo/vector-icons)                                                         | 矢量图标库                    |
-| [jiang0508/react-native-feather](https://github.com/jiang0508/react-native-feather)                               | Feather 图标组件              |
-| [onubo/react-native-logs](https://github.com/onubo/react-native-logs)                                             | 日志工具                      |
-| [margelo/react-native-worklets](https://github.com/margelo/react-native-worklets)                                 | JS Worklets 运行时            |
-| [emn178/js-sha256](https://github.com/emn178/js-sha256)                                                           | SHA-256 哈希计算              |
-| [linonetwo/segmentit](https://github.com/linonetwo/segmentit)                                                     | 中文分词（词语选取功能）      |
+| 仓库                                                                                                              | 说明                                                                                                     |
+| ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [facebook/react-native](https://github.com/facebook/react-native)                                                 | 跨平台移动框架                                                                                           |
+| [expo/expo](https://github.com/expo/expo)                                                                         | React Native 工具链与原生模块                                                                            |
+| [react-navigation/react-navigation](https://github.com/react-navigation/react-navigation)                         | 导航库                                                                                                   |
+| [pmndrs/zustand](https://github.com/pmndrs/zustand)                                                               | 轻量状态管理                                                                                             |
+| [Shopify/flash-list](https://github.com/Shopify/flash-list)                                                       | 高性能列表渲染                                                                                           |
+| [software-mansion/react-native-reanimated](https://github.com/software-mansion/react-native-reanimated)           | 动画库                                                                                                   |
+| [software-mansion/react-native-gesture-handler](https://github.com/software-mansion/react-native-gesture-handler) | 手势处理                                                                                                 |
+| [software-mansion/react-native-screens](https://github.com/software-mansion/react-native-screens)                 | 原生导航屏幕容器                                                                                         |
+| [th3rdwave/react-native-safe-area-context](https://github.com/th3rdwave/react-native-safe-area-context)           | 安全区域适配                                                                                             |
+| [callstack/react-native-pager-view](https://github.com/callstack/react-native-pager-view)                         | 原生分页视图                                                                                             |
+| [satya164/react-native-tab-view](https://github.com/satya164/react-native-tab-view)                               | Tab 切换视图                                                                                             |
+| [react-native-async-storage/async-storage](https://github.com/react-native-async-storage/async-storage)           | 本地键值存储                                                                                             |
+| [react-native-netinfo/react-native-netinfo](https://github.com/react-native-netinfo/react-native-netinfo)         | 网络状态监听                                                                                             |
+| [axios/axios](https://github.com/axios/axios)                                                                     | HTTP 客户端                                                                                              |
+| [dotnet/aspnetcore (SignalR)](https://github.com/dotnet/aspnetcore)                                               | 实时推送客户端                                                                                           |
+| [expo/vector-icons](https://github.com/expo/vector-icons)                                                         | 矢量图标库                                                                                               |
+| [jiang0508/react-native-feather](https://github.com/jiang0508/react-native-feather)                               | Feather 图标组件                                                                                         |
+| [hugeicons/hugeicons](https://github.com/hugeicons/hugeicons)                                                     | 内容类型图标（Hugeicons Free Stroke Rounded） · [MIT](https://hugeicons.com/docs/faqs/license-questions) |
+| [onubo/react-native-logs](https://github.com/onubo/react-native-logs)                                             | 日志工具                                                                                                 |
+| [margelo/react-native-worklets](https://github.com/margelo/react-native-worklets)                                 | JS Worklets 运行时                                                                                       |
+| [emn178/js-sha256](https://github.com/emn178/js-sha256)                                                           | SHA-256 哈希计算                                                                                         |
+| [linonetwo/segmentit](https://github.com/linonetwo/segmentit)                                                     | 中文分词（词语选取功能）                                                                                 |
 
 ### Android 依赖
 
