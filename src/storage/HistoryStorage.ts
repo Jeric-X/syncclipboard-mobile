@@ -16,43 +16,6 @@ import { HistoryDatabase } from './HistoryDatabase';
 import { File, Directory } from 'expo-file-system';
 
 /**
- * 当前历史记录数据版本号
- * 每次数据结构变更时递增
- */
-const CURRENT_HISTORY_VERSION = 1;
-
-/**
- * 迁移函数类型
- */
-type MigrationFunction = (items: HistoryItem[]) => HistoryItem[];
-
-/**
- * 版本迁移函数映射
- * key: 目标版本号
- * value: 从上一版本迁移到目标版本的函数
- */
-const MIGRATIONS: Record<number, MigrationFunction> = {
-  // v0 -> v1: 添加 syncStatus, lastAccessed 字段
-  1: (items: HistoryItem[]): HistoryItem[] => {
-    return items.map((item) => {
-      const migratedItem = { ...item };
-
-      // 设置同步状态默认值
-      if (migratedItem.syncStatus === undefined) {
-        migratedItem.syncStatus = HistorySyncStatus.LocalOnly;
-      }
-
-      // 设置 lastAccessed 默认值
-      if (migratedItem.lastAccessed === undefined) {
-        migratedItem.lastAccessed = migratedItem.timestamp;
-      }
-
-      return migratedItem;
-    });
-  },
-};
-
-/**
  * 历史记录变更事件类型
  */
 export type HistoryChangeAction = 'add' | 'update' | 'delete' | 'clear';
@@ -61,34 +24,6 @@ export type HistoryChangeAction = 'add' | 'update' | 'delete' | 'clear';
  * 历史记录存储服务
  */
 export type HistoryChangeCallback = (items: HistoryItem[], action: HistoryChangeAction) => void;
-
-/**
- * 规范化 ClipboardItem，确保所有字段都有默认值
- */
-function normalizeClipboardItem(item: HistoryItem): HistoryItem {
-  return {
-    type: item.type,
-    text: item.text ?? '',
-    profileHash: item.profileHash,
-    hasData: item.hasData,
-    dataName: item.dataName,
-    size: item.size ?? 0,
-    timestamp: item.timestamp ?? Date.now(),
-    deviceName: item.deviceName,
-    synced: item.synced,
-    starred: item.starred ?? false,
-    useCount: item.useCount ?? 0,
-    localClipboardHash: item.localClipboardHash,
-    fileUri: item.fileUri,
-    syncStatus: item.syncStatus ?? HistorySyncStatus.LocalOnly,
-    version: item.version ?? 0,
-    lastModified: item.lastModified ?? Date.now(),
-    lastAccessed: item.lastAccessed ?? Date.now(),
-    isDeleted: item.isDeleted ?? false,
-    pinned: item.pinned ?? false,
-    from: item.from,
-  };
-}
 
 export class HistoryStorage {
   private static instance: HistoryStorage | null = null;
@@ -340,24 +275,7 @@ export class HistoryStorage {
     try {
       const config = await configStorage.getConfig();
       if (config?.maxHistoryItems !== undefined) this.maxHistorySize = config.maxHistoryItems;
-      this.history = await this.database.load(({ json, version }) => {
-        if (!Number.isInteger(version) || version < 0 || version > CURRENT_HISTORY_VERSION) {
-          throw new Error('Unsupported legacy history version');
-        }
-        const parsed: unknown = json === null ? [] : JSON.parse(json);
-        if (
-          !Array.isArray(parsed) ||
-          parsed.some(
-            (item) =>
-              !item ||
-              typeof item.profileHash !== 'string' ||
-              !item.profileHash ||
-              !['Text', 'Image', 'File', 'Group'].includes(item.type)
-          )
-        )
-          throw new Error('Invalid legacy history');
-        return this.runMigrations(parsed, version).map(normalizeClipboardItem);
-      });
+      this.history = await this.database.load();
       this.sortHistory();
       this.initialized = true;
       this.cleanupOrphanedData().catch((error) => {
@@ -380,26 +298,6 @@ export class HistoryStorage {
   public async setLastSyncTime(time: number | null): Promise<void> {
     await this.initialize();
     await this.saveHistory(time);
-  }
-
-  /**
-   * 执行数据迁移
-   * @param items 历史记录数组
-   * @param fromVersion 起始版本号
-   * @returns 迁移后的记录数组
-   */
-  private runMigrations(items: HistoryItem[], fromVersion: number): HistoryItem[] {
-    let migratedItems = [...items];
-
-    for (let v = fromVersion + 1; v <= CURRENT_HISTORY_VERSION; v++) {
-      const migration = MIGRATIONS[v];
-      if (migration) {
-        console.log(`[HistoryStorage] Running migration to version ${v}`);
-        migratedItems = migration(migratedItems);
-      }
-    }
-
-    return migratedItems;
   }
 
   /**

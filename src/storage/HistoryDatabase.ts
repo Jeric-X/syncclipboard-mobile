@@ -1,6 +1,6 @@
 import { openDatabaseAsync } from 'expo-sqlite';
 import type { HistoryItem } from '../types/clipboard';
-import { readLegacyHistory, type LegacyHistory } from './legacyHistory';
+import { loadLegacyHistory } from './legacyHistory';
 
 /** 历史存储需要的 SQL 接口，测试可注入真实 SQLite 引擎。 */
 export interface HistorySqlConnection {
@@ -20,7 +20,7 @@ export class HistoryDatabase {
   constructor(
     private open: () => Promise<HistorySqlConnection> = () =>
       openDatabaseAsync('history.db', { useNewConnection: true }),
-    private readLegacy: () => Promise<LegacyHistory> = readLegacyHistory
+    private readInitialItems: () => Promise<HistoryItem[]> = loadLegacyHistory
   ) {}
 
   private enqueue<T>(task: () => Promise<T>): Promise<T> {
@@ -30,7 +30,7 @@ export class HistoryDatabase {
   }
 
   /** 迁移数据与完成标记一起提交；失败不会留下半份新历史。 */
-  load(migrate: (legacy: LegacyHistory) => HistoryItem[]): Promise<HistoryItem[]> {
+  load(): Promise<HistoryItem[]> {
     return this.enqueue(async () => {
       const db = this.connection ?? (this.connection = await this.open());
       await db.execAsync(`
@@ -45,7 +45,7 @@ export class HistoryDatabase {
       if (migrated && migrated.value !== '1')
         throw new Error('Unsupported history database version');
       if (!migrated) {
-        const items = migrate(await this.readLegacy());
+        const items = await this.readInitialItems();
         await db.withTransactionAsync(async () => {
           for (const item of items) {
             await db.runAsync(

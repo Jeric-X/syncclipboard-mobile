@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File } from 'expo-file-system';
 import { openDatabaseAsync } from 'expo-sqlite';
 import { getLegacyHistoryDatabasePath } from 'native-util';
+import { HistoryItem, HistorySyncStatus } from '../types/clipboard';
 import { STORAGE_KEYS } from '../types/storage';
 
 export interface LegacyHistory {
@@ -64,4 +65,96 @@ export async function readLegacyHistory(): Promise<LegacyHistory> {
   } finally {
     await db.closeAsync();
   }
+}
+
+/**
+ * 旧版 AsyncStorage 历史数据的最终版本号，与新 SQLite schema 版本无关
+ */
+const CURRENT_LEGACY_HISTORY_VERSION = 1;
+
+/**
+ * 迁移函数类型
+ */
+type MigrationFunction = (items: HistoryItem[]) => HistoryItem[];
+
+/**
+ * 版本迁移函数映射
+ * key: 目标版本号
+ * value: 从上一版本迁移到目标版本的函数
+ */
+const MIGRATIONS: Record<number, MigrationFunction> = {
+  // v0 -> v1: 添加 syncStatus, lastAccessed 字段
+  1: (items: HistoryItem[]): HistoryItem[] => {
+    return items.map((item) => {
+      const migratedItem = { ...item };
+
+      // 设置同步状态默认值
+      if (migratedItem.syncStatus === undefined) {
+        migratedItem.syncStatus = HistorySyncStatus.LocalOnly;
+      }
+
+      // 设置 lastAccessed 默认值
+      if (migratedItem.lastAccessed === undefined) {
+        migratedItem.lastAccessed = migratedItem.timestamp;
+      }
+
+      return migratedItem;
+    });
+  },
+};
+
+/**
+ * 将旧版记录补全为新版 HistoryItem
+ */
+function normalizeLegacyHistoryItem(item: HistoryItem): HistoryItem {
+  return {
+    type: item.type,
+    text: item.text ?? '',
+    profileHash: item.profileHash,
+    hasData: item.hasData,
+    dataName: item.dataName,
+    size: item.size ?? 0,
+    timestamp: item.timestamp ?? Date.now(),
+    deviceName: item.deviceName,
+    synced: item.synced,
+    starred: item.starred ?? false,
+    useCount: item.useCount ?? 0,
+    localClipboardHash: item.localClipboardHash,
+    fileUri: item.fileUri,
+    syncStatus: item.syncStatus ?? HistorySyncStatus.LocalOnly,
+    version: item.version ?? 0,
+    lastModified: item.lastModified ?? Date.now(),
+    lastAccessed: item.lastAccessed ?? Date.now(),
+    isDeleted: item.isDeleted ?? false,
+    pinned: item.pinned ?? false,
+    from: item.from,
+  };
+}
+
+/** 旧版兼容入口：读取、校验和升级全部封装在此，只向新存储提供 HistoryItem。 */
+export async function loadLegacyHistory(
+  read: () => Promise<LegacyHistory> = readLegacyHistory
+): Promise<HistoryItem[]> {
+  const { json, version } = await read();
+  if (!Number.isInteger(version) || version < 0 || version > CURRENT_LEGACY_HISTORY_VERSION) {
+    throw new Error('Unsupported legacy history version');
+  }
+  const parsed: unknown = json === null ? [] : JSON.parse(json);
+  if (
+    !Array.isArray(parsed) ||
+    parsed.some(
+      (item) =>
+        !item ||
+        typeof item.profileHash !== 'string' ||
+        !item.profileHash ||
+        !['Text', 'Image', 'File', 'Group'].includes(item.type)
+    )
+  )
+    throw new Error('Invalid legacy history');
+  let items: HistoryItem[] = parsed;
+  for (let target = version + 1; target <= CURRENT_LEGACY_HISTORY_VERSION; target++) {
+    const migrate = MIGRATIONS[target];
+    if (migrate) items = migrate(items);
+  }
+  return items.map(normalizeLegacyHistoryItem);
 }

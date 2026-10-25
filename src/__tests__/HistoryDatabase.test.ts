@@ -34,26 +34,22 @@ test('legacy chunks reconstruct multi-megabyte Unicode JSON including emoji with
 
 test('interrupted migration rolls back rows and completion marker, then retries without duplicates', async () => {
   const { connection } = await createHistorySqlite();
-  const legacy = jest.fn(async () => ({
-    json: JSON.stringify([item('a'), item('b')]),
-    version: 1,
-  }));
+  const legacy = jest.fn(async () => [item('a'), item('b')]);
   const store = new HistoryDatabase(async () => connection, legacy);
   const run = connection.runAsync.bind(connection);
   const failure = jest
     .spyOn(connection, 'runAsync')
     .mockImplementationOnce(run)
     .mockRejectedValueOnce(new Error('disk full'));
-  const migrate = ({ json }: { json: string | null }) => JSON.parse(json!);
-  await expect(store.load(migrate)).rejects.toThrow('disk full');
+  await expect(store.load()).rejects.toThrow('disk full');
   expect(await connection.getAllAsync('SELECT * FROM history_records')).toEqual([]);
   expect(await connection.getAllAsync('SELECT * FROM history_meta')).toEqual([]);
   failure.mockRestore();
-  expect(await store.load(migrate)).toHaveLength(2);
+  expect(await store.load()).toHaveLength(2);
   expect(legacy).toHaveBeenCalledTimes(2);
   await store.save([item('a')], 123);
   const restarted = new HistoryDatabase(async () => connection, legacy);
-  expect(await restarted.load(migrate)).toHaveLength(1);
+  expect(await restarted.load()).toHaveLength(1);
   expect(await restarted.getLastSyncTime()).toBe(123);
   expect(legacy).toHaveBeenCalledTimes(2);
 });
@@ -62,9 +58,9 @@ test('history changes and cursor roll back together if cursor persistence fails'
   const { connection } = await createHistorySqlite();
   const store = new HistoryDatabase(
     async () => connection,
-    async () => ({ json: null, version: 0 })
+    async () => []
   );
-  await store.load(() => []);
+  await store.load();
   await store.save([item('a')], 100);
   const run = connection.runAsync.bind(connection);
   const failure = jest.spyOn(connection, 'runAsync').mockImplementation(async (sql, ...params) => {
@@ -74,7 +70,7 @@ test('history changes and cursor roll back together if cursor persistence fails'
   await expect(store.save([item('b')], 200)).rejects.toThrow('disk full');
   failure.mockRestore();
   expect(await store.getLastSyncTime()).toBe(100);
-  expect(await store.load(() => [])).toEqual([item('a')]);
+  expect(await store.load()).toEqual([item('a')]);
   await store.save([item('b')], 200);
   expect(await store.getLastSyncTime()).toBe(200);
 });
@@ -83,9 +79,9 @@ test('queued snapshots commit in order and unchanged records are not rewritten',
   const { connection } = await createHistorySqlite();
   const store = new HistoryDatabase(
     async () => connection,
-    async () => ({ json: null, version: 0 })
+    async () => []
   );
-  await store.load(() => []);
+  await store.load();
   const first = item('a');
   await store.save([first]);
   const run = jest.spyOn(connection, 'runAsync');
@@ -97,7 +93,5 @@ test('queued snapshots commit in order and unchanged records are not rewritten',
   const writes = run.mock.calls.filter(([sql]) => sql.includes('INTO history_records'));
   expect(writes.map(([, hash]) => hash)).toEqual(['b', 'a']);
   expect(await store.getLastSyncTime()).toBe(200);
-  expect(await store.load(() => [])).toEqual(
-    expect.arrayContaining([{ ...first, starred: true }, second])
-  );
+  expect(await store.load()).toEqual(expect.arrayContaining([{ ...first, starred: true }, second]));
 });

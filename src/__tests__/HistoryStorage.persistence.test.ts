@@ -4,7 +4,7 @@ import { createHistorySqlite } from '../../test/helpers/historySqlite';
 import { HistoryStorage } from '../storage/HistoryStorage';
 import { createHistoryItem, HistorySyncStatus } from '../types/clipboard';
 import { STORAGE_KEYS } from '../types/storage';
-import { readLegacyHistoryChunks } from '../storage/legacyHistory';
+import { loadLegacyHistory, readLegacyHistoryChunks } from '../storage/legacyHistory';
 
 let connection: HistorySqlConnection;
 const mockValues = new Map<string, string>();
@@ -129,7 +129,7 @@ test('oversized legacy history migrates all types, local metadata and deleted re
   );
   const database = new HistoryDatabase(
     async () => connection,
-    () => readLegacyHistoryChunks(connection)
+    () => loadLegacyHistory(() => readLegacyHistoryChunks(connection))
   );
   const storage = new HistoryStorage(database);
   jest.spyOn(storage, 'cleanupOrphanedData').mockResolvedValue(0);
@@ -147,7 +147,12 @@ test('concurrent initialization and a new clipboard item share one migration', a
     resolve = done;
   });
   const read = jest.fn(() => pending);
-  const storage = new HistoryStorage(new HistoryDatabase(async () => connection, read));
+  const storage = new HistoryStorage(
+    new HistoryDatabase(
+      async () => connection,
+      () => loadLegacyHistory(read)
+    )
+  );
   const cleanup = jest.spyOn(storage, 'cleanupOrphanedData').mockResolvedValue(0);
   jest.spyOn(storage, 'cleanupByCount').mockResolvedValue(0);
   const operations = [storage.initialize(), storage.initialize(), storage.addItem(item('new'))];
@@ -180,3 +185,23 @@ test('version zero migration preserves timestamp as lastAccessed and is not repe
   mockValues.set(STORAGE_KEYS.HISTORY, 'corrupted after migration');
   expect(await restart().getCount()).toBe(1);
 });
+
+test.each(['-1', '0.5', '2', 'invalid'])(
+  'unsupported legacy version %s blocks migration and permits retry after repair',
+  async (version) => {
+    const original = JSON.stringify([item('old')]);
+    mockValues.set(STORAGE_KEYS.HISTORY, original);
+    mockValues.set(STORAGE_KEYS.HISTORY_VERSION, version);
+    const storage = restart();
+    await expect(storage.addItem(item('new'))).rejects.toThrow(
+      'Unsupported legacy history version'
+    );
+    expect(storage.cleanupOrphanedData).not.toHaveBeenCalled();
+    expect(await connection.getAllAsync('SELECT * FROM history_meta')).toEqual([]);
+    expect(await connection.getAllAsync('SELECT * FROM history_records')).toEqual([]);
+    expect(mockValues.get(STORAGE_KEYS.HISTORY)).toBe(original);
+    mockValues.set(STORAGE_KEYS.HISTORY_VERSION, '1');
+    expect(await storage.getCount()).toBe(1);
+    expect(await restart().getItem('old')).toMatchObject({ profileHash: 'old', timestamp: 100 });
+  }
+);
