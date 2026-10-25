@@ -1120,6 +1120,13 @@ class NativeUtilModule : Module() {
             Build.SUPPORTED_ABIS.toList()
         }
 
+        // 通过 Context 定位旧库，不依赖用户编号、包名或硬编码沙盒路径。
+        Function("getLegacyHistoryDatabasePath") {
+            val context = appContext.reactContext ?: throw IllegalStateException("React context unavailable")
+            val database = context.getDatabasePath("RKStorage")
+            if (database.exists()) Uri.fromFile(database).toString() else null
+        }
+
         AsyncFunction("saveClipboardImageToFile") { destDirPath: String, promise: Promise ->
             executor.submit {
                 try {

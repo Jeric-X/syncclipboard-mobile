@@ -98,6 +98,7 @@ const zh = {
   },
 
   history: {
+    loadFailed: '历史记录加载失败，原数据已保留',
     tabAll: '全部',
     tabText: '文本',
     tabImage: '图片',

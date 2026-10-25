@@ -54,7 +54,8 @@
           }
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      "expo-sqlite"
     ]
   }
 }

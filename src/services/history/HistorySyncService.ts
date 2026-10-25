@@ -13,12 +13,6 @@ import { ClipboardContentType, ServerConfig } from '@/types/api';
 import { getSignalRClient, type HistoryChangedEvent } from 'signalr-client';
 import { historyService } from './HistoryService';
 import type { HistoryChangeAction } from '@/storage/HistoryStorage';
-import {
-  getHistoryLastSyncTime,
-  setHistoryLastSyncTime,
-  removeHistoryLastSyncTime,
-} from '../../storage/SyncStateStorage';
-
 import { configStorage } from '../../storage/ConfigStorage';
 import { getHistoryTransferQueue } from './HistoryTransferQueue';
 import { createHistoryAPI } from '../../api/history/HistoryAPIFactory';
@@ -73,24 +67,28 @@ export class HistorySyncService {
    * 初始化同步服务
    */
   async initialize(config: HistorySyncConfig): Promise<void> {
-    this.historyAPI = config.historyAPI;
-    this.serverConfig = config.serverConfig;
+    const version = this.syncVersion;
+    // 迁移可能失败或耗时；存储就绪前不能发布已初始化状态或注册监听。
+    const lastSyncTime = await this.historyStorage.getLastSyncTime();
+    if (version !== this.syncVersion) return;
 
-    // 注册 SignalR 历史变化事件监听
-    const client = getSignalRClient();
-    client.onRemoteHistoryChanged(this.handleNativeHistoryChanged);
+    try {
+      this.historyAPI = config.historyAPI;
+      this.serverConfig = config.serverConfig;
+      this.lastSyncTime = lastSyncTime;
 
-    // 注册本地存储变更回调，自动同步 NeedSync 记录
-    this.storageChangeCallback = this.handleLocalHistoryChanged;
-    historyService.addChangeCallback(this.storageChangeCallback);
+      const client = getSignalRClient();
+      client.onRemoteHistoryChanged(this.handleNativeHistoryChanged);
+      this.storageChangeCallback = this.handleLocalHistoryChanged;
+      historyService.addChangeCallback(this.storageChangeCallback);
 
-    // 加载上次同步时间
-    await this.loadLastSyncTime();
-
-    // 初始化传输队列
-    const transferQueue = getHistoryTransferQueue();
-    transferQueue.setHistoryAPI(config.historyAPI);
-    await transferQueue.start();
+      const transferQueue = getHistoryTransferQueue();
+      transferQueue.setHistoryAPI(config.historyAPI);
+      await transferQueue.start();
+    } catch (error) {
+      await this.destroy();
+      throw error;
+    }
   }
 
   /**
@@ -180,8 +178,6 @@ export class HistorySyncService {
     isFullSync: boolean,
     progressCallback?: SyncProgressCallback
   ): Promise<void> {
-    const lastSyncTime = isFullSync ? undefined : (this.lastSyncTime ?? undefined);
-
     if (this.isSyncing) {
       console.log('[HistorySyncService] Sync already in progress');
       return;
@@ -201,6 +197,11 @@ export class HistorySyncService {
 
     try {
       if (!(await this.isHistorySyncEnabled()) || controller.signal.aborted) return;
+      // 等待迁移和所有历史写入，再读取对应游标。
+      await this.loadLastSyncTime();
+      this.throwIfSyncAborted(controller.signal);
+      const lastSyncTime = isFullSync ? undefined : (this.lastSyncTime ?? undefined);
+      const syncStartedAt = Date.now();
       await this.notifyProgress({ phase: 'fetching', message: '校验服务器时间...' });
       await this.validateServerTime(controller.signal);
 
@@ -240,8 +241,8 @@ export class HistorySyncService {
       }
 
       this.throwIfSyncAborted(controller.signal);
-      this.lastSyncTime = Date.now();
-      await this.saveLastSyncTime();
+      await this.historyStorage.setLastSyncTime(syncStartedAt);
+      this.lastSyncTime = syncStartedAt;
 
       this.throwIfSyncAborted(controller.signal);
       await this.notifyProgress({ phase: 'completed', message: '同步完成' });
@@ -966,26 +967,12 @@ export class HistorySyncService {
    * 加载上次同步时间
    */
   private async loadLastSyncTime(): Promise<void> {
-    try {
-      this.lastSyncTime = await getHistoryLastSyncTime();
-    } catch (error) {
-      console.warn('[HistorySyncService] Failed to load last sync time:', error);
-    }
+    this.lastSyncTime = await this.historyStorage.getLastSyncTime();
   }
 
-  /**
-   * 保存上次同步时间
-   */
+  /** 保存失败必须传递给调用方，不能把未落盘的游标视为成功。 */
   private async saveLastSyncTime(): Promise<void> {
-    try {
-      if (this.lastSyncTime) {
-        await setHistoryLastSyncTime(this.lastSyncTime);
-      } else {
-        await removeHistoryLastSyncTime();
-      }
-    } catch (error) {
-      console.warn('[HistorySyncService] Failed to save last sync time:', error);
-    }
+    await this.historyStorage.setLastSyncTime(this.lastSyncTime);
   }
 
   /**
@@ -1140,7 +1127,7 @@ export class HistorySyncService {
     }
 
     await this.initialize({ serverConfig, historyAPI });
-    return true;
+    return this.isInitialized();
   }
 }
 
