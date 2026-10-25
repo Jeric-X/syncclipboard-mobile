@@ -3,6 +3,8 @@
  * 验证历史记录插入、更新后排序行为符合预期
  */
 
+import { HistoryDatabase } from '../storage/HistoryDatabase';
+import { createHistorySqlite } from '../../test/helpers/historySqlite';
 import { HistoryStorage } from '../storage/HistoryStorage';
 import { HistoryItem, HistorySyncStatus } from '../types/clipboard';
 
@@ -26,6 +28,8 @@ jest.mock('expo-file-system', () => ({
 }));
 
 jest.mock('../utils/fileStorage', () => ({
+  initFileStorage: jest.fn().mockResolvedValue(undefined),
+  HISTORY_BASE_DIR: { exists: false },
   getHistoryFileDir: jest.fn().mockReturnValue({
     uri: 'file://test/history',
     exists: true,
@@ -85,7 +89,9 @@ describe('HistoryStorage 排序', () => {
     jest.clearAllMocks();
     // 重置单例
     (HistoryStorage as unknown as { instance: null }).instance = null;
-    storage = HistoryStorage.getInstance();
+    storage = new HistoryStorage(
+      new HistoryDatabase(async () => (await createHistorySqlite()).connection)
+    );
     await storage.initialize();
 
     // cleanupByCount 内有 dynamic import，在测试环境中不可用，直接 mock 掉

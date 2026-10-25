@@ -44,6 +44,7 @@
     "expo-media-library": "~55.0.10",
     "expo-module-scripts": "^55.0.2",
     "expo-sharing": "~55.0.11",
+    "expo-sqlite": "~55.0.20",
     "expo-status-bar": "~55.0.4",
     "expo-system-ui": "~55.0.9",
     "i18next": "^26.2.0",
@@ -66,6 +67,7 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/react": "~19.2.10",
+    "@types/sql.js": "^1.4.11",
     "@typescript-eslint/eslint-plugin": "^8.55.0",
     "@typescript-eslint/parser": "^8.55.0",
     "babel-plugin-module-resolver": "^5.0.2",
@@ -77,6 +79,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-native": "^5.0.0",
     "prettier": "^3.8.1",
+    "sql.js": "^1.15.1",
     "typescript": "~5.9.2"
   },
   "private": true

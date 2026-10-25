@@ -3,10 +3,16 @@
  * 历史记录存储服务 - 管理剪贴板历史记录
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { HistoryItem, HistorySyncStatus, isLocalFileReady } from '../types/clipboard';
-import { HistoryFilter, HistorySort, STORAGE_KEYS } from '../types/storage';
-import { getHistoryFileDir, deleteHistoryFileDir } from '../utils/fileStorage';
+import { HistoryFilter, HistorySort } from '../types/storage';
+import {
+  getHistoryFileDir,
+  deleteHistoryFileDir,
+  initFileStorage,
+  HISTORY_BASE_DIR,
+} from '../utils/fileStorage';
+import { configStorage } from './ConfigStorage';
+import { HistoryDatabase } from './HistoryDatabase';
 import { File, Directory } from 'expo-file-system';
 
 /**
@@ -88,6 +94,7 @@ export class HistoryStorage {
   private static instance: HistoryStorage | null = null;
   private history: HistoryItem[] = [];
   private initialized = false;
+  private initializing: Promise<void> | null = null;
   private maxHistorySize = 1000;
   private onChangeCallback: HistoryChangeCallback | null = null;
   private pendingChanges: { items: HistoryItem[]; action: HistoryChangeAction }[] = [];
@@ -96,7 +103,7 @@ export class HistoryStorage {
   private static readonly NOTIFY_DELAY_MS = 100;
   private sortConfig: HistorySort = { field: 'timestamp', order: 'desc' };
 
-  private constructor() {}
+  constructor(private database = new HistoryDatabase()) {}
 
   /**
    * 获取单例实例
@@ -320,74 +327,59 @@ export class HistoryStorage {
    * 初始化历史记录存储
    */
   public async initialize(): Promise<void> {
-    if (this.initialized) {
-      return;
+    if (this.initialized) return;
+    if (!this.initializing) {
+      this.initializing = this.initializeStorage().finally(() => {
+        this.initializing = null;
+      });
     }
+    await this.initializing;
+  }
 
+  private async initializeStorage(): Promise<void> {
     try {
-      // 从配置中读取最大历史记录条数
-      try {
-        const { configStorage } = await import('./ConfigStorage');
-        const config = await configStorage.getConfig();
-        if (config?.maxHistoryItems) {
-          this.maxHistorySize = config.maxHistoryItems;
+      const config = await configStorage.getConfig();
+      if (config?.maxHistoryItems !== undefined) this.maxHistorySize = config.maxHistoryItems;
+      this.history = await this.database.load(({ json, version }) => {
+        if (!Number.isInteger(version) || version < 0 || version > CURRENT_HISTORY_VERSION) {
+          throw new Error('Unsupported legacy history version');
         }
-      } catch (error) {
-        console.warn('[HistoryStorage] Failed to load maxHistoryItems from config:', error);
-      }
-
-      await this.loadHistory();
+        const parsed: unknown = json === null ? [] : JSON.parse(json);
+        if (
+          !Array.isArray(parsed) ||
+          parsed.some(
+            (item) =>
+              !item ||
+              typeof item.profileHash !== 'string' ||
+              !item.profileHash ||
+              !['Text', 'Image', 'File', 'Group'].includes(item.type)
+          )
+        )
+          throw new Error('Invalid legacy history');
+        return this.runMigrations(parsed, version).map(normalizeClipboardItem);
+      });
       this.sortHistory();
       this.initialized = true;
-
-      // 启动时清理孤儿数据
       this.cleanupOrphanedData().catch((error) => {
         console.error('[HistoryStorage] Failed to cleanup orphaned data on startup:', error);
       });
     } catch (error) {
+      // 读取/迁移失败绝不能标记为空库，否则后续写入和清理会破坏原数据。
       console.error('[HistoryStorage] Failed to initialize:', error);
-      this.history = [];
-      this.initialized = true;
+      throw error;
     }
   }
 
-  /**
-   * 加载历史记录
-   */
-  private async loadHistory(): Promise<void> {
-    const historyJson = await AsyncStorage.getItem(STORAGE_KEYS.HISTORY);
-    const storedVersion = parseInt(
-      (await AsyncStorage.getItem(STORAGE_KEYS.HISTORY_VERSION)) || '0',
-      10
-    );
+  /** 读取与历史数据一起持久化的同步游标。 */
+  public async getLastSyncTime(): Promise<number | null> {
+    await this.initialize();
+    return this.database.getLastSyncTime();
+  }
 
-    if (historyJson) {
-      const parsedHistory: HistoryItem[] = JSON.parse(historyJson);
-      // 规范化所有记录，确保字段都有默认值
-      this.history = parsedHistory.map(normalizeClipboardItem);
-
-      // 执行版本迁移
-      if (storedVersion < CURRENT_HISTORY_VERSION) {
-        this.history = await this.runMigrations(this.history, storedVersion);
-        console.log(
-          `[HistoryStorage] Migrated history from version ${storedVersion} to ${CURRENT_HISTORY_VERSION}`
-        );
-        await this.saveHistory();
-        await AsyncStorage.setItem(
-          STORAGE_KEYS.HISTORY_VERSION,
-          CURRENT_HISTORY_VERSION.toString()
-        );
-      }
-    } else {
-      this.history = [];
-      // 新数据写入版本号
-      if (CURRENT_HISTORY_VERSION > 0) {
-        await AsyncStorage.setItem(
-          STORAGE_KEYS.HISTORY_VERSION,
-          CURRENT_HISTORY_VERSION.toString()
-        );
-      }
-    }
+  /** 将当前历史和同步游标原子提交；null 表示下次重新全量拉取。 */
+  public async setLastSyncTime(time: number | null): Promise<void> {
+    await this.initialize();
+    await this.saveHistory(time);
   }
 
   /**
@@ -396,7 +388,7 @@ export class HistoryStorage {
    * @param fromVersion 起始版本号
    * @returns 迁移后的记录数组
    */
-  private async runMigrations(items: HistoryItem[], fromVersion: number): Promise<HistoryItem[]> {
+  private runMigrations(items: HistoryItem[], fromVersion: number): HistoryItem[] {
     let migratedItems = [...items];
 
     for (let v = fromVersion + 1; v <= CURRENT_HISTORY_VERSION; v++) {
@@ -413,11 +405,12 @@ export class HistoryStorage {
   /**
    * 保存历史记录
    */
-  private async saveHistory(): Promise<void> {
+  private async saveHistory(lastSyncTime?: number | null): Promise<void> {
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(this.history));
+      await this.database.save(this.history, lastSyncTime);
     } catch (error) {
       console.error('[HistoryStorage] Failed to save history:', error);
+      this.initialized = false;
       throw error;
     }
   }
@@ -923,6 +916,7 @@ export class HistoryStorage {
    * 物理删除历史记录项（用于孤儿数据清理和过期软删除清理）
    */
   public async physicalDeleteItem(profileHash: string): Promise<void> {
+    await this.initialize();
     const index = this.history.findIndex(
       (item) => item.profileHash.toLowerCase() === profileHash.toLowerCase()
     );
@@ -1158,7 +1152,6 @@ export class HistoryStorage {
       await this.initialize();
     }
 
-    const { HistorySyncStatus } = await import('../types/clipboard');
     return this.history.filter((item) => item.syncStatus === HistorySyncStatus.NeedSync);
   }
 
@@ -1170,7 +1163,6 @@ export class HistoryStorage {
       await this.initialize();
     }
 
-    const { HistorySyncStatus } = await import('../types/clipboard');
     return this.history.filter(
       (item) => item.syncStatus === HistorySyncStatus.LocalOnly || item.syncStatus === undefined
     );
@@ -1184,7 +1176,6 @@ export class HistoryStorage {
       await this.initialize();
     }
 
-    const { HistorySyncStatus } = await import('../types/clipboard');
     return this.history.filter(
       (item) => item.syncStatus === HistorySyncStatus.Synced && !isLocalFileReady(item)
     );
@@ -1236,8 +1227,6 @@ export class HistoryStorage {
     if (!this.initialized) {
       await this.initialize();
     }
-
-    const { HistorySyncStatus } = await import('../types/clipboard');
 
     const stats = {
       total: this.history.length,
@@ -1292,17 +1281,16 @@ export class HistoryStorage {
    * 清空历史记录
    */
   public async clear(): Promise<void> {
+    await this.initialize();
     // 清空内存中的历史记录
     this.history = [];
-    // 从AsyncStorage中移除历史记录
-    await AsyncStorage.removeItem(STORAGE_KEYS.HISTORY);
+    // 空库也必须持久化，避免重启后重新导入保留的旧版数据。
+    await this.saveHistory(null);
 
     // 删除历史记录文件夹下的所有文件
     try {
-      const { initFileStorage } = await import('../utils/fileStorage');
       await initFileStorage();
 
-      const { HISTORY_BASE_DIR } = await import('../utils/fileStorage');
       if (HISTORY_BASE_DIR.exists) {
         const entries = HISTORY_BASE_DIR.list();
         for (const entry of entries) {
@@ -1367,8 +1355,6 @@ export class HistoryStorage {
       return 0;
     }
 
-    const { HistorySyncStatus } = await import('../types/clipboard');
-
     const localOnlyItems = this.history.filter(
       (item) =>
         (item.syncStatus === HistorySyncStatus.LocalOnly || item.syncStatus === undefined) &&
@@ -1426,7 +1412,6 @@ export class HistoryStorage {
     let cleanedCount = 0;
 
     try {
-      const { initFileStorage, HISTORY_BASE_DIR } = await import('../utils/fileStorage');
       await initFileStorage();
 
       if (!HISTORY_BASE_DIR.exists) {

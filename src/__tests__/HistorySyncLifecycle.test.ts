@@ -13,11 +13,6 @@ jest.mock('../utils/clipboard/convert', () => ({ dtoToHistoryItem: jest.fn() }))
 jest.mock('../services/history/HistoryService', () => ({
   historyService: { addChangeCallback: jest.fn(), removeChangeCallback: jest.fn() },
 }));
-jest.mock('../storage/SyncStateStorage', () => ({
-  getHistoryLastSyncTime: jest.fn(),
-  setHistoryLastSyncTime: jest.fn(),
-  removeHistoryLastSyncTime: jest.fn(),
-}));
 jest.mock('../storage/ConfigStorage', () => ({
   configStorage: { getConfig: () => mockGetConfig() },
 }));
@@ -39,6 +34,8 @@ jest.mock('signalr-client', () => ({
 }));
 
 const mockStorage = {
+  getLastSyncTime: jest.fn().mockResolvedValue(null),
+  setLastSyncTime: jest.fn().mockResolvedValue(undefined),
   getAllItemsIncludingDeleted: jest.fn().mockResolvedValue([]),
   getNeedSyncItems: jest.fn().mockResolvedValue([]),
   getLocalOnlyItems: jest.fn().mockResolvedValue([]),
@@ -64,11 +61,58 @@ async function flush() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockStorage.getLastSyncTime.mockResolvedValue(null);
+  mockStorage.setLastSyncTime.mockResolvedValue(undefined);
   mockServer = { type: 'syncclipboard', url: 'https://first.test' };
   mockGetConfig.mockResolvedValue({ enableHistorySync: true });
   mockAPI.queryRecords.mockResolvedValue([]);
   jest.spyOn(console, 'log').mockImplementation(() => {});
   jest.spyOn(console, 'error').mockImplementation(() => {});
+});
+
+test('incremental sync waits for migrated storage and ignores a cursor reset since service initialization', async () => {
+  mockStorage.getLastSyncTime.mockResolvedValue(100);
+  await historySyncTask.start();
+  const migration = deferred<number | null>();
+  mockStorage.getLastSyncTime.mockReturnValueOnce(migration.promise);
+  const syncing = getHistorySyncService().syncIncremental();
+  await flush();
+  expect(mockAPI.queryRecords).not.toHaveBeenCalled();
+  migration.resolve(null);
+  await syncing;
+  expect(mockAPI.queryRecords.mock.calls[0][0]).not.toHaveProperty('modifiedAfter');
+});
+
+test('a failed final history/cursor commit fails sync and retains the previous cursor', async () => {
+  mockStorage.getLastSyncTime.mockResolvedValue(100);
+  await historySyncTask.start();
+  mockStorage.setLastSyncTime.mockRejectedValueOnce(new Error('disk full'));
+  await expect(getHistorySyncService().syncIncremental()).rejects.toThrow('disk full');
+  expect(getHistorySyncService().getLastSyncTime()).toBe(100);
+});
+
+test('failed history migration leaves sync uninitialized and a retry starts the transfer queue', async () => {
+  const service = getHistorySyncService();
+  mockStorage.getLastSyncTime.mockRejectedValueOnce(new Error('migration failed'));
+  await expect(service.ensureInitialized(mockServer)).rejects.toThrow('migration failed');
+  expect(service.isInitialized()).toBe(false);
+  expect(mockQueue.start).not.toHaveBeenCalled();
+  await expect(service.ensureInitialized(mockServer)).resolves.toBe(true);
+  expect(mockQueue.start).toHaveBeenCalledTimes(1);
+  expect(service.isInitialized()).toBe(true);
+});
+
+test('destroy during migration prevents late initialization from restarting the transfer queue', async () => {
+  const service = getHistorySyncService();
+  const migration = deferred<number | null>();
+  mockStorage.getLastSyncTime.mockReturnValueOnce(migration.promise);
+  const initializing = service.ensureInitialized(mockServer);
+  await flush();
+  await service.destroy();
+  migration.resolve(null);
+  await initializing;
+  expect(service.isInitialized()).toBe(false);
+  expect(mockQueue.start).not.toHaveBeenCalled();
 });
 afterEach(async () => {
   await historySyncTask.stop();

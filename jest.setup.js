@@ -8,6 +8,8 @@ jest.mock('expo-crypto', () => ({
   },
 }));
 
+jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
+
 jest.mock('expo-clipboard', () => ({
   getStringAsync: jest.fn(),
   setStringAsync: jest.fn(),
@@ -67,6 +69,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 jest.mock('native-util', () => ({
+  getLegacyHistoryDatabasePath: jest.fn(() => null),
   getCurrentNetworkInfo: jest.fn(() => null),
   addNetworkChangeListener: jest.fn(() => ({ remove: jest.fn() })),
   isLocationServicesEnabled: jest.fn(() => true),

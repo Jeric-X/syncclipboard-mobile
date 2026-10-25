@@ -70,6 +70,7 @@ export interface NativeNotificationOptions {
 }
 
 export interface NativeUtilModuleType {
+  getLegacyHistoryDatabasePath(): string | null;
   moveTaskToBack(): boolean;
   getCurrentNetworkInfo(): NativeCurrentNetworkInfo;
   isLocationServicesEnabled(): boolean;
@@ -115,6 +116,12 @@ const NativeUtilModule: NativeUtilModuleType = requireNativeModule('NativeUtilMo
 
 export const isNativeModuleAvailable = Platform.OS === 'android';
 export const isNativeHashModuleAvailable = Platform.OS === 'android';
+
+/** 返回 Android 旧版 AsyncStorage 数据库的位置，仅供历史迁移读取。 */
+export function getLegacyHistoryDatabasePath(): string | null {
+  if (Platform.OS !== 'android') return null;
+  return NativeUtilModule.getLegacyHistoryDatabasePath();
+}
 
 /**
  * 将应用移到后台，保持 Activity 存活（不同于 BackHandler.exitApp 可能终止 Activity）

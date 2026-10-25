@@ -105,6 +105,7 @@ const en: DeepString<typeof zh> = {
   },
 
   history: {
+    loadFailed: 'Could not load history. Existing data has been preserved.',
     tabAll: 'All',
     tabText: 'Text',
     tabImage: 'Image',

@@ -75,6 +75,8 @@ export function HistoryScreen() {
   );
   const {
     items,
+    isLoading,
+    error: historyError,
     loadItems,
     searchItems,
     addItems,
@@ -920,6 +922,31 @@ export function HistoryScreen() {
 
   // 渲染空状态
   const renderEmptyComponent = useCallback(() => {
+    if (isLoading) {
+      return (
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator color={theme.colors.primary} />
+          <Text style={[styles.emptyDescription, { color: theme.colors.textSecondary }]}>
+            {t('common.loading')}
+          </Text>
+        </View>
+      );
+    }
+    if (historyError) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>
+            {t('history.loadFailed')}
+          </Text>
+          <Text style={[styles.emptyDescription, { color: theme.colors.textSecondary }]}>
+            {historyError}
+          </Text>
+          <TouchableOpacity onPress={() => void loadItems()} accessibilityRole="button">
+            <Text style={{ color: theme.colors.primary }}>{t('common.retry')}</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
     return (
       <View style={styles.emptyContainer}>
         <Text style={styles.emptyIcon}>📋</Text>
@@ -929,7 +956,7 @@ export function HistoryScreen() {
         </Text>
       </View>
     );
-  }, [theme, searchText]);
+  }, [theme, searchText, t, isLoading, historyError, loadItems]);
 
   // 客户端分类筛选
   const filteredItemsByTab = useMemo(() => {
