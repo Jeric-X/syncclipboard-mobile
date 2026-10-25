@@ -1,3 +1,4 @@
+import { getReadyHistorySyncService } from '../services/history/historySyncReadiness';
 import { historySyncTask } from '../longRunningTask/HistorySyncTask';
 import {
   getHistorySyncService,
@@ -19,7 +20,7 @@ jest.mock('../storage/ConfigStorage', () => ({
 jest.mock('../services/ConfigService', () => ({
   configService: {
     getActiveServer: () => mockServer,
-    getConfig: () => ({ enableHistorySync: true }),
+    getConfig: () => ({ enableHistorySync: true, servers: [mockServer], activeServerIndex: 0 }),
   },
 }));
 jest.mock('../api/history/HistoryAPIFactory', () => ({ createHistoryAPI: () => mockAPI }));
@@ -32,6 +33,12 @@ jest.mock('signalr-client', () => ({
     offRemoteHistoryChanged: jest.fn(),
   }),
 }));
+
+jest.mock('../services/ServiceRuntime', () => ({ requestServiceRuntime: async () => {} }));
+jest.mock('../longRunningTask/LongRunningTaskManager', () => ({
+  longRunningTaskManager: { refresh: (...args: unknown[]) => mockRefresh(...args) },
+}));
+const mockRefresh = jest.fn();
 
 const mockStorage = {
   getLastSyncTime: jest.fn().mockResolvedValue(null),
@@ -214,4 +221,21 @@ test('stop discards a pending replacement sync and ignores a late response from 
   expect(mockAPI.queryRecords).toHaveBeenCalledTimes(1);
   expect(mockStorage.getAllItemsIncludingDeleted).not.toHaveBeenCalled();
   expect(mockStorage.cleanupExpiredSoftDeletes).not.toHaveBeenCalled();
+});
+
+test('history-page retry recovers sync through the coordinator after storage startup failed', async () => {
+  const coordinator = new LongRunningTaskCoordinator(
+    async () => ({ foreground: true, backgroundEnabled: true }),
+    jest.fn()
+  );
+  coordinator.register(historySyncTask, true);
+  mockRefresh.mockImplementation((changed: boolean) => coordinator.refresh(changed));
+  mockStorage.getLastSyncTime.mockRejectedValueOnce(new Error('temporary storage failure'));
+  await coordinator.startAll();
+  expect(getHistorySyncService().isInitialized()).toBe(false);
+  expect(mockQueue.start).not.toHaveBeenCalled();
+  await expect(getReadyHistorySyncService()).resolves.toBe(getHistorySyncService());
+  expect(mockRefresh).toHaveBeenCalledWith(true);
+  expect(mockQueue.start).toHaveBeenCalledTimes(1);
+  await coordinator.stopAll();
 });

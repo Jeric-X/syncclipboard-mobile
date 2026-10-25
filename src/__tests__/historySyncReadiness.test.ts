@@ -10,6 +10,11 @@ jest.mock('../services/ConfigService', () => ({
   configService: { getConfig: async () => mockConfig },
 }));
 
+jest.mock('../longRunningTask/LongRunningTaskManager', () => ({
+  longRunningTaskManager: { refresh: () => mockRefresh() },
+}));
+const mockRefresh = jest.fn();
+
 const mockService = { isInitialized: jest.fn() };
 const mockRequestRuntime = jest.fn();
 let mockConfig: {
