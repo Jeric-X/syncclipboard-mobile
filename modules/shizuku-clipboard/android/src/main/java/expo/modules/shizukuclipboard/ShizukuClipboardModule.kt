@@ -642,12 +642,13 @@ class ShizukuClipboardModule : Module() {
 
         AsyncFunction("hasStringViaShizuku") { promise: Promise ->
             try {
-                promise.resolve(callUserService("hasStringViaShizuku", false) {
+                val hasText = callUserService<Boolean?>("hasStringViaShizuku", null) {
                     it.hasPrimaryClipText()
-                })
+                } ?: throw IllegalStateException("Cannot check clipboard text after reconnecting UserService")
+                promise.resolve(hasText)
             } catch (e: Exception) {
                 NativeLogger.e(TAG, "hasStringViaShizuku failed", e)
-                promise.resolve(false)
+                promise.reject("ERR_SHIZUKU_CLIPBOARD_READ", e.message ?: "Cannot check clipboard text", e)
             }
         }
 

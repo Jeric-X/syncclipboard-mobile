@@ -83,7 +83,11 @@ class ClipboardUserService : IClipboardUserService.Stub() {
         /**
          * 动态查找并调用剪贴板方法
          */
-        private fun findAndInvokeMethod(clipboard: Any, methodName: String): Any? {
+        private fun findAndInvokeMethod(
+            clipboard: Any,
+            methodName: String,
+            throwOnFailure: Boolean = false
+        ): Any? {
             val clazz = clipboard.javaClass
             val methods = clazz.methods
                 .filter { it.name == methodName }
@@ -107,10 +111,12 @@ class ClipboardUserService : IClipboardUserService.Stub() {
                     if (e is java.lang.reflect.InvocationTargetException) {
                         android.util.Log.e(TAG, "  cause: ${e.cause}", e.cause)
                     }
+                    if (throwOnFailure) throw IllegalStateException("Failed to invoke $methodName", e)
                     null
                 }
             }
             android.util.Log.e(TAG, "No suitable method found: $methodName")
+            if (throwOnFailure) throw IllegalStateException("No suitable method found: $methodName")
             return null
         }
 
@@ -190,12 +196,16 @@ class ClipboardUserService : IClipboardUserService.Stub() {
 
     override fun hasPrimaryClipText(): Boolean {
         return try {
-            val clipboard = getClipboardService() ?: return false
-            val desc = findAndInvokeMethod(clipboard, "getPrimaryClipDescription") as? ClipDescription
+            val clipboard = getClipboardService()
+                ?: throw IllegalStateException("Clipboard service is unavailable")
+            // null 描述表示剪贴板为空；读取失败必须传给调用方，不能伪装成没有文字。
+            val desc = findAndInvokeMethod(
+                clipboard, "getPrimaryClipDescription", throwOnFailure = true
+            ) as? ClipDescription
             desc?.hasMimeType("text/*") ?: false
         } catch (e: Exception) {
             android.util.Log.e(TAG, "hasPrimaryClipText failed", e)
-            false
+            throw IllegalStateException("Cannot check clipboard text", e)
         }
     }
 

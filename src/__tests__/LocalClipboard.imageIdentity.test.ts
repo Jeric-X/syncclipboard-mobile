@@ -10,7 +10,8 @@ import { createContentFromFile } from '@/utils/clipboard/clipboardContentUtils';
 import type { ClipboardContent } from '@/types/clipboard';
 
 jest.mock('@/utils/clipboardProxy', () => ({
-  getStringAsync: jest.fn().mockResolvedValue(''),
+  getStringAsync: jest.fn().mockResolvedValue('content://clipboard/photo.png'),
+  hasStringAsync: jest.fn().mockResolvedValue(false),
   hasImageAsync: jest.fn().mockResolvedValue(true),
   saveImageToFileAsync: jest.fn(),
 }));
@@ -103,9 +104,22 @@ test.each([false, true])(
       fileName: content.fileName,
       localClipboardHash: fileHash,
     });
+    expect(clipboardProxy.getStringAsync).not.toHaveBeenCalled();
     expect(remoteCopied).toHaveBeenCalledTimes(remote ? 1 : 0);
   }
 );
+
+test('a URI copied as actual text is still read as text', async () => {
+  jest.mocked(clipboardProxy.hasStringAsync).mockResolvedValueOnce(true);
+  jest.mocked(historyStorage.getItemByLocalHash).mockResolvedValue(null);
+  jest.mocked(calculateTextHash).mockResolvedValue('text-profile');
+
+  await expect(new LocalClipboard().getClipboardContent()).resolves.toMatchObject({
+    type: 'Text',
+    text: 'content://clipboard/photo.png',
+  });
+  expect(clipboardProxy.hasImageAsync).not.toHaveBeenCalled();
+});
 
 test('a failed image write restores monitoring and does not mark a remote copy', async () => {
   jest

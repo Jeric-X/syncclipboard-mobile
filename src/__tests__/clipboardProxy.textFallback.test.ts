@@ -34,7 +34,14 @@ beforeEach(() => {
   (Clipboard.getStringAsync as jest.Mock).mockResolvedValue('');
 });
 
-it('Shizuku 类型检查返回 false 时仍可通过悬浮窗读取文本', async () => {
+it('Shizuku 确认没有文字时直接返回，不唤起悬浮窗或系统回退', async () => {
+  expect(await hasStringAsync()).toBe(false);
+  expect(acquireClipboardOverlay).not.toHaveBeenCalled();
+  expect(Clipboard.hasStringAsync).not.toHaveBeenCalled();
+});
+
+it('Shizuku 文本类型检查抛出读取错误时才通过悬浮窗回退', async () => {
+  (shizuku.hasStringViaShizuku as jest.Mock).mockRejectedValue(new Error('service unavailable'));
   (overlay.hasStringViaOverlay as jest.Mock).mockResolvedValue(true);
   (overlay.getStringViaOverlay as jest.Mock).mockResolvedValue('overlay text');
 
@@ -44,7 +51,9 @@ it('Shizuku 类型检查返回 false 时仍可通过悬浮窗读取文本', asyn
   expect(Clipboard.hasStringAsync).not.toHaveBeenCalled();
 });
 
-it('Shizuku 和悬浮窗均读不到时仍尝试系统文本接口', async () => {
+it('Shizuku 和悬浮窗均抛出错误时才尝试系统文本接口', async () => {
+  (shizuku.hasStringViaShizuku as jest.Mock).mockRejectedValue(new Error('service unavailable'));
+  (overlay.hasStringViaOverlay as jest.Mock).mockRejectedValue(new Error('overlay failed'));
   (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
   (Clipboard.getStringAsync as jest.Mock).mockResolvedValue('system text');
 
@@ -53,10 +62,12 @@ it('Shizuku 和悬浮窗均读不到时仍尝试系统文本接口', async () =>
   expect(releaseOverlay).toHaveBeenCalledTimes(2);
 });
 
-it('只有图片、各接口均无文字时不将 URI 当作文本', async () => {
+it('悬浮窗确认没有文字时直接返回并释放窗口，不调用系统回退', async () => {
+  (shizuku.hasStringViaShizuku as jest.Mock).mockRejectedValue(new Error('service unavailable'));
   expect(await hasStringAsync()).toBe(false);
   expect(overlay.hasStringViaOverlay).toHaveBeenCalled();
-  expect(Clipboard.hasStringAsync).toHaveBeenCalled();
+  expect(releaseOverlay).toHaveBeenCalledTimes(1);
+  expect(Clipboard.hasStringAsync).not.toHaveBeenCalled();
   expect(overlay.getStringViaOverlay).not.toHaveBeenCalled();
 });
 
