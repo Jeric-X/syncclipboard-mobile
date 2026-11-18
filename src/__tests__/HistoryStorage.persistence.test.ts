@@ -205,3 +205,16 @@ test.each(['-1', '0.5', '2', 'invalid'])(
     expect(await restart().getItem('old')).toMatchObject({ profileHash: 'old', timestamp: 100 });
   }
 );
+
+test('image local hash survives add/update merging and restart', async () => {
+  const storage = restart();
+  const image = { ...item('image'), type: 'Image' as const, hasData: true };
+  await storage.addItem(image);
+  await storage.addItem({ ...image, localClipboardHash: 'image-bytes' });
+  expect((await restart().getItemByLocalHash('image-bytes'))?.profileHash).toBe('image');
+  await storage.addItem(image);
+  await storage.addItems([image]);
+  expect((await restart().getItem('image'))?.localClipboardHash).toBe('image-bytes');
+  await storage.addItems([{ ...image, localClipboardHash: 'updated-bytes' }]);
+  expect((await restart().getItem('image'))?.localClipboardHash).toBe('updated-bytes');
+});

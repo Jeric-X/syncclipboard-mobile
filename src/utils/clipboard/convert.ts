@@ -184,6 +184,7 @@ export function clipboardContentToItem(
     type: content.type,
     text: content.text,
     profileHash: content.profileHash || '',
+    localClipboardHash: content.localClipboardHash,
     hasData: content.hasData,
     dataName: content.fileName,
     size: content.fileSize,
@@ -201,6 +202,7 @@ export function historyItemToContent(item: HistoryItem): ClipboardContent {
     fileName: item.dataName,
     fileSize: item.size,
     profileHash: item.profileHash,
+    localClipboardHash: item.localClipboardHash,
     hasData: item.hasData,
   };
 }

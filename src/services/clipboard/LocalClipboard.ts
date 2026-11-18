@@ -10,7 +10,7 @@ import { ClipboardContent } from '@/types';
 import { calculateTextHash, calculateFileHash } from '@/utils/hash';
 import { isTextInvalid } from '@/utils/index';
 import { historyStorage } from '../../storage/HistoryStorage';
-import { prepareTempFilePath, CLIPBOARD_TEMP_DIR } from '@/utils/fileStorage';
+import { prepareTempFilePath, CLIPBOARD_TEMP_DIR, getHistoryFileUri } from '@/utils/fileStorage';
 import { nativeSetClipboardImageFromFile } from 'native-util';
 import i18n from '@/i18n';
 import { measureStartup } from '@/services/StartupTiming';
@@ -29,6 +29,7 @@ export interface CopyLifecycleCallbacks {
  * 剪贴板管理器类
  */
 export class LocalClipboard {
+  private lastCopiedImage: { profileHash: string; localClipboardHash: string } | null = null;
   private copyLifecycleCallbacks: CopyLifecycleCallbacks | null = null;
   private remoteCopiedCallback: ((content: ClipboardContent) => void) | null = null;
 
@@ -87,7 +88,6 @@ export class LocalClipboard {
     if (historyItem && historyItem.type === 'Text') {
       // 如果历史记录有外部文件，验证文件是否存在
       if (historyItem.hasData && historyItem.dataName) {
-        const { getHistoryFileUri } = await import('@/utils/fileStorage');
         const historyFileUri = await getHistoryFileUri(
           'Text',
           historyItem.profileHash,
@@ -245,11 +245,17 @@ export class LocalClipboard {
       // ========== 阶段3: 基于文件进行后续操作 ==========
 
       // 根据 localClipboardHash 查询历史记录
-      const historyItem = await historyStorage.getItemByLocalHash(localClipboardHash);
+      // 相同字节可对应不同文件名，程序内复制时优先保留用户选择的记录。
+      let historyItem =
+        this.lastCopiedImage?.localClipboardHash === localClipboardHash
+          ? await historyStorage.getItem(this.lastCopiedImage.profileHash)
+          : null;
+      if (!historyItem || historyItem.localClipboardHash !== localClipboardHash) {
+        historyItem = await historyStorage.getItemByLocalHash(localClipboardHash);
+      }
 
       if (historyItem && historyItem.hasData && historyItem.dataName) {
         // 从历史记录中获取文件路径
-        const { getHistoryFileUri } = await import('@/utils/fileStorage');
         const historyFileUri = await getHistoryFileUri(
           'Image',
           historyItem.profileHash,
@@ -377,7 +383,19 @@ export class LocalClipboard {
 
         case 'Image':
           if (content.fileUri) {
+            // 旧记录可能没有文件字节哈希；恢复监听前补齐，使读回图片能沿用原记录身份。
+            const localClipboardHash = await calculateFileHash(content.fileUri);
+            if (content.profileHash) {
+              const item = await historyStorage.getItem(content.profileHash);
+              if (item && item.localClipboardHash !== localClipboardHash) {
+                await historyStorage.updateItem(content.profileHash, { localClipboardHash });
+              }
+            }
             await this.setImageContent(content.fileUri);
+            this.lastCopiedImage = content.profileHash
+              ? { profileHash: content.profileHash, localClipboardHash }
+              : null;
+            content = { ...content, localClipboardHash };
           }
           break;
 

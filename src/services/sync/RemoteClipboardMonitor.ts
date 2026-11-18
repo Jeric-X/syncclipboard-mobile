@@ -168,7 +168,13 @@ class RemoteClipboardMonitor {
     return this.isPolling() || this.isSignalRConnected();
   }
 
+  /** 当前连接是否已观察到此记录；断连及重连首次刷新前不可使用旧缓存去重。 */
+  hasObservedProfileHash(profileHash: string): boolean {
+    return this.isConnected() && this._lastContentHash?.toUpperCase() === profileHash.toUpperCase();
+  }
+
   private readonly _signalRStateCallback = (state: ConnectionState): void => {
+    if (state !== 'CONNECTED') this._lastContentHash = null;
     if (state === 'DISCONNECTED') {
       clipboardSyncState.setSyncError({ title: '服务器连接断开' });
     } else if (state === 'CONNECTED') {
@@ -242,23 +248,32 @@ class RemoteClipboardMonitor {
    * @throws 无服务器连接或拉取失败时抛出异常
    */
   async fetchLatest(signal?: AbortSignal): Promise<ClipboardContent> {
+    const version = this.connectionVersion;
     return this._fetchOp.execute(true, undefined, signal ?? null, async (sig) => {
-      const apiClient = await measureStartup('remote.getClient', () => getAPIClient());
-      if (sig.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
-      const profile = await measureStartup('remote.getClipboard', () =>
-        apiClient.getClipboard(sig)
-      );
-      if (sig.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
-      if (!profile) throw new Error('No clipboard data returned');
-      const content: ClipboardContent = profileDtoToContent(profile);
-      logStartupPoint('remote.firstContent', { type: content.type, hasData: content.hasData });
-      const hash = content.profileHash || content.text;
-      if (hash !== this._lastContentHash) {
-        this._lastContentHash = hash;
-        this.notifyCallbacks(content);
+      try {
+        const apiClient = await measureStartup('remote.getClient', () => getAPIClient());
+        if (sig.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
+        const profile = await measureStartup('remote.getClipboard', () =>
+          apiClient.getClipboard(sig)
+        );
+        if (sig.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
+        if (!profile) throw new Error('No clipboard data returned');
+        const content: ClipboardContent = profileDtoToContent(profile);
+        logStartupPoint('remote.firstContent', { type: content.type, hasData: content.hasData });
+        const hash = content.profileHash || content.text;
+        if (hash !== this._lastContentHash) {
+          this._lastContentHash = hash;
+          this.notifyCallbacks(content);
+        }
+        clipboardSyncState.clearSyncError();
+        return content;
+      } catch (error) {
+        // 旧连接取消后的迟到异常不能清除新连接的观察结果。
+        if (version === this.connectionVersion && !sig.aborted) {
+          this._lastContentHash = null;
+        }
+        throw error;
       }
-      clipboardSyncState.clearSyncError();
-      return content;
     });
   }
 

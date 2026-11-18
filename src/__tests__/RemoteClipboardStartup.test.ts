@@ -2,6 +2,7 @@ import { RemoteClipboardMonitorTask } from '../longRunningTask/RemoteClipboardMo
 import { remoteClipboardMonitor } from '../services/sync/RemoteClipboardMonitor';
 import { configService } from '../services/ConfigService';
 import { getAPIClient } from '../services/ClientFactory';
+import { setTimer } from 'native-timer';
 import { getSignalRClient } from 'signalr-client';
 import { clipboardSyncState } from '../services/sync/SyncState';
 
@@ -134,4 +135,59 @@ it('SignalR 断线但 HTTP 仍可用时，回到前台仍拉取最新内容', as
   await task.onForeground();
   await flush();
   expect(getClipboard).toHaveBeenCalledTimes(2);
+});
+
+it('断连后旧内容不能用于跳过上传，重连首次拉取完成前也不能', async () => {
+  await task.start();
+  await flush();
+  expect(remoteClipboardMonitor.hasObservedProfileHash('READY')).toBe(true);
+  await task.onBackground();
+  expect(remoteClipboardMonitor.hasObservedProfileHash('ready')).toBe(false);
+  let complete!: (profile: unknown) => void;
+  getClipboard.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        complete = resolve;
+      })
+  );
+  await task.onForeground();
+  await flush();
+  expect(remoteClipboardMonitor.hasObservedProfileHash('ready')).toBe(false);
+  complete({ type: 'Image', hash: 'new-image', hasData: true });
+  await flush();
+  expect(remoteClipboardMonitor.hasObservedProfileHash('ready')).toBe(false);
+  expect(remoteClipboardMonitor.hasObservedProfileHash('new-image')).toBe(true);
+});
+
+it('SignalR 自动重连在首次刷新完成前不能复用旧观察值', async () => {
+  await task.start();
+  await flush();
+  const stateChanged = client.onConnectionStateChanged.mock.calls[0][0] as (state: string) => void;
+  stateChanged('RECONNECTING');
+  let complete!: (profile: unknown) => void;
+  getClipboard.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        complete = resolve;
+      })
+  );
+  stateChanged('CONNECTED');
+  await flush();
+  expect(remoteClipboardMonitor.hasObservedProfileHash('ready')).toBe(false);
+  complete({ type: 'Text', hash: 'ready', text: 'ready' });
+  await flush();
+  expect(remoteClipboardMonitor.hasObservedProfileHash('ready')).toBe(true);
+});
+
+it('轮询请求失败后不再信任旧缓存，成功拉取后恢复', async () => {
+  jest.mocked(setTimer).mockReturnValue('poll');
+  jest.mocked(configService.getActiveServer).mockResolvedValue({ ...server, type: 'webdav' });
+  await task.start();
+  await flush();
+  expect(remoteClipboardMonitor.hasObservedProfileHash('ready')).toBe(true);
+  getClipboard.mockRejectedValueOnce(new Error('offline'));
+  await expect(remoteClipboardMonitor.fetchLatest()).rejects.toThrow('offline');
+  expect(remoteClipboardMonitor.hasObservedProfileHash('ready')).toBe(false);
+  await remoteClipboardMonitor.fetchLatest();
+  expect(remoteClipboardMonitor.hasObservedProfileHash('ready')).toBe(true);
 });

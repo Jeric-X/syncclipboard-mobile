@@ -1,3 +1,9 @@
+import { calculateFileHash } from '../utils/hash';
+
+jest.mock('../utils/hash', () => ({
+  calculateFileHash: jest.fn().mockResolvedValue('image-bytes'),
+}));
+
 import { HistoryTransferQueue } from '../services/history/HistoryTransferQueue';
 import type { TransferTask } from '../services/history/HistoryTransferQueue';
 import type { IHistoryAPI } from '../api/history';
@@ -71,6 +77,7 @@ async function download(
   expect(queue.getActiveCount()).toBe(0);
   expect(snapshots.at(-1)?.status).toBe('completed');
   return {
+    result,
     task: snapshots.find((task) => task.status === 'running' && task.bytesTransferred > 0)!,
     report,
   };
@@ -163,4 +170,14 @@ it('keeps early image downloads pending until the history API is bound, then dra
     await queue.stop();
     jest.useRealTimers();
   }
+});
+
+it('downloaded images retain a byte hash in storage and returned content', async () => {
+  const { result } = await download(12, { bytesTransferred: 12, totalBytes: 12, progress: 1 });
+  expect(calculateFileHash).toHaveBeenCalledWith('file://history/data', expect.any(AbortSignal));
+  expect(mockStorage.updateItem).toHaveBeenCalledWith('hash', {
+    fileUri: 'file://history/data',
+    localClipboardHash: 'image-bytes',
+  });
+  expect(result.localClipboardHash).toBe('image-bytes');
 });

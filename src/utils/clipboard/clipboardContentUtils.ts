@@ -63,7 +63,8 @@ export async function createContentFromFile(
     fileName,
     fileSize: resolvedSize,
     profileHash,
-    localClipboardHash: profileHash,
+    localClipboardHash:
+      contentType === 'Image' ? await calculateFileHash(tempPath, options?.signal) : profileHash,
     hasData: true,
     timestamp: Date.now(),
   };

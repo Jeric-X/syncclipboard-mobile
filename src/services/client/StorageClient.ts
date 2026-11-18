@@ -5,7 +5,7 @@ import type { ProgressCallback } from '../history/HistoryTransferQueue';
 import { clipboardContentToItem } from '@/utils/clipboard/convert';
 import { historyService } from '../history/HistoryService';
 import { prepareTempFilePath } from '@/utils/fileStorage';
-import { calculateFileProfileHash } from '@/utils/hash';
+import { calculateFileHash, calculateFileProfileHash } from '@/utils/hash';
 import { ISyncClipboardAPI, type DownloadProgressCallback } from '@/api/clients/APIClient';
 import { HistorySyncStatus } from '@/types/clipboard';
 import { File } from 'expo-file-system';
@@ -53,6 +53,10 @@ async function downloadAndAddToHistory(
     ...content,
     fileUri,
     profileHash,
+    localClipboardHash:
+      content.type === 'Image'
+        ? await calculateFileHash(fileUri, signal)
+        : content.localClipboardHash,
   };
 
   // 写入历史记录

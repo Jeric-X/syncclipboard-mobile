@@ -10,6 +10,7 @@ import { HistorySyncStatus, type ClipboardContent, isLocalFileReady } from '@/ty
 import { getHistoryFileDir } from '@/utils/fileStorage';
 import { historyItemToContent, historyItemToDto } from '@/utils/clipboard/convert';
 import { File } from 'expo-file-system';
+import { calculateFileHash } from '@/utils/hash';
 import type { ProgressDetail } from '@/types/progress';
 import { getProfileId, parseProfileId } from '@/utils/clipboard/profileId';
 
@@ -656,8 +657,13 @@ export class HistoryTransferQueue {
       }
     );
 
+    const localClipboardHash =
+      item.type === 'Image'
+        ? await calculateFileHash(destinationUri, task.abortController.signal)
+        : item.localClipboardHash;
     await this.historyStorage.updateItem(parsed.hash, {
       fileUri: destinationUri,
+      localClipboardHash,
     });
 
     console.log(`[HistoryTransferQueue] Download task completed: ${task.profileId}`);
@@ -665,6 +671,7 @@ export class HistoryTransferQueue {
     return {
       ...historyItemToContent(item),
       fileUri: destinationUri,
+      localClipboardHash,
     };
   }
 

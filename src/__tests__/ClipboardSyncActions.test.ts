@@ -62,7 +62,11 @@ jest.mock('../services/clipboard/LocalClipboard', () => ({
   },
 }));
 
-import { downloadRemoteClipboard, setRemoteClipboard } from '../services/sync/ClipboardSyncActions';
+import {
+  downloadRemoteClipboard,
+  setRemoteClipboard,
+  isClipboardUploadRunning,
+} from '../services/sync/ClipboardSyncActions';
 import { configService } from '../services/ConfigService';
 import { networkAutoSwitchService } from '../services/NetworkAutoSwitchService';
 import { remoteClipboardMonitor } from '../services/sync/RemoteClipboardMonitor';
@@ -82,6 +86,24 @@ describe('setRemoteClipboard', () => {
       type: 'syncclipboard',
       url: 'https://home.example',
     });
+  });
+
+  it('直接上传在完成前报告活动状态，失败后清理', async () => {
+    let fail!: (error: Error) => void;
+    const pending = new Promise<void>((_, reject) => {
+      fail = reject;
+    });
+    mockSetRemoteClipboard.mockReturnValueOnce(pending);
+    expect(isClipboardUploadRunning()).toBe(false);
+    const upload = setRemoteClipboard(localContent, new AbortController().signal);
+    expect(isClipboardUploadRunning()).toBe(true);
+    const rejected = expect(upload).rejects.toThrow('upload failed');
+    // 允许配置读取和历史保存完成，进入实际上传。
+    await Promise.resolve();
+    await Promise.resolve();
+    fail(new Error('upload failed'));
+    await rejected;
+    expect(isClipboardUploadRunning()).toBe(false);
   });
 
   it('上传底层不执行网络自动切换预检', async () => {

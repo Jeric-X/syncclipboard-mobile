@@ -81,6 +81,11 @@ export class DedupedOperation<TContent, TResult, TProgress = never> {
     return this._promise;
   }
 
+  /** 是否仍有操作在运行，包括已请求取消但尚未结束的操作。 */
+  isRunning(): boolean {
+    return this._controller !== null;
+  }
+
   /** 取消当前正在进行的操作（如有） */
   abort(): void {
     this._controller?.abort();
