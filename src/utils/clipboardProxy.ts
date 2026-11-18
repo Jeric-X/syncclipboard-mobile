@@ -90,7 +90,8 @@ export async function setStringAsync(
 export async function hasStringAsync(): Promise<boolean> {
   if (await shouldUseShizuku()) {
     try {
-      return await shizukuModule!.hasStringViaShizuku();
+      // 原生服务不可读时也可能返回 false，保持与文本读取相同的回退链。
+      if (await shizukuModule!.hasStringViaShizuku()) return true;
     } catch (e) {
       console.warn('[ClipboardProxy] Shizuku hasStringAsync failed, falling back:', e);
     }
@@ -98,7 +99,7 @@ export async function hasStringAsync(): Promise<boolean> {
   const releaseOverlay = await acquireClipboardOverlay();
   if (releaseOverlay) {
     try {
-      return await overlayModule!.hasStringViaOverlay();
+      if (await overlayModule!.hasStringViaOverlay()) return true;
     } catch (e) {
       console.warn('[ClipboardProxy] Overlay hasStringAsync failed, falling back:', e);
     } finally {
