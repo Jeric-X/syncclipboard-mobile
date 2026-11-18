@@ -172,6 +172,8 @@ const zh = {
     syncSection: '同步设置',
     autoSync: '自动同步',
     autoSyncDesc: '处于前台时自动同步剪贴板',
+    autoCopyTextOnly: '仅自动复制文字',
+    autoCopyTextOnlyDesc: '开启后，远程图片仍可自动下载，但不会自动写入本机剪贴板',
     syncToast: '同步 Toast 通知',
     syncToastDesc: '上传/下载完成后显示 Toast 提示',
     autoDownloadMaxSize: '允许自动同步的数据大小',

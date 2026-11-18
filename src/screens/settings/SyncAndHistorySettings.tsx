@@ -36,6 +36,10 @@ export const SyncAndHistorySettings = ({ showMessage }: SettingsModuleProps) => 
   // 本地状态用于跟踪Switch的当前值，避免闪烁
   const [localAutoSyncEnabled, setLocalAutoSyncEnabled] = useState(config?.autoSync ?? false);
 
+  const [localAutoCopyTextOnly, setLocalAutoCopyTextOnly] = useState(
+    config?.autoCopyTextOnly ?? false
+  );
+
   const [localHistorySyncEnabled, setLocalHistorySyncEnabled] = useState(
     config?.enableHistorySync ?? false
   );
@@ -64,6 +68,10 @@ export const SyncAndHistorySettings = ({ showMessage }: SettingsModuleProps) => 
   useEffect(() => {
     setLocalAutoSyncEnabled(config?.autoSync ?? false);
   }, [config?.autoSync]);
+
+  useEffect(() => {
+    setLocalAutoCopyTextOnly(config?.autoCopyTextOnly ?? false);
+  }, [config?.autoCopyTextOnly]);
 
   useEffect(() => {
     setLocalHistorySyncEnabled(config?.enableHistorySync ?? true);
@@ -313,6 +321,17 @@ export const SyncAndHistorySettings = ({ showMessage }: SettingsModuleProps) => 
     }
   };
 
+  // 处理仅自动复制文字开关
+  const handleToggleAutoCopyTextOnly = async (enabled: boolean) => {
+    setLocalAutoCopyTextOnly(enabled);
+    try {
+      await updateModule('sync', { autoCopyTextOnly: enabled });
+    } catch (error: unknown) {
+      setLocalAutoCopyTextOnly(!enabled);
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
+    }
+  };
+
   // 处理切换同步 Toast 通知
   const handleToggleSyncToast = async (enabled: boolean) => {
     setLocalSyncToastEnabled(enabled);
@@ -332,6 +351,13 @@ export const SyncAndHistorySettings = ({ showMessage }: SettingsModuleProps) => 
           description={t('settings.autoSyncDesc')}
           value={localAutoSyncEnabled}
           onChange={handleToggleAutoSync}
+        />
+
+        <SettingSwitch
+          label={t('settings.autoCopyTextOnly')}
+          description={t('settings.autoCopyTextOnlyDesc')}
+          value={localAutoCopyTextOnly}
+          onChange={handleToggleAutoCopyTextOnly}
         />
 
         <SettingSwitch

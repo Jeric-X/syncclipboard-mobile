@@ -11,6 +11,7 @@ export const CONFIG_MODULE_FIELDS = {
     'syncInBackground',
     'syncOnStartup',
     'autoSync',
+    'autoCopyTextOnly',
     'autoDownloadMaxSize',
     'remotePollingInterval',
     'localPollingInterval',

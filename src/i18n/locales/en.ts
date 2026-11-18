@@ -180,6 +180,9 @@ const en: DeepString<typeof zh> = {
     syncSection: 'Sync Settings',
     autoSync: 'Auto Sync',
     autoSyncDesc: 'Automatically sync clipboard while in foreground',
+    autoCopyTextOnly: 'Auto-copy text only',
+    autoCopyTextOnlyDesc:
+      'When enabled, remote images can still download automatically but will not be copied to this device’s clipboard',
     syncToast: 'Sync Toast Notification',
     syncToastDesc: 'Show a toast after upload/download completes',
     autoDownloadMaxSize: 'Max size for auto sync',

@@ -40,6 +40,25 @@ describe('ConfigStorage', () => {
   });
 
   describe('initialize', () => {
+    it('旧配置缺少仅自动复制文字字段时默认允许复制图片', async () => {
+      mockGetItem.mockResolvedValue(JSON.stringify({ autoSync: true }));
+
+      const config = await configStorage.getConfig();
+
+      expect(config.autoCopyTextOnly).toBe(false);
+    });
+
+    it('仅自动复制文字开关可以通过同步模块保存并在重新加载后保留', async () => {
+      mockGetItem.mockResolvedValue(null);
+      await configStorage.updateModule('sync', { autoCopyTextOnly: true });
+      const persisted = mockSetItem.mock.calls.at(-1)![1];
+      mockGetItem.mockResolvedValue(persisted);
+      getPrivate(configStorage).initialized = false;
+      getPrivate(configStorage).config = null;
+
+      expect((await configStorage.getConfig()).autoCopyTextOnly).toBe(true);
+    });
+
     it('并发冷启动只迁移保存一次，所有入口使用与存储一致的稳定 ID', async () => {
       mockGetItem.mockResolvedValue(
         JSON.stringify({
