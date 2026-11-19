@@ -49,14 +49,17 @@ export class LocalClipboard {
    */
   async getClipboardContent(): Promise<ClipboardContent | null> {
     try {
-      // Directly try getting text first (avoids extra overlay windows for type checks)
-      const text = await measureStartup('local.readSystemText', () =>
-        ClipboardProxy.getStringAsync()
-      );
-      if (text && text.length > 0) {
-        return await measureStartup('local.buildTextContent', () =>
-          this.getTextContentFromString(text)
+      // 先检查文本类型，避免 Android 将图片 URI 强制转换成文字并重新上传。
+      const hasText = await measureStartup('local.hasText', () => ClipboardProxy.hasStringAsync());
+      if (hasText) {
+        const text = await measureStartup('local.readSystemText', () =>
+          ClipboardProxy.getStringAsync()
         );
+        if (text && text.length > 0) {
+          return await measureStartup('local.buildTextContent', () =>
+            this.getTextContentFromString(text)
+          );
+        }
       }
 
       // If no text, check for image

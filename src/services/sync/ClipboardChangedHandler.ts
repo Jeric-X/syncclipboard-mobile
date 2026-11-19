@@ -18,6 +18,7 @@ import {
 } from './JustSetHash';
 import { updateForegroundNotification } from '../notification/ForegroundNotification';
 import { historyService } from '../history/HistoryService';
+import { localClipboard } from '../clipboard/LocalClipboard';
 import { calculateTextHash } from '../../utils/hash';
 import i18n from '@/i18n';
 import { logStartupPoint, getStartupElapsedMs } from '../StartupTiming';
@@ -163,7 +164,8 @@ class ClipboardChangedHandler {
     content: ClipboardContent,
     config: AppConfig
   ): Promise<void> {
-    if (content.type !== 'Text') return;
+    if (content.type !== 'Text' && content.type !== 'Image') return;
+    if (content.type === 'Image' && (config.autoCopyTextOnly || !content.fileUri)) return;
 
     const autoSyncEnabled = config?.autoSync ?? false;
     const bgDownloadEnabled = !!(config?.enableBackgroundTasks && config?.enableBackgroundDownload);
@@ -181,7 +183,7 @@ class ClipboardChangedHandler {
     }
 
     if (!content.text && !content.fileUri) {
-      console.log('[ClipboardChangedHandler] No text content available for auto-copy');
+      console.log('[ClipboardChangedHandler] No content available for auto-copy');
       return;
     }
 
@@ -207,7 +209,6 @@ class ClipboardChangedHandler {
   }
 
   private async copyToLocalClipboard(content: ClipboardContent): Promise<void> {
-    const { localClipboard } = await import('../clipboard/LocalClipboard');
     await localClipboard.setClipboardContent(content, true);
     this.lastLocalProfileHash = content.profileHash || content.text;
     console.log('[ClipboardChangedHandler] Copied to local clipboard');

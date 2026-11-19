@@ -68,6 +68,7 @@ export async function getStringViaShizuku(): Promise<string> {
 
 /**
  * 通过 Shizuku 检查剪贴板是否有文本
+ * 正常无文本返回 false；Android 服务连接或读取失败时拒绝 Promise。
  */
 export async function hasStringViaShizuku(): Promise<boolean> {
   if (NativeModule) {
