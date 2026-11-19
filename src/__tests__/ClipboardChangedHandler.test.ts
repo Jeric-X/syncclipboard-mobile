@@ -15,7 +15,6 @@ jest.mock('../services/ConfigService', () => ({
 
 jest.mock('../services/sync/ClipboardSyncActions', () => ({
   uploadLocalClipboard: jest.fn(),
-  isClipboardUploadRunning: jest.fn(() => false),
   downloadRemoteClipboard: jest.fn(),
 }));
 
@@ -46,7 +45,6 @@ jest.mock('../services/sync/SyncState', () => ({
 jest.mock('../services/sync/RemoteClipboardMonitor', () => ({
   remoteClipboardMonitor: {
     refresh: jest.fn(() => Promise.resolve()),
-    hasObservedProfileHash: jest.fn(() => true),
   },
 }));
 
@@ -64,12 +62,8 @@ jest.mock('@/i18n', () => ({
 import { configService } from '../services/ConfigService';
 import { historyService } from '../services/history/HistoryService';
 import { clipboardSyncState } from '../services/sync/SyncState';
-import {
-  uploadLocalClipboard,
-  isClipboardUploadRunning,
-} from '../services/sync/ClipboardSyncActions';
+import { uploadLocalClipboard } from '../services/sync/ClipboardSyncActions';
 import { getClipboardChangedHandler } from '../services/sync/ClipboardChangedHandler';
-import { remoteClipboardMonitor } from '../services/sync/RemoteClipboardMonitor';
 import * as startupClock from '../services/StartupTiming';
 
 const SYSTEM_START_TIME_MS = 2_728_733_964;
@@ -87,16 +81,11 @@ describe('ClipboardChangedHandler 启动基线窗口', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.mocked(isClipboardUploadRunning).mockReturnValue(false);
-    jest.mocked(remoteClipboardMonitor.hasObservedProfileHash).mockReturnValue(true);
     jest.spyOn(performance, 'now').mockReturnValue(SYSTEM_START_TIME_MS);
     jest
       .spyOn(startupClock, 'getStartupElapsedMs')
       .mockImplementation(startupClock.createStartupClock(() => performance.now()));
     handler.resetHashes();
-    jest
-      .mocked(clipboardSyncState.getState)
-      .mockReturnValue({ remoteContent: null } as ReturnType<typeof clipboardSyncState.getState>);
     copyToLocalClipboard = jest
       .spyOn(
         handler as unknown as {
@@ -178,68 +167,5 @@ describe('ClipboardChangedHandler 启动基线窗口', () => {
 
     expect(copyToLocalClipboard).toHaveBeenCalledTimes(1);
     expect(copyToLocalClipboard).toHaveBeenCalledWith(next);
-  });
-});
-
-describe('复制当前远程图片', () => {
-  const handler = getClipboardChangedHandler();
-  const image: ClipboardContent = {
-    type: 'Image',
-    text: 'photo.png',
-    fileName: 'photo.png',
-    profileHash: 'remote-image',
-    localClipboardHash: 'image-bytes',
-    hasData: true,
-    fileUri: 'file:///photo.png',
-  };
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.mocked(isClipboardUploadRunning).mockReturnValue(false);
-    jest.mocked(remoteClipboardMonitor.hasObservedProfileHash).mockReturnValue(true);
-    handler.resetHashes();
-    handler.setLastRemoteProfileHash(image.profileHash!);
-    jest.spyOn(startupClock, 'getStartupElapsedMs').mockReturnValue(5000);
-    jest
-      .mocked(configService.getConfig)
-      .mockResolvedValue({ autoSync: true } as Awaited<ReturnType<typeof configService.getConfig>>);
-    jest
-      .mocked(configService.getActiveServer)
-      .mockResolvedValue({ type: 'syncclipboard' } as Awaited<
-        ReturnType<typeof configService.getActiveServer>
-      >);
-    jest
-      .mocked(clipboardSyncState.getState)
-      .mockReturnValue({ remoteContent: image } as ReturnType<typeof clipboardSyncState.getState>);
-  });
-  afterEach(() => jest.restoreAllMocks());
-
-  it('历史页复制当前远程图片不回传', async () => {
-    await handler.handleAutoUpload({ ...image });
-    expect(uploadLocalClipboard).not.toHaveBeenCalled();
-  });
-  it('直接上传进行中即使 UI 标志为 false 仍进入上传替换流程', async () => {
-    jest.mocked(isClipboardUploadRunning).mockReturnValue(true);
-    jest
-      .mocked(clipboardSyncState.getState)
-      .mockReturnValue({ remoteContent: image, uploadingClipboard: false } as ReturnType<
-        typeof clipboardSyncState.getState
-      >);
-    await handler.handleAutoUpload({ ...image });
-    expect(uploadLocalClipboard).toHaveBeenCalledWith(image);
-  });
-  it('切换服务器后不使用旧远程缓存跳过上传', async () => {
-    handler.resetLastRemoteProfileHash();
-    await handler.handleAutoUpload({ ...image });
-    expect(uploadLocalClipboard).toHaveBeenCalledWith(image);
-  });
-  it('后台远程监听断开后不根据旧缓存跳过上传', async () => {
-    jest.mocked(remoteClipboardMonitor.hasObservedProfileHash).mockReturnValue(false);
-    await handler.handleAutoUpload({ ...image });
-    expect(uploadLocalClipboard).toHaveBeenCalledWith(image);
-  });
-  it('复制其他历史图片仍正常上传', async () => {
-    const other = { ...image, profileHash: 'other-image', localClipboardHash: 'other-bytes' };
-    await handler.handleAutoUpload(other);
-    expect(uploadLocalClipboard).toHaveBeenCalledWith(other);
   });
 });

@@ -9,11 +9,7 @@ import type { AppConfig } from '../../types';
 import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
 import { remoteClipboardMonitor } from './RemoteClipboardMonitor';
-import {
-  uploadLocalClipboard,
-  downloadRemoteClipboard,
-  isClipboardUploadRunning,
-} from './ClipboardSyncActions';
+import { uploadLocalClipboard, downloadRemoteClipboard } from './ClipboardSyncActions';
 import {
   getJustUploadedHash,
   clearJustUploadedHash,
@@ -243,23 +239,6 @@ class ClipboardChangedHandler {
       return;
     }
     clearJustSetLocalHash();
-
-    // 历史页复制当前远程图片也会触发本地变化，无需将相同记录再次上传。
-    const { remoteContent } = clipboardSyncState.getState();
-    if (
-      !isClipboardUploadRunning() &&
-      this.lastRemoteProfileHash !== null &&
-      content.type === 'Image' &&
-      remoteContent?.type === 'Image' &&
-      content.profileHash &&
-      remoteContent.profileHash &&
-      remoteClipboardMonitor.hasObservedProfileHash(content.profileHash) &&
-      content.profileHash.toUpperCase() === this.lastRemoteProfileHash.toUpperCase() &&
-      content.profileHash.toUpperCase() === remoteContent.profileHash.toUpperCase()
-    ) {
-      this.lastLocalProfileHash = currentHash;
-      return;
-    }
 
     if (currentHash === this.lastLocalProfileHash) return;
     this.lastLocalProfileHash = currentHash;

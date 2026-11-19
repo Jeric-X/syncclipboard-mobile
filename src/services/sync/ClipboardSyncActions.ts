@@ -85,11 +85,6 @@ export async function uploadLocalClipboard(content?: ClipboardContent | null): P
   }
 }
 
-/** 查询共享上传操作，包含自动同步、分享和文件选择器发起的上传。 */
-export function isClipboardUploadRunning(): boolean {
-  return _uploadOp.isRunning();
-}
-
 /** 取消当前正在进行的本地上传（如有） */
 export function cancelUploadLocalClipboard(): void {
   _uploadOp.abort();
