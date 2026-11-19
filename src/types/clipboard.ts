@@ -56,7 +56,7 @@ export interface HistoryItem {
   /** 使用次数 */
   useCount?: number;
 
-  /** 本地剪贴板 hash（用于本地变化检测，基于 base64 内容） */
+  /** 本地剪贴板 hash（文本内容或图片文件字节的 SHA-256，不含文件名） */
   localClipboardHash?: string;
 
   /** 文件 URI（本地文件路径） */
@@ -146,7 +146,7 @@ export interface ClipboardContent {
   /** Profile hash（用于服务器上传，遵循服务器规则） */
   profileHash?: string;
 
-  /** 本地剪贴板 hash（用于本地变化检测，基于 base64 内容） */
+  /** 本地剪贴板 hash（文本内容或图片文件字节的 SHA-256，不含文件名） */
   localClipboardHash?: string;
 
   /** 文件数据（二进制） */
