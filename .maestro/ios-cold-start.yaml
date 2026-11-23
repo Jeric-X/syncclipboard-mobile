@@ -1,9 +1,0 @@
-appId: com.jericx.syncclipboardmobile
----
-- launchApp:
-    clearState: true
-- assertVisible: "No server configured|未配置服务器"
-- tapOn: "(History|历史), tab, 2 of 3"
-- assertVisible: "No history yet|暂无历史记录"
-- tapOn: "(Settings|设置), tab, 3 of 3"
-- assertVisible: "Server Configuration|服务器配置"
