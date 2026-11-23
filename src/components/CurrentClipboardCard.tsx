@@ -3,7 +3,6 @@
  * 当前剪贴板内容卡片
  */
 
-import { MAX_INLINE_TEXT_LENGTH } from '@/services/sync/iosResumeTextSync';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
@@ -17,7 +16,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from 'react-i18next';
-import { ClipboardContent } from '@/types/clipboard';
+import { ClipboardContent, isInlineClipboardText } from '@/types/clipboard';
 import { useSettingsStore } from '@/stores';
 import { useMessageStore } from '@/stores/messageStore';
 import { openFile, shareFile, saveToGallery } from '@/utils/fileActions';
@@ -471,10 +470,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         {isRemote &&
           clipboard.type === 'Text' &&
           !requiresDownload &&
-          (Platform.OS !== 'ios' ||
-            (!clipboard.hasData &&
-              typeof clipboard.text === 'string' &&
-              clipboard.text.length <= MAX_INLINE_TEXT_LENGTH)) && (
+          (Platform.OS !== 'ios' || isInlineClipboardText(clipboard)) && (
             <TouchableOpacity
               style={[
                 styles.actionButton,

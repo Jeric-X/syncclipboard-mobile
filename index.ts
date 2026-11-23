@@ -10,7 +10,6 @@ import ServiceRestartApp from './src/ServiceRestartApp';
 import SmsUploadTask from './src/tasks/SmsUploadTask';
 import ServiceRuntimeHeadlessTask from './src/services/headless/ServiceRuntimeHeadlessTask';
 import { installServiceRuntime } from './src/services/ServiceRuntime';
-import { installIosResumeTextSync } from './src/services/sync/iosResumeTextRuntime';
 import { notifyColdStart } from './src/services/ColdStartNotification';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
@@ -30,6 +29,5 @@ if (Platform.OS === 'android') {
   AppRegistry.registerHeadlessTask('ServiceRuntimeHeadlessTask', () => ServiceRuntimeHeadlessTask);
 }
 
-if (Platform.OS === 'ios') installIosResumeTextSync();
 installServiceRuntime();
 notifyColdStart().catch((error) => console.error('[ColdStartNotification] Failed:', error));

@@ -16,14 +16,13 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
-import * as ClipboardProxy from '@/utils/clipboardProxy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/hooks/useTheme';
 import { useLocalClipboardStore } from '@/stores/localClipboardStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useClipboardSyncServiceStore } from '@/serviceState/ClipboardSyncState';
-import { ClipboardContent } from '@/types/clipboard';
+import { ClipboardContent, MAX_INLINE_TEXT_LENGTH, isInlineClipboardText } from '@/types/clipboard';
 import { CurrentClipboardCard } from '@/components/CurrentClipboardCard';
 import { MessageToast } from '@/components/MessageToast';
 import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
@@ -31,7 +30,10 @@ import { WordPickerScreen } from '@/screens/WordPickerScreen';
 import { useMessageStore } from '@/stores/messageStore';
 import { useErrorStore } from '@/stores/errorStore';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
-import { createContentFromFile } from '@/utils/clipboard/clipboardContentUtils';
+import {
+  createContentFromFile,
+  createContentFromText,
+} from '@/utils/clipboard/clipboardContentUtils';
 import {
   setRemoteClipboard,
   uploadLocalClipboard,
@@ -40,7 +42,8 @@ import {
   cancelRemoteClipboardDownload,
   refreshMonitor,
 } from '@/services/sync/ClipboardSyncActions';
-import { runIosTextAction } from '@/services/sync/iosResumeTextRuntime';
+import { getClipboardSyncService } from '@/services/sync/ClipboardSyncService';
+import { localClipboard } from '@/services/clipboard/LocalClipboard';
 import type { ProgressInfo } from '@/types/progress';
 import { updateService } from '@/services/update';
 import { useUpdateDialog } from '@/hooks/useUpdateDialog';
@@ -95,74 +98,49 @@ export function HomeScreen() {
   const iosTextServer =
     Platform.OS === 'ios' && activeServer?.type !== 's3' ? activeServer?.id : undefined;
   const unsupportedIosServer = Platform.OS === 'ios' && activeServer?.type === 's3';
-  const uploadIosText = useCallback(
-    async (expectedText?: string) => {
-      if (!iosTextServer) return;
-      const chosenServer = JSON.stringify(useSettingsStore.getState().getActiveServer());
-      const result = await runIosTextAction('upload', iosTextServer, expectedText);
+  const uploadClipboardText = useCallback(async () => {
+    if (useClipboardSyncServiceStore.getState().uploadingClipboard) return;
+    const selected = useSettingsStore.getState().getActiveServer();
+    const session = getClipboardSyncService().getSessionSignal();
+    if (!selected || !session || session.aborted) return;
+    const publish = async (content: ClipboardContent) => {
       if (
-        result === 'canceled' ||
-        chosenServer !== JSON.stringify(useSettingsStore.getState().getActiveServer())
+        session.aborted ||
+        JSON.stringify(useSettingsStore.getState().getActiveServer()) !== JSON.stringify(selected)
       )
         return;
-      const uploaded = result === 'success';
-      if (result === 'unavailable') {
-        Alert.prompt(
-          t('home.uploadClipboardText'),
-          t('home.pasteTextHint'),
-          [
-            { text: t('common.cancel'), style: 'cancel' },
-            {
-              text: t('clipboard.upload'),
-              onPress: async (text?: string) => {
-                const sameServer =
-                  chosenServer === JSON.stringify(useSettingsStore.getState().getActiveServer());
-                const sent =
-                  !!text &&
-                  sameServer &&
-                  (await runIosTextAction('paste', iosTextServer, text)) === 'success';
-                showMessage(
-                  t(sent ? 'home.uploadSuccess' : 'home.uploadFailed'),
-                  sent ? 'success' : 'error'
-                );
-              },
-            },
-          ],
-          'plain-text'
+      try {
+        const sent = await uploadLocalClipboard(content, session, selected);
+        showMessage(
+          t(sent ? 'home.uploadSuccess' : 'home.uploadFailed'),
+          sent ? 'success' : 'error'
         );
-        return;
+      } catch {
+        showMessage(t('home.uploadFailed'), 'error');
       }
-      showMessage(
-        t(
-          uploaded
-            ? 'home.uploadSuccess'
-            : expectedText !== undefined &&
-                useLocalClipboardStore.getState().currentContent?.text !== expectedText
-              ? 'home.localPreviewChanged'
-              : 'home.uploadFailed'
-        ),
-        uploaded ? 'success' : 'error'
-      );
-    },
-    [iosTextServer, showMessage, t]
-  );
+    };
+    const content = useLocalClipboardStore.getState().currentContent;
+    if (content && isInlineClipboardText(content) && content.text) return publish(content);
+    Alert.prompt(
+      t('home.uploadClipboardText'),
+      t('home.pasteTextHint'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('clipboard.upload'),
+          onPress: async (text?: string) => {
+            if (text && text.length <= MAX_INLINE_TEXT_LENGTH)
+              await publish(await createContentFromText(text));
+            else showMessage(t('home.uploadFailed'), 'error');
+          },
+        },
+      ],
+      'plain-text'
+    );
+  }, [showMessage, t]);
 
   // 复制远程内容到本地剪贴板
   const copyRemoteToLocal = async (content: ClipboardContent, logPrefix: string = '') => {
-    if (iosTextServer && content.type === 'Text' && !content.hasData) {
-      if ((await runIosTextAction('copy', iosTextServer, content.text)) !== 'success') {
-        const latest = useClipboardSyncServiceStore.getState().remoteContent;
-        throw new Error(
-          t(
-            latest && (latest.type !== content.type || latest.text !== content.text)
-              ? 'home.remotePreviewChanged'
-              : 'clipboard.copyFailed'
-          )
-        );
-      }
-      return;
-    }
-    const { localClipboard } = await import('@/services');
     await localClipboard.setClipboardContent(content, true);
     console.log(`[HomeScreen] ${logPrefix}Copy to local clipboard completed`);
   };
@@ -170,7 +148,6 @@ export function HomeScreen() {
   // 复制本地剪贴板内容（简单模式，直接设置到剪贴板）
   const copyLocalToClipboard = async (content: ClipboardContent) => {
     try {
-      const { localClipboard } = await import('@/services');
       await localClipboard.setClipboardContent(content);
       showMessage(t('clipboard.copied'), 'success');
     } catch (error) {
@@ -270,7 +247,7 @@ export function HomeScreen() {
     () =>
       Platform.OS === 'ios'
         ? iosTextServer
-          ? [{ label: t('home.uploadClipboardText'), onPress: () => uploadIosText() }]
+          ? [{ label: t('home.uploadClipboardText'), onPress: () => uploadClipboardText() }]
           : []
         : [
             {
@@ -284,7 +261,7 @@ export function HomeScreen() {
               disabled: !!fileUploadPayload,
             },
           ],
-    [iosTextServer, uploadIosText, handleUploadImage, handleUploadFile, fileUploadPayload, t]
+    [iosTextServer, uploadClipboardText, handleUploadImage, handleUploadFile, fileUploadPayload, t]
   );
 
   // 设置标题栏菜单按钮
@@ -298,8 +275,7 @@ export function HomeScreen() {
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      if (iosTextServer) await runIosTextAction('refresh', iosTextServer);
-      else if (Platform.OS !== 'ios') await refreshMonitor();
+      await refreshMonitor();
     } finally {
       setRefreshing(false);
     }
@@ -310,7 +286,7 @@ export function HomeScreen() {
     try {
       clearError();
 
-      if (iosTextServer) return await uploadIosText(currentContent?.text);
+      if (iosTextServer) return await uploadClipboardText();
       console.log('[HomeScreen] Starting upload...');
       await uploadLocalClipboard();
     } catch (error: unknown) {
@@ -353,7 +329,7 @@ export function HomeScreen() {
 
   const handleCopyError = async () => {
     if (error) {
-      await ClipboardProxy.setStringAsync(`${error.title}\n\n${error.message}`);
+      await localClipboard.copyText(`${error.title}\n\n${error.message}`);
       showMessage(t('home.errorCopied'), 'success');
     }
   };
@@ -466,7 +442,7 @@ export function HomeScreen() {
                 onAction={Platform.OS === 'ios' && !iosTextServer ? undefined : handleUpload}
                 acting={uploadingClipboard}
                 actionProgress={uploadProgress}
-                onCancelAction={iosTextServer ? undefined : handleCancelClipboardUpload}
+                onCancelAction={handleCancelClipboardUpload}
                 onCopy={copyLocalToClipboard}
                 onWordPick={setWordPickerText}
               />

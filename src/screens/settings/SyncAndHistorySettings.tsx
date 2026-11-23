@@ -355,6 +355,21 @@ export const SyncAndHistorySettings = ({ showMessage }: SettingsModuleProps) => 
           onChange={handleToggleAutoSync}
         />
 
+        {(Platform.OS === 'ios'
+          ? activeServer?.type === 'webdav'
+          : activeServer?.type !== 'syncclipboard') && (
+          <SettingInput
+            label={t('settings.remotePollingInterval')}
+            value={remotePollingInput}
+            onChangeText={setRemotePollingInput}
+            onBlur={handleRemotePollingBlur}
+            unit={t('settings.unitSecond')}
+            keyboardType="number-pad"
+            placeholder="3"
+            filter={filterPositiveInteger}
+          />
+        )}
+
         {Platform.OS !== 'ios' && (
           <>
             <SettingSwitch
@@ -381,19 +396,6 @@ export const SyncAndHistorySettings = ({ showMessage }: SettingsModuleProps) => 
               keyboardType="number-pad"
               placeholder="5"
             />
-
-            {activeServer?.type !== 'syncclipboard' && (
-              <SettingInput
-                label={t('settings.remotePollingInterval')}
-                value={remotePollingInput}
-                onChangeText={setRemotePollingInput}
-                onBlur={handleRemotePollingBlur}
-                unit={t('settings.unitSecond')}
-                keyboardType="number-pad"
-                placeholder="3"
-                filter={filterPositiveInteger}
-              />
-            )}
 
             <SettingInput
               label={t('settings.localPollingInterval')}

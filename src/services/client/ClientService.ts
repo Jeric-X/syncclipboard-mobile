@@ -1,7 +1,8 @@
 import type { ClipboardContent } from '@/types/clipboard';
 import type { ProgressCallback } from '../history/HistoryTransferQueue';
 import { configService } from '../ConfigService';
-import { getAPIClient } from '../ClientFactory';
+import type { ServerConfig } from '@/types/api';
+import { createClientFromConfig, getAPIClient } from '../ClientFactory';
 import { contentToProfileDto } from '@/utils/clipboard/convert';
 import { downloadForStorage, uploadForStorage } from './StorageClient';
 import { downloadForSyncClipboard, uploadForSyncClipboard } from './SyncClipboardClient';
@@ -61,13 +62,14 @@ export class ClientService {
   async setRemoteClipboard(
     content: ClipboardContent,
     progress?: ProgressCallback,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    selected?: ServerConfig
   ): Promise<void> {
     if (content.hasData) {
       await this.uploadData(content, progress, signal);
     }
 
-    const apiClient = await getAPIClient();
+    const apiClient = selected ? createClientFromConfig(selected) : await getAPIClient();
     const profile = await contentToProfileDto(content, { signal });
     await apiClient.putClipboard(profile, signal);
   }

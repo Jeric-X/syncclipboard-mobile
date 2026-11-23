@@ -62,9 +62,6 @@ const en: DeepString<typeof zh> = {
     localClipboard: 'Local Clipboard',
     noServerTitle: 'No server configured',
     noServerDescription: 'Add a server configuration in Settings to enable sync',
-    localPreviewChanged: 'Local text changed. Check the updated preview and tap Upload again.',
-    remotePreviewChanged:
-      'The remote clipboard changed. Check the updated preview and tap Copy again.',
     pasteTextHint: 'Use Paste in the text field, then confirm the upload. Up to 1,000 characters.',
     iosS3Unavailable:
       'To sync text on iOS, select a SyncClipboard Server or WebDAV server in Settings.',
@@ -190,9 +187,8 @@ const en: DeepString<typeof zh> = {
     syncAndHistorySection: 'Sync and History',
     syncSection: 'Sync Settings',
     autoSync: 'Auto Sync',
-    iosResumeSyncFailed: 'Clipboard operation failed',
     iosAutoSyncDesc:
-      'When you return to the app, sync short text with SyncClipboard Server or WebDAV. The first check sets a baseline. If the check finds changes on both sides, each keeps its text.',
+      'While the app is in the foreground, stay connected to SyncClipboard Server or poll WebDAV. Read the local clipboard once on entering the foreground.',
     autoSyncDesc: 'Automatically sync clipboard while in foreground',
     autoCopyTextOnly: 'Auto-copy text only',
     autoCopyTextOnlyDesc:

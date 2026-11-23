@@ -11,6 +11,7 @@
  * 生命周期由 LongRunningTaskManager 统一管理。
  */
 
+import { Platform } from 'react-native';
 import { LongRunningTask } from './LongRunningTask';
 import type { ServerConfig } from '../types/api';
 import { remoteClipboardMonitor } from '../services/sync/RemoteClipboardMonitor';
@@ -33,7 +34,7 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
     const server = await configService.getActiveServer();
     const config = await configService.getConfig();
     if (lifecycle !== this.lifecycle) return;
-    if (!server) {
+    if (!server || (Platform.OS === 'ios' && server.type === 's3')) {
       this._activeServer = null;
       this._activePollingInterval = config?.remotePollingInterval;
       clipboardSyncState.setRemoteContent(null);
@@ -67,7 +68,7 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
     const serverChanged = JSON.stringify(newServer) !== JSON.stringify(this._activeServer);
     const pollingIntervalChanged = newPollingInterval !== this._activePollingInterval;
 
-    if (!newServer) {
+    if (!newServer || (Platform.OS === 'ios' && newServer.type === 's3')) {
       this._activeServer = null;
       this._activePollingInterval = newPollingInterval;
       await remoteClipboardMonitor.disconnect();
@@ -91,7 +92,8 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
   }
 
   override async onForeground(): Promise<void> {
-    if (this._started) this.runInBackground(() => remoteClipboardMonitor.handleForeground());
+    if (this._started && this._activeServer)
+      this.runInBackground(() => remoteClipboardMonitor.handleForeground());
   }
 
   private runInBackground(operation: () => Promise<void>): void {

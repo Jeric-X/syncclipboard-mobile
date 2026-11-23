@@ -35,7 +35,7 @@ export class ClipboardMonitor {
 
   // 配置选项
   private options: Required<ClipboardMonitorOptions> = {
-    pollingInterval: 1000, // iOS 默认 1 秒轮询
+    pollingInterval: 1000,
   };
 
   private isChecking: boolean = false;
@@ -48,7 +48,13 @@ export class ClipboardMonitor {
     // 注册复制生命周期回调，避免循环引用
     clipboardManager.registerCopyLifecycleCallbacks({
       onBeforeCopy: () => this.pauseMonitoring(),
-      onAfterCopy: () => this.resumeMonitoring(),
+      onAfterCopy: async (written) => {
+        if (Platform.OS !== 'ios') return this.resumeMonitoring();
+        if (written && this.hasContentChanged(written)) {
+          await this.setLastContent(written);
+          this.notifyCallbacks(written);
+        }
+      },
     });
 
     if (options) {
@@ -79,7 +85,8 @@ export class ClipboardMonitor {
     }
 
     this.isMonitoring = true;
-    await this.startMonitoring();
+    if (Platform.OS === 'ios') await this.checkClipboard();
+    else await this.startMonitoring();
 
     console.log('[ClipboardMonitor] Started monitoring');
   }
@@ -283,20 +290,20 @@ export class ClipboardMonitor {
   private async checkClipboard(): Promise<void> {
     if (!this.isMonitoring) return;
     // 互斥锁：如果上一次检查还在进行中（大图片 hash 计算耗时），跳过本次
-    if (this.isChecking) return;
+    if (this.isChecking && Platform.OS !== 'ios') return;
     this.isChecking = true;
     this.recheckAfterReconnect = false;
     const gen = this.checkGeneration;
     try {
       const content = await measureStartup('local.readContent', () =>
-        this.clipboardManager.getClipboardContent()
+        this.clipboardManager.getClipboardContent(Platform.OS === 'ios')
       );
 
       // 如果在 getClipboardContent 期间 setLastContent 被调用，丢弃本次结果
       if (gen !== this.checkGeneration) return;
 
       if (!content) {
-        // console.log('[ClipboardMonitor] Poll: clipboard is empty');
+        if (Platform.OS === 'ios') this.lastContent = null;
         return;
       }
 
@@ -307,6 +314,7 @@ export class ClipboardMonitor {
         this.notifyCallbacks(content);
       }
     } catch (error) {
+      if (Platform.OS === 'ios' && gen === this.checkGeneration) this.lastContent = null;
       console.error('[ClipboardMonitor] Failed to check clipboard:', error);
     } finally {
       this.isChecking = false;
@@ -381,6 +389,7 @@ export class ClipboardMonitor {
    * 立即触发一次检查；只有轮询计时器和事件监听都不存在时才恢复监控。
    */
   handleForeground(): void {
+    if (Platform.OS === 'ios') return;
     if (this.isMonitoring) {
       void this.checkClipboard();
       if (!this.pollingTimerTag && !this.nativeClipboardListenerCleanup) {
@@ -393,6 +402,7 @@ export class ClipboardMonitor {
    * 手动触发一次检查
    */
   async triggerCheck(): Promise<void> {
+    if (Platform.OS === 'ios') return;
     await this.checkClipboard();
   }
 
@@ -426,6 +436,7 @@ export class ClipboardMonitor {
    * 后台且后台上传未启用时，不恢复监控（避免后台写入剪贴板后误重启）。
    */
   async resumeMonitoring(): Promise<void> {
+    if (Platform.OS === 'ios') return;
     if (!this.isMonitoring) return;
 
     // 后台且后台上传未启用时，不恢复任何监控。

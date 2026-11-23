@@ -46,7 +46,7 @@ export class LongRunningTaskCoordinator {
     });
   }
 
-  refresh(configChanged = false): Promise<void> {
+  refresh(configChanged = false, foreground?: boolean): Promise<void> {
     return this.enqueue(async () => {
       if (!this.enabled) return;
       if (configChanged) {
@@ -54,7 +54,7 @@ export class LongRunningTaskCoordinator {
           if (task.isRunning()) await this.safely(task, () => task.onConfigChanged());
         }
       }
-      await this.reconcile();
+      await this.reconcile(foreground);
     });
   }
 
@@ -86,12 +86,13 @@ export class LongRunningTaskCoordinator {
     }
   }
 
-  private async reconcile(): Promise<void> {
+  private async reconcile(foreground?: boolean): Promise<void> {
     const policy = await this.getPolicy();
+    const isForeground = foreground ?? policy.foreground;
     const active: ILongRunningTask[] = [];
     // 注册顺序保证网络选择和同步回调先于剪贴板监听初始化。
     for (const { task, keepAlive } of this.tasks.values()) {
-      if (keepAlive || policy.foreground || policy.backgroundEnabled) {
+      if (keepAlive || isForeground || policy.backgroundEnabled) {
         if (!task.isRunning()) {
           await this.safely(task, () =>
             measureStartup(`task.${task.name}.start`, () => task.start())
@@ -106,7 +107,7 @@ export class LongRunningTaskCoordinator {
     for (const task of active) {
       await this.safely(task, () =>
         measureStartup(`task.${task.name}.initialPolicy`, () =>
-          policy.foreground ? task.onForeground() : task.onBackground()
+          isForeground ? task.onForeground() : task.onBackground()
         )
       );
     }

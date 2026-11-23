@@ -4,7 +4,6 @@
  */
 
 import { nativeUploadFile, type ProgressInfo } from 'native-util';
-import type { ClipboardSnapshot, ClipboardWriteCondition } from './APIClient';
 import { APIClient, ISyncClipboardAPI, PutContentOptions } from './APIClient';
 import { ProfileDto, ServerInfo } from '@/types/api';
 import type { ClipboardContent } from '@/types/clipboard';
@@ -52,24 +51,28 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
    * 获取剪贴板配置
    */
   async getClipboard(signal?: AbortSignal): Promise<ProfileDto> {
-    return (await this.getClipboardSnapshot(signal)).profile;
-  }
-
-  async getClipboardSnapshot(signal?: AbortSignal): Promise<ClipboardSnapshot> {
     try {
-      const snapshot = await this.readClipboardSnapshot(
+      // WebDAV GET 请求获取文件
+      const profile = await this.get<ProfileDto>(
         `/${WebDAVClient.PROFILE_FILENAME}`,
         signal
+          ? {
+              signal,
+              headers: { 'Cache-Control': 'no-cache' },
+            }
+          : {
+              headers: { 'Cache-Control': 'no-cache' },
+            }
       );
-      this.validateProfile(snapshot.profile);
-      return snapshot;
+
+      // 验证响应数据
+      this.validateProfile(profile);
+
+      return profile;
     } catch (error) {
       // 404 表示远程剪贴板为空（首次连接），返回默认空配置
       if (error instanceof ServerError && error.statusCode === 404) {
-        return {
-          profile: { type: 'Text', text: '', hasData: false },
-          condition: { 'If-None-Match': '*' },
-        };
+        return { type: 'Text', text: '', hasData: false } as ProfileDto;
       }
       console.error('[WebDAVClient] Failed to get clipboard:', error);
       throw error;
@@ -79,11 +82,7 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
   /**
    * 上传剪贴板配置
    */
-  async putClipboard(
-    profile: ProfileDto,
-    signal?: AbortSignal,
-    condition?: ClipboardWriteCondition
-  ): Promise<void> {
+  async putClipboard(profile: ProfileDto, signal?: AbortSignal): Promise<void> {
     try {
       // 验证输入数据
       this.validateProfile(profile);
@@ -92,7 +91,7 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
       await this.ensureDirectoryExists('/', signal);
 
       // WebDAV PUT 请求上传文件
-      await this.put(`/${WebDAVClient.PROFILE_FILENAME}`, profile, { signal, headers: condition });
+      await this.put(`/${WebDAVClient.PROFILE_FILENAME}`, profile, signal ? { signal } : undefined);
     } catch (error) {
       console.error('[WebDAVClient] Failed to put clipboard:', error);
       throw error;
@@ -209,8 +208,8 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
       // 如果目录已存在，会返回 405 Method Not Allowed，这是正常的
       await this.client.request({
         method: 'MKCOL',
-        url: path,
         signal,
+        url: path,
       });
     } catch (error: unknown) {
       // 405 或 409 表示目录已存在，忽略这个错误

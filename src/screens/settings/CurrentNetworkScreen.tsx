@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
+import { localClipboard } from '@/services/clipboard/LocalClipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Copy } from 'react-native-feather';
 import { useTranslation } from 'react-i18next';
@@ -56,7 +56,7 @@ export const CurrentNetworkScreen = () => {
   };
 
   const copyValue = async (value: string) => {
-    await Clipboard.setStringAsync(value);
+    await localClipboard.copyText(value);
     Alert.alert(t('networkAutoSwitch.copied'));
   };
 

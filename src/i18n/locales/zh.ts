@@ -55,8 +55,6 @@ const zh = {
     localClipboard: '本地剪贴板',
     noServerTitle: '未配置服务器',
     noServerDescription: '请在"设置"页面添加服务器配置以启用同步功能',
-    localPreviewChanged: '本机文本已变化，请确认预览后再上传。',
-    remotePreviewChanged: '远端内容已更新，请确认预览后再复制。',
     pasteTextHint: '在输入框中选择系统“粘贴”，确认后上传，最多 1000 个字符。',
     iosS3Unavailable:
       'iOS 文本同步目前支持 SyncClipboard Server 和 WebDAV。请在设置中选择其中一种服务器。',
@@ -181,9 +179,8 @@ const zh = {
     syncAndHistorySection: '同步和历史记录',
     syncSection: '同步设置',
     autoSync: '自动同步',
-    iosResumeSyncFailed: '本次剪贴板操作失败',
     iosAutoSyncDesc:
-      '回到前台时与 SyncClipboard Server 或 WebDAV 同步一次短文本。首次检查建立基准，检查发现两边都有变化时各自保留。',
+      '进入前台时读取一次本机剪贴板。停留前台时，持续接收 SyncClipboard Server 的更新或轮询 WebDAV。',
     autoSyncDesc: '处于前台时自动同步剪贴板',
     autoCopyTextOnly: '仅自动复制文字',
     autoCopyTextOnlyDesc: '开启后，仅自动复制远程文字内容，不自动复制图片。',

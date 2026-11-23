@@ -19,10 +19,12 @@ import { LongRunningTaskCoordinator } from './LongRunningTaskCoordinator';
 
 class LongRunningTaskManager extends LongRunningTaskCoordinator {
   constructor() {
+    let foreground = AppState.currentState === 'active';
     super(
       async () => ({
-        foreground: AppState.currentState === 'active',
+        foreground: Platform.OS === 'ios' ? foreground : AppState.currentState === 'active',
         backgroundEnabled:
+          Platform.OS === 'android' &&
           !backgroundRuntimeState.isTempDisabled() &&
           !!(await configService.getConfig()).enableBackgroundTasks,
       }),
@@ -30,11 +32,22 @@ class LongRunningTaskManager extends LongRunningTaskCoordinator {
     );
     configService.subscribe(() => this.requestRefresh(true));
     backgroundRuntimeState.subscribe(() => this.requestRefresh(true));
-    AppState.addEventListener('change', () => this.requestRefresh());
+    AppState.addEventListener('change', (state) => {
+      if (Platform.OS === 'ios') {
+        // 系统授权弹窗会暂时进入 inactive，仍属于同一段前台会话。
+        if (state !== 'background' && state !== 'active') return;
+        const active = state === 'active';
+        if (foreground === active) return;
+        foreground = active;
+        this.requestRefresh(false, active);
+      } else {
+        this.requestRefresh();
+      }
+    });
   }
 
-  private requestRefresh(configChanged = false): void {
-    this.refresh(configChanged).catch((error) => {
+  private requestRefresh(configChanged = false, foreground?: boolean): void {
+    this.refresh(configChanged, foreground).catch((error) => {
       console.error('[LongRunningTaskManager] Failed to reconcile tasks:', error);
     });
   }
@@ -42,7 +55,7 @@ class LongRunningTaskManager extends LongRunningTaskCoordinator {
 
 export const longRunningTaskManager = new LongRunningTaskManager();
 
-// 这些任务属于 Android 的持续同步运行时。iOS 冷启动只初始化前台界面。
+// Android 支持后台任务；iOS 的共享同步任务只在前台会话内运行。
 if (Platform.OS === 'android') {
   // 网络选择与同步回调先于监听器启动，保证 Headless 冷启动也能收到首次变化。
   longRunningTaskManager.register(networkAutoSwitchTask, true);
@@ -55,4 +68,8 @@ if (Platform.OS === 'android') {
   longRunningTaskManager.register(historySyncTask, true);
   longRunningTaskManager.register(foregroundServiceTask);
   longRunningTaskManager.register(shizukuRecoveryTask);
+} else if (Platform.OS === 'ios') {
+  longRunningTaskManager.register(clipboardSyncTask);
+  longRunningTaskManager.register(clipboardMonitorTask);
+  longRunningTaskManager.register(remoteClipboardMonitorTask);
 }

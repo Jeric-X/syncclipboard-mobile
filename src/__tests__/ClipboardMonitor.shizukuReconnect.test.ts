@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { ClipboardMonitor } from '../services/clipboard/ClipboardMonitor';
 import type { LocalClipboard } from '../services/clipboard/LocalClipboard';
 import { setTimer, clearTimer } from 'native-timer';
@@ -183,4 +184,38 @@ it('恢复时若旧轮询仍在读取，结束后仍须补读最新内容', asyn
   finishRead(null);
   for (let i = 0; i < 10; i++) await Promise.resolve();
   expect(changed).toHaveBeenCalledWith(content);
+});
+
+it('iOS samples once per foreground session and never polls or rereads after an app write', async () => {
+  const previous = Platform.OS;
+  Platform.OS = 'ios';
+  try {
+    await monitor.start();
+    monitor.handleForeground();
+    await monitor.refreshListeningMode();
+    await monitor.resumeMonitoring();
+    await monitor.triggerCheck();
+    expect(readClipboard).toHaveBeenCalledTimes(1);
+    expect(setTimer).not.toHaveBeenCalled();
+    await monitor.stop();
+    await monitor.start();
+    expect(readClipboard).toHaveBeenCalledTimes(2);
+  } finally {
+    Platform.OS = previous;
+  }
+});
+
+it('clears the previous iOS sample when the new foreground read fails', async () => {
+  const previous = Platform.OS;
+  Platform.OS = 'ios';
+  try {
+    readClipboard.mockResolvedValueOnce({ type: 'Text', text: 'old' });
+    await monitor.start();
+    await monitor.stop();
+    readClipboard.mockRejectedValueOnce(new Error('read failed'));
+    await monitor.start();
+    expect(monitor.getLastContent()).toBeNull();
+  } finally {
+    Platform.OS = previous;
+  }
 });

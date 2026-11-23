@@ -1,4 +1,3 @@
-import { Platform } from 'react-native';
 import { ConfigStorage } from '../storage/ConfigStorage';
 import { AppConfig, DEFAULT_APP_CONFIG, STORAGE_KEYS } from '../types/storage';
 import { ServerConfig } from '../types/api';
@@ -38,26 +37,6 @@ describe('ConfigStorage', () => {
     const privateProps = getPrivate(configStorage);
     privateProps.initialized = false;
     privateProps.config = null;
-  });
-
-  it('persists a fresh iOS selection when switching back, but retains it on password rotation', async () => {
-    const os = Platform.OS;
-    Platform.OS = 'ios';
-    try {
-      await configStorage.addServer({ id: 'a', type: 'webdav', url: 'https://a.example' });
-      await configStorage.addServer({ id: 'b', type: 'webdav', url: 'https://b.example' });
-      const first = (await configStorage.getConfig()).iosClipboardSelection;
-      expect(first).toBeTruthy();
-      await configStorage.updateServer(0, { password: 'updated' });
-      expect((await configStorage.getConfig()).iosClipboardSelection).toBe(first);
-      await configStorage.setActiveServer(1);
-      await configStorage.setActiveServer(0);
-      mockGetItem.mockResolvedValue(mockSetItem.mock.calls.at(-1)![1]);
-      getPrivate(configStorage).initialized = false;
-      expect((await configStorage.getConfig()).iosClipboardSelection).not.toBe(first);
-    } finally {
-      Platform.OS = os;
-    }
   });
 
   describe('initialize', () => {

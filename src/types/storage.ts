@@ -18,9 +18,6 @@ export interface AppConfig {
   /** 当前激活的服务器索引 */
   activeServerIndex: number;
 
-  /** iOS 当前选服标记，真实切换时替换。 */
-  iosClipboardSelection?: string;
-
   /** 根据当前默认网络自动选择服务器。 */
   networkAutoSwitch: NetworkAutoSwitchConfig;
 

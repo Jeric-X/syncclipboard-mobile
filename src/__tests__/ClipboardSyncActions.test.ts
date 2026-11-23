@@ -94,6 +94,17 @@ describe('setRemoteClipboard', () => {
       expect.any(AbortSignal)
     );
   });
+
+  it('uses the chosen server after waiting for local history', async () => {
+    const selected = { id: 'selected', type: 'webdav' as const, url: 'https://selected.example' };
+    await setRemoteClipboard(localContent, new AbortController().signal, undefined, selected);
+    expect(mockSetRemoteClipboard).toHaveBeenCalledWith(
+      localContent,
+      expect.any(Function),
+      expect.any(AbortSignal),
+      selected
+    );
+  });
 });
 
 describe('downloadRemoteClipboard', () => {

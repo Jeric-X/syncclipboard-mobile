@@ -12,14 +12,28 @@
  * 生命周期由 LongRunningTaskManager 统一管理。
  */
 
+import { Platform } from 'react-native';
+import { useLocalClipboardStore } from '../stores/localClipboardStore';
 import { LongRunningTask } from './LongRunningTask';
 import { clipboardMonitor } from '../services/clipboard/ClipboardMonitor';
 import { configService } from '../services/ConfigService';
 
 class ClipboardMonitorTask extends LongRunningTask {
   readonly name = 'clipboardMonitor';
+  private sampleGeneration = 0;
 
   async start(): Promise<void> {
+    if (Platform.OS === 'ios') {
+      // 系统可能显示粘贴权限弹窗；远端连接和后台停止不应等待它返回。
+      const generation = ++this.sampleGeneration;
+      useLocalClipboardStore.setState({ currentContent: null });
+      void clipboardMonitor.start().then(() => {
+        if (generation === this.sampleGeneration && clipboardMonitor.isActive()) {
+          useLocalClipboardStore.setState({ currentContent: clipboardMonitor.getLastContent() });
+        }
+      });
+      return;
+    }
     if (!clipboardMonitor.isActive()) {
       await clipboardMonitor.start();
       await clipboardMonitor.triggerCheck();
@@ -28,6 +42,7 @@ class ClipboardMonitorTask extends LongRunningTask {
   }
 
   override async onConfigChanged(): Promise<void> {
+    if (Platform.OS === 'ios') return;
     await this._applyPollingInterval();
     await clipboardMonitor.refreshListeningMode();
   }
@@ -51,6 +66,10 @@ class ClipboardMonitorTask extends LongRunningTask {
   }
 
   async stop(): Promise<void> {
+    if (Platform.OS === 'ios') {
+      this.sampleGeneration++;
+      useLocalClipboardStore.setState({ currentContent: null });
+    }
     await clipboardMonitor.stop();
   }
 
