@@ -11,6 +11,7 @@ export default [
   {
     ignores: [
       'node_modules/**',
+      'ios/**',
       '.expo/**',
       'dist/**',
       'build/**',

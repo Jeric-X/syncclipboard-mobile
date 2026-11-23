@@ -13,6 +13,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
+      "bundleIdentifier": "com.jericx.syncclipboardmobile",
+      "buildNumber": "1",
       "supportsTablet": true
     },
     "android": {
@@ -54,6 +56,7 @@
           }
         }
       ],
+      ["expo-build-properties", { "ios": { "deploymentTarget": "15.1" } }],
       "expo-localization",
       "expo-sqlite"
     ]
