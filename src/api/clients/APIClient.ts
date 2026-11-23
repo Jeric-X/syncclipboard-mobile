@@ -55,12 +55,26 @@ export interface DownloadProgressCallback {
   (info: ProgressInfo): void;
 }
 
+export type ClipboardWriteCondition = { 'If-Match': string } | { 'If-None-Match': '*' };
+
+export interface ClipboardSnapshot {
+  profile: ProfileDto;
+  condition?: ClipboardWriteCondition;
+}
+
 export interface ISyncClipboardAPI {
+  /** 同时取得内容与服务端提供的写入前提，供前台同步使用。 */
+  getClipboardSnapshot?(signal?: AbortSignal): Promise<ClipboardSnapshot>;
+
   /** 获取剪贴板配置 */
   getClipboard(signal?: AbortSignal): Promise<ProfileDto>;
 
   /** 上传剪贴板配置 */
-  putClipboard(profile: ProfileDto, signal?: AbortSignal): Promise<void>;
+  putClipboard(
+    profile: ProfileDto,
+    signal?: AbortSignal,
+    condition?: ClipboardWriteCondition
+  ): Promise<void>;
 
   /** 直接下载文件到指定路径（优化内存占用） */
   downloadFile(
@@ -340,6 +354,22 @@ export abstract class APIClient {
     return response.data;
   }
 
+  /** 强 ETag 可用于 If-Match；弱 ETag 不能用于比较写入。 */
+  protected async readClipboardSnapshot(
+    url: string,
+    signal?: AbortSignal
+  ): Promise<ClipboardSnapshot> {
+    const response = await this.client.get<ProfileDto>(url, {
+      signal,
+      headers: { 'Cache-Control': 'no-cache' },
+    });
+    const tag = response.headers.etag;
+    return {
+      profile: response.data,
+      condition: typeof tag === 'string' && /^"[^"]*"$/.test(tag) ? { 'If-Match': tag } : undefined,
+    };
+  }
+
   /**
    * POST 请求
    */
@@ -437,7 +467,11 @@ export abstract class APIClient {
    * 上传剪贴板配置（由子类实现）
    * @param profile 剪贴板配置对象
    */
-  abstract putClipboard(profile: ProfileDto, signal?: AbortSignal): Promise<void>;
+  abstract putClipboard(
+    profile: ProfileDto,
+    signal?: AbortSignal,
+    condition?: ClipboardWriteCondition
+  ): Promise<void>;
 
   /**
    * 构建详细的错误信息，包含HTTP状态码和服务器响应体

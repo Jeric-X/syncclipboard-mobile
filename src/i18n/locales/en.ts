@@ -62,6 +62,13 @@ const en: DeepString<typeof zh> = {
     localClipboard: 'Local Clipboard',
     noServerTitle: 'No server configured',
     noServerDescription: 'Add a server configuration in Settings to enable sync',
+    localPreviewChanged: 'Local text changed. Check the updated preview and tap Upload again.',
+    remotePreviewChanged:
+      'The remote clipboard changed. Check the updated preview and tap Copy again.',
+    pasteTextHint: 'Use Paste in the text field, then confirm the upload. Up to 1,000 characters.',
+    iosS3Unavailable:
+      'To sync text on iOS, select a SyncClipboard Server or WebDAV server in Settings.',
+    uploadClipboardText: 'Upload clipboard text',
     uploadImage: 'Upload Image',
     uploadFile: 'Upload File',
     cancelingUpload: 'Canceling upload...',
@@ -81,6 +88,10 @@ const en: DeepString<typeof zh> = {
 
   clipboard: {
     empty: 'Clipboard is empty',
+    noRemoteSnapshot: 'No remote preview',
+    noRemoteSnapshotHint: 'Pull to refresh the clipboard preview for this server.',
+    noTextSnapshot: 'No local text preview',
+    noTextSnapshotHint: 'Copy short text and allow pasting when prompted.',
     emptyHint: 'Copied content will appear here',
     imageFileLabel: 'Image file',
     imageFallback: 'Image',
@@ -179,6 +190,9 @@ const en: DeepString<typeof zh> = {
     syncAndHistorySection: 'Sync and History',
     syncSection: 'Sync Settings',
     autoSync: 'Auto Sync',
+    iosResumeSyncFailed: 'Clipboard operation failed',
+    iosAutoSyncDesc:
+      'When you return to the app, sync short text with SyncClipboard Server or WebDAV. The first check sets a baseline. If the check finds changes on both sides, each keeps its text.',
     autoSyncDesc: 'Automatically sync clipboard while in foreground',
     autoCopyTextOnly: 'Auto-copy text only',
     autoCopyTextOnlyDesc:

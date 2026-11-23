@@ -348,74 +348,80 @@ export const SyncAndHistorySettings = ({ showMessage }: SettingsModuleProps) => 
       <SettingsSection title={t('settings.syncSection')}>
         <SettingSwitch
           label={t('settings.autoSync')}
-          description={t('settings.autoSyncDesc')}
+          description={t(
+            Platform.OS === 'ios' ? 'settings.iosAutoSyncDesc' : 'settings.autoSyncDesc'
+          )}
           value={localAutoSyncEnabled}
           onChange={handleToggleAutoSync}
         />
 
-        <SettingSwitch
-          label={t('settings.autoCopyTextOnly')}
-          description={t('settings.autoCopyTextOnlyDesc')}
-          value={localAutoCopyTextOnly}
-          onChange={handleToggleAutoCopyTextOnly}
-        />
+        {Platform.OS !== 'ios' && (
+          <>
+            <SettingSwitch
+              label={t('settings.autoCopyTextOnly')}
+              description={t('settings.autoCopyTextOnlyDesc')}
+              value={localAutoCopyTextOnly}
+              onChange={handleToggleAutoCopyTextOnly}
+            />
 
-        <SettingSwitch
-          label={t('settings.syncToast')}
-          description={t('settings.syncToastDesc')}
-          value={localSyncToastEnabled}
-          onChange={handleToggleSyncToast}
-        />
+            <SettingSwitch
+              label={t('settings.syncToast')}
+              description={t('settings.syncToastDesc')}
+              value={localSyncToastEnabled}
+              onChange={handleToggleSyncToast}
+            />
 
-        <SettingInput
-          label={t('settings.autoDownloadMaxSize')}
-          description={t('settings.autoDownloadMaxSizeDesc')}
-          value={maxSizeInput}
-          onChangeText={setMaxSizeInput}
-          onBlur={handleMaxSizeBlur}
-          unit="MB"
-          keyboardType="number-pad"
-          placeholder="5"
-        />
+            <SettingInput
+              label={t('settings.autoDownloadMaxSize')}
+              description={t('settings.autoDownloadMaxSizeDesc')}
+              value={maxSizeInput}
+              onChangeText={setMaxSizeInput}
+              onBlur={handleMaxSizeBlur}
+              unit="MB"
+              keyboardType="number-pad"
+              placeholder="5"
+            />
 
-        {activeServer?.type !== 'syncclipboard' && (
-          <SettingInput
-            label={t('settings.remotePollingInterval')}
-            value={remotePollingInput}
-            onChangeText={setRemotePollingInput}
-            onBlur={handleRemotePollingBlur}
-            unit={t('settings.unitSecond')}
-            keyboardType="number-pad"
-            placeholder="3"
-            filter={filterPositiveInteger}
-          />
-        )}
+            {activeServer?.type !== 'syncclipboard' && (
+              <SettingInput
+                label={t('settings.remotePollingInterval')}
+                value={remotePollingInput}
+                onChangeText={setRemotePollingInput}
+                onBlur={handleRemotePollingBlur}
+                unit={t('settings.unitSecond')}
+                keyboardType="number-pad"
+                placeholder="3"
+                filter={filterPositiveInteger}
+              />
+            )}
 
-        <SettingInput
-          label={t('settings.localPollingInterval')}
-          value={localPollingInput}
-          onChangeText={setLocalPollingInput}
-          onBlur={handleLocalPollingBlur}
-          unit={t('settings.unitSecond')}
-          keyboardType="number-pad"
-          placeholder="1"
-          filter={filterPositiveInteger}
-        />
+            <SettingInput
+              label={t('settings.localPollingInterval')}
+              value={localPollingInput}
+              onChangeText={setLocalPollingInput}
+              onBlur={handleLocalPollingBlur}
+              unit={t('settings.unitSecond')}
+              keyboardType="number-pad"
+              placeholder="1"
+              filter={filterPositiveInteger}
+            />
 
-        <SettingSwitch
-          label={t('settings.autoSaveSyncFile')}
-          description={t('settings.autoSaveSyncFileDesc')}
-          value={localAutoSaveSyncFileEnabled}
-          onChange={handleToggleAutoSaveSyncFile}
-        />
+            <SettingSwitch
+              label={t('settings.autoSaveSyncFile')}
+              description={t('settings.autoSaveSyncFileDesc')}
+              value={localAutoSaveSyncFileEnabled}
+              onChange={handleToggleAutoSaveSyncFile}
+            />
 
-        {localAutoSaveSyncFileEnabled && (
-          <SettingAction
-            label={t('settings.syncFileSavePath')}
-            description={localSyncFileSavePath || t('settings.syncFileSavePathNotSet')}
-            buttonText={t('settings.syncFileSavePathPick')}
-            onPress={handlePickSyncFileSavePath}
-          />
+            {localAutoSaveSyncFileEnabled && (
+              <SettingAction
+                label={t('settings.syncFileSavePath')}
+                description={localSyncFileSavePath || t('settings.syncFileSavePathNotSet')}
+                buttonText={t('settings.syncFileSavePathPick')}
+                onPress={handlePickSyncFileSavePath}
+              />
+            )}
+          </>
         )}
       </SettingsSection>
 

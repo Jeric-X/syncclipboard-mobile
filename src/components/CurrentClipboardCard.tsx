@@ -3,6 +3,7 @@
  * 当前剪贴板内容卡片
  */
 
+import { MAX_INLINE_TEXT_LENGTH } from '@/services/sync/iosResumeTextSync';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
@@ -120,10 +121,22 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         <View style={styles.emptyContent}>
           <Text style={[styles.emptyIcon, { color: theme.colors.textTertiary }]}>📋</Text>
           <Text style={[styles.emptyTitle, { color: theme.colors.textSecondary }]}>
-            {t('clipboard.empty')}
+            {t(
+              Platform.OS === 'ios'
+                ? isRemote
+                  ? 'clipboard.noRemoteSnapshot'
+                  : 'clipboard.noTextSnapshot'
+                : 'clipboard.empty'
+            )}
           </Text>
           <Text style={[styles.emptyDescription, { color: theme.colors.textTertiary }]}>
-            {t('clipboard.emptyHint')}
+            {t(
+              Platform.OS === 'ios'
+                ? isRemote
+                  ? 'clipboard.noRemoteSnapshotHint'
+                  : 'clipboard.noTextSnapshotHint'
+                : 'clipboard.emptyHint'
+            )}
           </Text>
         </View>
       </View>
@@ -208,7 +221,10 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
     return false;
   };
 
-  const showActionButton = isRemote ? !!(onAction && needsFileDownload()) : !!onAction;
+  const requiresDownload = needsFileDownload();
+  const showActionButton = isRemote
+    ? !!(onAction && requiresDownload && Platform.OS !== 'ios')
+    : !!onAction;
 
   // 可以"打开"的非文本类型（有 fileUri）- Group类型不支持打开
   const canOpenFile =
@@ -433,40 +449,49 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         )}
 
         {/* 文本类型：分词按钮 */}
-        {clipboard.type === 'Text' && onWordPick && !isTextInvalid(clipboard.text) && (
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
-            onPress={() => onWordPick(clipboard.text!)}
-          >
-            <Text
-              style={[styles.actionButtonText, { color: theme.colors.white }]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
+        {clipboard.type === 'Text' &&
+          !(Platform.OS === 'ios' && requiresDownload) &&
+          onWordPick &&
+          !isTextInvalid(clipboard.text) && (
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
+              onPress={() => onWordPick(clipboard.text!)}
             >
-              {t('clipboard.wordPick')}
-            </Text>
-          </TouchableOpacity>
-        )}
+              <Text
+                style={[styles.actionButtonText, { color: theme.colors.white }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {t('clipboard.wordPick')}
+              </Text>
+            </TouchableOpacity>
+          )}
 
         {/* 远程 Text 类型：只有在不需要下载时才显示复制按钮 */}
-        {isRemote && clipboard.type === 'Text' && !showActionButton && (
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              styles.actionButtonLast,
-              { backgroundColor: theme.colors.primary },
-            ]}
-            onPress={() => onCopy(clipboard)}
-          >
-            <Text
-              style={[styles.actionButtonText, { color: theme.colors.white }]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
+        {isRemote &&
+          clipboard.type === 'Text' &&
+          !requiresDownload &&
+          (Platform.OS !== 'ios' ||
+            (!clipboard.hasData &&
+              typeof clipboard.text === 'string' &&
+              clipboard.text.length <= MAX_INLINE_TEXT_LENGTH)) && (
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.actionButtonLast,
+                { backgroundColor: theme.colors.primary },
+              ]}
+              onPress={() => onCopy(clipboard)}
             >
-              {t('common.copy')}
-            </Text>
-          </TouchableOpacity>
-        )}
+              <Text
+                style={[styles.actionButtonText, { color: theme.colors.white }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {t('common.copy')}
+              </Text>
+            </TouchableOpacity>
+          )}
 
         {/* 非文本且有文件：打开按钮 */}
         {canOpenFile && (
@@ -552,6 +577,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
               styles.actionButtonLast,
               { borderColor: theme.colors.primary },
             ]}
+            disabled={acting && !onCancelAction}
             onPress={acting ? onCancelAction : onAction}
           >
             {acting && actionProgress && (
@@ -579,7 +605,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
                     actionProgress.bytesTransferred
                   )} / ${formatFileSize(actionProgress.totalBytes)}`
                 : acting
-                  ? t('common.cancel')
+                  ? t(onCancelAction ? 'common.cancel' : 'quickTile.uploadingClipboard')
                   : isRemote
                     ? t('clipboard.download')
                     : t('clipboard.upload')}

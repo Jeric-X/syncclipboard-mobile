@@ -9,6 +9,7 @@ import {
   nativeUploadMultipart,
   ProgressInfo,
 } from 'native-util';
+import type { ClipboardSnapshot, ClipboardWriteCondition } from './APIClient';
 import { APIClient, APIClientConfig, PutContentOptions, ISyncClipboardAPI } from './APIClient';
 import { ProfileDto, ServerInfo, ClipboardContentType } from '@/types/api';
 import type { ClipboardContent } from '@/types/clipboard';
@@ -39,15 +40,17 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
    * 获取剪贴板配置
    */
   async getClipboard(signal?: AbortSignal): Promise<ProfileDto> {
+    return (await this.getClipboardSnapshot(signal)).profile;
+  }
+
+  async getClipboardSnapshot(signal?: AbortSignal): Promise<ClipboardSnapshot> {
     try {
-      const profile = await this.get<ProfileDto>(
+      const snapshot = await this.readClipboardSnapshot(
         SyncClipboardClient.PROFILE_ENDPOINT,
-        signal ? { signal } : undefined
+        signal
       );
-
-      this.validateProfile(profile);
-
-      return profile;
+      this.validateProfile(snapshot.profile);
+      return snapshot;
     } catch (error) {
       console.error('[SyncClipboardClient] Failed to get clipboard:', error);
       throw error;
@@ -57,20 +60,15 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
   /**
    * 上传剪贴板配置
    */
-  async putClipboard(profile: ProfileDto, signal?: AbortSignal): Promise<void> {
+  async putClipboard(
+    profile: ProfileDto,
+    signal?: AbortSignal,
+    condition?: ClipboardWriteCondition
+  ): Promise<void> {
     try {
       this.validateProfile(profile);
 
-      console.log(
-        '[SyncClipboardClient] putClipboard - Profile to upload:',
-        JSON.stringify(profile, null, 2)
-      );
-
-      await this.put(
-        SyncClipboardClient.PROFILE_ENDPOINT,
-        profile,
-        signal ? { signal } : undefined
-      );
+      await this.put(SyncClipboardClient.PROFILE_ENDPOINT, profile, { signal, headers: condition });
 
       console.log('[SyncClipboardClient] putClipboard - Upload successful');
     } catch (error) {
