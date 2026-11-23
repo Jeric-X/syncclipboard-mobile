@@ -103,6 +103,7 @@ syncclipboard-mobile.code-workspace
 tmpclaude-*-cwd
 
 # build output
+/ios/
 /android/
 modules/*/android/build/
 modules/*/build/

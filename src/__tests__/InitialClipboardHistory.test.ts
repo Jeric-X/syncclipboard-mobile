@@ -22,6 +22,7 @@ function mockTask(name: string, start = () => {}, stop = () => {}): ILongRunning
   };
 }
 jest.mock('react-native', () => ({
+  Platform: { OS: 'android' },
   AppState: { currentState: 'background', addEventListener: jest.fn() },
 }));
 jest.mock('../services/ConfigService', () => ({

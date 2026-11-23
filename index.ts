@@ -2,7 +2,7 @@
 import './src/services/StartupTiming';
 
 import { registerRootComponent } from 'expo';
-import { AppRegistry } from 'react-native';
+import { AppRegistry, Platform } from 'react-native';
 
 import App from './App';
 import QuickActionApp from './src/QuickActionApp';
@@ -17,15 +17,17 @@ import { notifyColdStart } from './src/services/ColdStartNotification';
 // the environment is set up appropriately
 registerRootComponent(App);
 
-// Separate entry point for the transparent QuickActionActivity
-AppRegistry.registerComponent('quickAction', () => QuickActionApp);
+if (Platform.OS === 'android') {
+  // Separate entry point for the transparent QuickActionActivity
+  AppRegistry.registerComponent('quickAction', () => QuickActionApp);
 
-// Fallback UI when the user taps a notification after headless recovery fails
-AppRegistry.registerComponent('serviceRestart', () => ServiceRestartApp);
+  // Fallback UI when the user taps a notification after headless recovery fails
+  AppRegistry.registerComponent('serviceRestart', () => ServiceRestartApp);
 
-// Headless JS task for SMS verification code upload (runs without UI)
-AppRegistry.registerHeadlessTask('SmsUploadTask', () => SmsUploadTask);
-AppRegistry.registerHeadlessTask('ServiceRuntimeHeadlessTask', () => ServiceRuntimeHeadlessTask);
+  // Headless JS task for SMS verification code upload (runs without UI)
+  AppRegistry.registerHeadlessTask('SmsUploadTask', () => SmsUploadTask);
+  AppRegistry.registerHeadlessTask('ServiceRuntimeHeadlessTask', () => ServiceRuntimeHeadlessTask);
+}
 
 installServiceRuntime();
 notifyColdStart().catch((error) => console.error('[ColdStartNotification] Failed:', error));

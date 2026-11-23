@@ -49,9 +49,7 @@ changed in the task:
 
 This is a React Native clipboard synchronization app built with **Expo SDK 55**, using React Native 0.83 and React 19. It syncs clipboard content (text, images, files) between devices via SyncClipboard Server, WebDAV, or S3 backends.
 
-**Current status: Android-only. iOS support is planned for the future.**
-
-All code should be written with cross-platform portability in mind (see [Cross-Platform Design Principles](#cross-platform-design-principles) below). When writing code, consider iOS compatibility but do **not** implement iOS-specific features or native modules right now — just avoid patterns that would make iOS support unnecessarily difficult later.
+Android is the released platform. The `codex/ios-dev` branch is bringing up the iOS build and foreground UI. Use `npm run prebuild:ios` to generate the iOS project. Scope platform changes to the current milestone and preserve Android behavior.
 
 ### Three Entry Points
 
@@ -166,7 +164,7 @@ Bottom tab navigator (Home / History / Settings) in `src/navigation/AppNavigator
 
 ## Cross-Platform Design Principles
 
-**The app is currently Android-only, but iOS support is planned.** When writing any code (JS/TS or native), follow these principles to keep the iOS path open without implementing iOS functionality today.
+Apply these principles to shared code and to platform-specific work on the iOS development branch.
 
 ### In TypeScript/JavaScript
 

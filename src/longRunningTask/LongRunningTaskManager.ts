@@ -14,7 +14,7 @@ import { remoteClipboardMonitorTask } from './RemoteClipboardMonitorTask';
 import { networkAutoSwitchTask } from './NetworkAutoSwitchTask';
 import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { LongRunningTaskCoordinator } from './LongRunningTaskCoordinator';
 
 class LongRunningTaskManager extends LongRunningTaskCoordinator {
@@ -42,14 +42,17 @@ class LongRunningTaskManager extends LongRunningTaskCoordinator {
 
 export const longRunningTaskManager = new LongRunningTaskManager();
 
-// 网络选择与同步回调先于监听器启动，保证 Headless 冷启动也能收到首次变化。
-longRunningTaskManager.register(networkAutoSwitchTask, true);
-longRunningTaskManager.register(clipboardSyncTask);
-longRunningTaskManager.register(smsForwardingTask, true);
-// 历史订阅必须先就绪，才能接住监听器启动时发出的首条内容。
-longRunningTaskManager.register(historyTrackerTask, true);
-longRunningTaskManager.register(clipboardMonitorTask, true);
-longRunningTaskManager.register(remoteClipboardMonitorTask, true);
-longRunningTaskManager.register(historySyncTask, true);
-longRunningTaskManager.register(foregroundServiceTask);
-longRunningTaskManager.register(shizukuRecoveryTask);
+// 这些任务属于 Android 的持续同步运行时。iOS 冷启动只初始化前台界面。
+if (Platform.OS === 'android') {
+  // 网络选择与同步回调先于监听器启动，保证 Headless 冷启动也能收到首次变化。
+  longRunningTaskManager.register(networkAutoSwitchTask, true);
+  longRunningTaskManager.register(clipboardSyncTask);
+  longRunningTaskManager.register(smsForwardingTask, true);
+  // 历史订阅必须先就绪，才能接住监听器启动时发出的首条内容。
+  longRunningTaskManager.register(historyTrackerTask, true);
+  longRunningTaskManager.register(clipboardMonitorTask, true);
+  longRunningTaskManager.register(remoteClipboardMonitorTask, true);
+  longRunningTaskManager.register(historySyncTask, true);
+  longRunningTaskManager.register(foregroundServiceTask);
+  longRunningTaskManager.register(shizukuRecoveryTask);
+}
