@@ -7,12 +7,9 @@ import { profileDtoToContent } from '@/utils/clipboard/convert';
 import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
 import { createClientFromConfig } from '../ClientFactory';
-import {
-  syncResumeText,
-  clearResumeTextBaseline,
-  resumeTargetIdentity,
-  type IosTextAction,
-} from './iosResumeTextSync';
+import { syncResumeText, clearResumeTextBaseline, type IosTextAction } from './iosResumeTextSync';
+
+import { resumeTargetIdentity } from './iosResumeTarget';
 
 type ActionResult = 'success' | 'unavailable' | 'failed' | 'canceled';
 type ManualAction = Exclude<IosTextAction, 'resume'>;
@@ -65,8 +62,11 @@ export function installIosResumeTextSync(): () => void {
 
   const unsubscribe = configService.subscribe((next) => {
     const targetChanged =
-      config && resumeTargetIdentity(getServer(config)) !== resumeTargetIdentity(getServer(next));
-    if (targetChanged) invalidate();
+      config &&
+      (config.iosClipboardSelection !== next.iosClipboardSelection ||
+        resumeTargetIdentity(getServer(config)) !== resumeTargetIdentity(getServer(next)));
+    if (targetChanged || (config && getServer(config)?.password !== getServer(next)?.password))
+      invalidate();
     else if (config?.autoSync !== next.autoSync) cancelAutomatic();
     if (targetChanged) {
       needsBaselineReset = true;
@@ -104,7 +104,8 @@ export function installIosResumeTextSync(): () => void {
           createClientFromConfig(server),
           signal,
           action,
-          expectedText
+          expectedText,
+          config.iosClipboardSelection
         );
         if (!observed || signal.aborted) return 'canceled';
         if (observed.local) {

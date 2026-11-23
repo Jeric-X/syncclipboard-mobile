@@ -13,7 +13,6 @@ jest.mock('@/services/ClientFactory', () => ({ createClientFromConfig: jest.fn()
 jest.mock('@/services/sync/iosResumeTextSync', () => ({
   syncResumeText: jest.fn(),
   clearResumeTextBaseline: jest.fn(),
-  resumeTargetIdentity: JSON.stringify,
 }));
 
 jest.mock('@/services/clipboard/ClipboardMonitor', () => ({
@@ -122,6 +121,7 @@ it('serializes manual actions and discards queued operations when the target cha
       jest.mocked(createClientFromConfig).mock.results.at(-1)?.value,
       expect.anything(),
       'refresh',
+      undefined,
       undefined
     );
   } finally {

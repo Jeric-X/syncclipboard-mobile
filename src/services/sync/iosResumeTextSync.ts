@@ -4,6 +4,8 @@ import type { ServerConfig, ProfileDto } from '@/types/api';
 import type { ISyncClipboardAPI } from '@/api/clients/APIClient';
 import { calculateTextHash, isValidHash } from '@/utils/hash';
 
+import { resumeTargetIdentity } from './iosResumeTarget';
+
 type TextClient = Pick<ISyncClipboardAPI, 'getClipboardSnapshot' | 'putClipboard'>;
 
 export const MAX_INLINE_TEXT_LENGTH = 1000;
@@ -12,20 +14,6 @@ const BASELINE_KEY = '@syncclipboard:ios:resume-text';
 /** 全应用只保留当前目标的一组基准。 */
 export function clearResumeTextBaseline(): Promise<void> {
   return AsyncStorage.removeItem(BASELINE_KEY);
-}
-
-export function resumeTargetIdentity(server?: ServerConfig): string {
-  return server
-    ? JSON.stringify([
-        server.id,
-        server.type,
-        server.url,
-        server.username ?? '',
-        server.password ?? '',
-        server.bucketName ?? '',
-        server.objectPrefix ?? '',
-      ])
-    : '';
 }
 
 interface TextBaseline {
@@ -91,7 +79,8 @@ export async function syncResumeText(
   client: TextClient,
   signal: AbortSignal,
   action: IosTextAction = 'resume',
-  actionText?: string
+  actionText?: string,
+  selection?: string
 ): Promise<TextObservations | undefined> {
   if (!server.id || !client.getClipboardSnapshot || server.type === 's3' || signal.aborted) return;
   let localChangedDuringCheck = false;
@@ -109,7 +98,7 @@ export async function syncResumeText(
     const [{ profile, condition }, raw, target] = await Promise.all([
       client.getClipboardSnapshot(signal),
       action === 'resume' ? AsyncStorage.getItem(BASELINE_KEY) : null,
-      calculateTextHash(resumeTargetIdentity(server)),
+      calculateTextHash(JSON.stringify([selection, resumeTargetIdentity(server)])),
     ]);
     if (signal.aborted) return;
     const observed: TextObservations = { local: samplesLocal ? local : undefined, remote: profile };

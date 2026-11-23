@@ -92,6 +92,23 @@ it('keeps only one baseline and initializes again when the target changes', asyn
   expect(client.putClipboard).not.toHaveBeenCalled();
 });
 
+it('retains the baseline after password rotation and ignores it after switching back', async () => {
+  await check();
+  local = 'updated';
+  await check({ ...server, password: 'rotated' });
+  expect(profile.text).toBe(local);
+  local = 'after switch';
+  await syncResumeText(
+    server,
+    client,
+    new AbortController().signal,
+    'resume',
+    undefined,
+    'new selection'
+  );
+  expect(client.putClipboard).toHaveBeenCalledTimes(1);
+});
+
 it('does not turn a denied or oversized local read into a transfer', async () => {
   await check();
   const first = new Map(records);

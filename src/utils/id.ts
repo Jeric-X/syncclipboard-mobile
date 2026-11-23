@@ -5,7 +5,7 @@ let sequence = 0;
  *
  * 不承载安全语义；时间、随机数和进程内序号共同避免导入/快速新增时碰撞。
  */
-export function createStableId(prefix: 'server' | 'rule'): string {
+export function createStableId(prefix: 'server' | 'rule' | 'selection'): string {
   sequence = (sequence + 1) % 0x100000;
   const time = Date.now().toString(36);
   const random = Math.floor(Math.random() * 0x100000000)

@@ -3,6 +3,8 @@
  * 配置存储服务 - 管理应用配置和服务器配置
  */
 
+import { Platform } from 'react-native';
+import { resumeTargetIdentity } from '../services/sync/iosResumeTarget';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppConfig, DEFAULT_APP_CONFIG, STORAGE_KEYS } from '../types/storage';
 import { ServerConfig } from '../types/api';
@@ -145,7 +147,17 @@ export class ConfigStorage {
       .catch(() => {})
       .then(async () => {
         await this.initialize();
-        const next = build(this.config!);
+        const current = this.config!;
+        const next = build(current);
+        if (Platform.OS === 'ios') {
+          const previousServer = current.servers[current.activeServerIndex];
+          const selectedServer = next.servers[next.activeServerIndex];
+          // 与目标选择一起持久化，即使清理旧基准前进程结束，切回也不会复用它。
+          next.iosClipboardSelection =
+            resumeTargetIdentity(previousServer) === resumeTargetIdentity(selectedServer)
+              ? current.iosClipboardSelection
+              : createStableId('selection');
+        }
         await this.saveConfig(next);
         this.config = next;
       });
