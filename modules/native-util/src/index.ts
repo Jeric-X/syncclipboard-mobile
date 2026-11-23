@@ -112,14 +112,15 @@ export interface NativeUtilModuleType {
   addListener(eventName: string, listener: (event: any) => void): EventSubscription;
 }
 
-const NativeUtilModule: NativeUtilModuleType = requireNativeModule('NativeUtilModule');
+const NativeUtilModule =
+  Platform.OS === 'android' ? requireNativeModule<NativeUtilModuleType>('NativeUtilModule') : null;
 
-export const isNativeModuleAvailable = Platform.OS === 'android';
-export const isNativeHashModuleAvailable = Platform.OS === 'android';
+export const isNativeModuleAvailable = NativeUtilModule !== null;
+export const isNativeHashModuleAvailable = isNativeModuleAvailable;
 
 /** 返回 Android 旧版 AsyncStorage 数据库的位置，仅供历史迁移读取。 */
 export function getLegacyHistoryDatabasePath(): string | null {
-  if (Platform.OS !== 'android') return null;
+  if (!NativeUtilModule) return null;
   return NativeUtilModule.getLegacyHistoryDatabasePath();
 }
 
@@ -127,13 +128,13 @@ export function getLegacyHistoryDatabasePath(): string | null {
  * 将应用移到后台，保持 Activity 存活（不同于 BackHandler.exitApp 可能终止 Activity）
  */
 export function moveTaskToBack(): boolean {
-  if (Platform.OS !== 'android') return false;
+  if (!NativeUtilModule) return false;
   return NativeUtilModule.moveTaskToBack();
 }
 
 /** 读取 Android 当前默认网络及其 LinkProperties。 */
 export function getCurrentNetworkInfo(): NativeCurrentNetworkInfo | null {
-  if (Platform.OS !== 'android') return null;
+  if (!NativeUtilModule) return null;
   return NativeUtilModule.getCurrentNetworkInfo();
 }
 
@@ -141,29 +142,29 @@ export function getCurrentNetworkInfo(): NativeCurrentNetworkInfo | null {
 export function addNetworkChangeListener(
   listener: (event: NativeNetworkChangedEvent) => void
 ): EventSubscription | null {
-  if (Platform.OS !== 'android') return null;
+  if (!NativeUtilModule) return null;
   return NativeUtilModule.addListener('onNetworkChanged', listener);
 }
 
 export function isLocationServicesEnabled(): boolean {
-  if (Platform.OS !== 'android') return true;
+  if (!NativeUtilModule) return true;
   return NativeUtilModule.isLocationServicesEnabled();
 }
 
 export function openLocationSettings(): boolean {
-  if (Platform.OS !== 'android') return false;
+  if (!NativeUtilModule) return false;
   return NativeUtilModule.openLocationSettings();
 }
 
 /** Show an Android system notification through the shared native-util implementation. */
 export function showNotification(options: NativeNotificationOptions): boolean {
-  if (Platform.OS !== 'android') return false;
+  if (!NativeUtilModule) return false;
   return NativeUtilModule.showNotification(options);
 }
 
 /** Cancel a system notification previously shown through native-util. */
 export function cancelNotification(id: number): boolean {
-  if (Platform.OS !== 'android') return false;
+  if (!NativeUtilModule) return false;
   return NativeUtilModule.cancelNotification(id);
 }
 
@@ -173,7 +174,7 @@ export function cancelNotification(id: number): boolean {
  * pendingPromise 不会被清除，导致后续分享请求被拒绝。
  */
 export function resetSharingState(): boolean {
-  if (Platform.OS !== 'android') return false;
+  if (!NativeUtilModule) return false;
   return NativeUtilModule.resetSharingState();
 }
 
@@ -181,7 +182,7 @@ export function resetSharingState(): boolean {
  * 检查应用是否已加入电池优化白名单
  */
 export function isIgnoringBatteryOptimizations(): boolean {
-  if (Platform.OS !== 'android') return true;
+  if (!NativeUtilModule) return true;
   return NativeUtilModule.isIgnoringBatteryOptimizations();
 }
 
@@ -189,7 +190,7 @@ export function isIgnoringBatteryOptimizations(): boolean {
  * 请求加入电池优化白名单（弹出系统对话框）
  */
 export function requestIgnoreBatteryOptimizations(): boolean {
-  if (Platform.OS !== 'android') return false;
+  if (!NativeUtilModule) return false;
   return NativeUtilModule.requestIgnoreBatteryOptimizations();
 }
 
@@ -197,7 +198,7 @@ export function requestIgnoreBatteryOptimizations(): boolean {
  * 设置是否从最近任务列表中隐藏应用
  */
 export function setExcludeFromRecents(exclude: boolean): boolean {
-  if (Platform.OS !== 'android') return false;
+  if (!NativeUtilModule) return false;
   return NativeUtilModule.setExcludeFromRecents(exclude);
 }
 
@@ -205,7 +206,7 @@ export function setExcludeFromRecents(exclude: boolean): boolean {
  * 获取设备支持的 ABI 列表（按优先级排序）
  */
 export function getSupportedAbis(): string[] {
-  if (Platform.OS !== 'android') return [];
+  if (!NativeUtilModule) return [];
   return NativeUtilModule.getSupportedAbis();
 }
 
@@ -218,7 +219,7 @@ export function getSupportedAbis(): string[] {
 export async function nativeSaveClipboardImageToFile(
   destDirPath: string
 ): Promise<{ width: number; height: number; filePath: string; mimeType: string } | null> {
-  if (Platform.OS !== 'android') return null;
+  if (!NativeUtilModule) return null;
   return NativeUtilModule.saveClipboardImageToFile(destDirPath);
 }
 
@@ -228,12 +229,12 @@ export async function nativeSaveClipboardImageToFile(
  * @returns 是否成功
  */
 export async function nativeSetClipboardImageFromFile(fileUri: string): Promise<boolean> {
-  if (Platform.OS !== 'android') return false;
+  if (!NativeUtilModule) return false;
   return NativeUtilModule.setClipboardImageFromFile(fileUri);
 }
 
 export async function nativeCopyFile(srcUri: string, destUri: string): Promise<void> {
-  if (Platform.OS !== 'android') {
+  if (!NativeUtilModule) {
     throw new Error('NativeUtilModule is not available on this platform');
   }
   await NativeUtilModule.copyFile(srcUri, destUri);
@@ -247,7 +248,7 @@ export async function nativeCopyFileToDirectory(
   signal?: AbortSignal,
   onProgress?: (info: ProgressInfo) => void
 ): Promise<void> {
-  if (Platform.OS !== 'android') {
+  if (!NativeUtilModule) {
     throw new Error('NativeUtilModule is not available on this platform');
   }
 
@@ -304,7 +305,7 @@ export async function nativeCalculateFileHash(
   signal?: AbortSignal,
   onProgress?: (progress: number) => void
 ): Promise<string> {
-  if (Platform.OS !== 'android') {
+  if (!NativeUtilModule) {
     throw new Error('NativeUtilModule is not available on this platform');
   }
 
@@ -344,7 +345,7 @@ export async function nativeCalculateFileHash(
  * 计算字符串内容的 MD5 并返回 Base64 编码（用于 Content-MD5 header）
  */
 export function nativeCalculateStringMD5Base64(data: string): string {
-  if (Platform.OS !== 'android') {
+  if (!NativeUtilModule) {
     throw new Error('NativeUtilModule is not available on this platform');
   }
   return NativeUtilModule.calculateStringMD5Base64(data);
@@ -358,7 +359,7 @@ export async function nativeCalculateFileMD5Base64(
   fileUri: string,
   signal?: AbortSignal
 ): Promise<string> {
-  if (Platform.OS !== 'android') {
+  if (!NativeUtilModule) {
     throw new Error('NativeUtilModule is not available on this platform');
   }
 
@@ -393,7 +394,7 @@ export async function nativeUploadFile(
   signal?: AbortSignal,
   onProgress?: (info: ProgressInfo) => void
 ): Promise<void> {
-  if (Platform.OS !== 'android') {
+  if (!NativeUtilModule) {
     throw new Error('NativeUtilModule is not available on this platform');
   }
 
@@ -446,7 +447,7 @@ export async function nativeZipFiles(
   signal?: AbortSignal,
   onProgress?: (info: ProgressInfo) => void
 ): Promise<void> {
-  if (Platform.OS !== 'android') {
+  if (!NativeUtilModule) {
     throw new Error('NativeUtilModule is not available on this platform');
   }
 
@@ -499,7 +500,7 @@ export async function nativeUnzipFile(
   signal?: AbortSignal,
   onProgress?: (info: ProgressInfo) => void
 ): Promise<void> {
-  if (Platform.OS !== 'android') {
+  if (!NativeUtilModule) {
     throw new Error('NativeUtilModule is not available on this platform');
   }
 
@@ -554,7 +555,7 @@ export async function nativeUploadMultipart(
   signal?: AbortSignal,
   onProgress?: (info: ProgressInfo) => void
 ): Promise<void> {
-  if (Platform.OS !== 'android') {
+  if (!NativeUtilModule) {
     throw new Error('NativeUtilModule is not available on this platform');
   }
 
@@ -608,7 +609,7 @@ export async function nativeDownloadFile(
   signal?: AbortSignal,
   onProgress?: (info: ProgressInfo) => void
 ): Promise<void> {
-  if (Platform.OS !== 'android') {
+  if (!NativeUtilModule) {
     throw new Error('NativeUtilModule is not available on this platform');
   }
 
