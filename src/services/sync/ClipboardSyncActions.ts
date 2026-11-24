@@ -128,6 +128,9 @@ export async function downloadRemoteClipboard(
       const cachedFile = new File(cachedItem.fileUri);
       if (cachedFile.exists) {
         const result = { ...actualContent, fileUri: cachedItem.fileUri };
+        if (clipboardSyncState.getState().remoteContent === actualContent) {
+          clipboardSyncState.setRemoteContent(result);
+        }
         return result;
       }
     }

@@ -321,17 +321,16 @@ export class LocalClipboard {
     }
   }
 
-  /**
-   * 设置文本到剪贴板
-   */
-  private async readTextFromFileUri(fileUri: string): Promise<string> {
+  /** 取得完整正文，文件型文本必须从附件读取。 */
+  async readTextContent(content: ClipboardContent): Promise<string> {
+    if (!content.hasData) return content.text;
+    if (!content.fileUri) throw new Error(i18n.t('error.cannotReadFullText'));
     try {
-      const file = new FileSystem.File(fileUri);
-      return await file.text();
+      return await new FileSystem.File(content.fileUri).text();
     } catch (fileSystemError) {
       console.warn('[ClipboardManager] Failed to read text via File API:', fileSystemError);
-
-      const response = await fetch(fileUri);
+      const response = await fetch(content.fileUri);
+      if (response.status >= 400) throw new Error(i18n.t('error.cannotReadFullText'));
       return await response.text();
     }
   }
@@ -347,21 +346,7 @@ export class LocalClipboard {
 
   async setTextContent(content: ClipboardContent): Promise<boolean> {
     try {
-      let text = content.text;
-      if (content.type === 'Text' && content.fileUri && content.hasData) {
-        try {
-          text = await this.readTextFromFileUri(content.fileUri);
-          console.log(
-            `[ClipboardManager] Read complete text from file for profileHash: ${content.profileHash}, length: ${text.length}`
-          );
-        } catch (error) {
-          console.error('[ClipboardManager] Failed to read text file:', error);
-          if (isTextInvalid(content.text)) {
-            throw new Error(i18n.t('error.cannotReadFullText'));
-          }
-          // fallback to preview text
-        }
-      }
+      const text = await this.readTextContent(content);
       if (isTextInvalid(text)) {
         return false;
       }

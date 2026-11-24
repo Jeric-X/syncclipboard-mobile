@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from 'react-i18next';
-import { ClipboardContent, isInlineClipboardText } from '@/types/clipboard';
+import { ClipboardContent } from '@/types/clipboard';
 import { useSettingsStore } from '@/stores';
 import { useMessageStore } from '@/stores/messageStore';
 import { openFile, shareFile, saveToGallery } from '@/utils/fileActions';
@@ -40,7 +40,7 @@ interface CurrentClipboardCardProps {
   actionProgress?: DownloadProgress | null;
   onCancelAction?: () => void;
   onCopy: (content: ClipboardContent) => Promise<void>;
-  onWordPick?: (text: string) => void;
+  onWordPick?: (content: ClipboardContent) => void;
 }
 
 export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
@@ -209,9 +209,10 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   };
 
   const requiresDownload = needsFileDownload();
-  const showActionButton = isRemote
-    ? !!(onAction && requiresDownload && Platform.OS !== 'ios')
-    : !!onAction;
+  const hasFullText =
+    clipboard.type === 'Text' &&
+    (clipboard.hasData ? !!clipboard.fileUri : !isTextInvalid(clipboard.text));
+  const showActionButton = !!onAction && (!isRemote || requiresDownload);
 
   // 可以"打开"的非文本类型（有 fileUri）- Group类型不支持打开
   const canOpenFile =
@@ -436,46 +437,40 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         )}
 
         {/* 文本类型：分词按钮 */}
-        {clipboard.type === 'Text' &&
-          !(Platform.OS === 'ios' && requiresDownload) &&
-          onWordPick &&
-          !isTextInvalid(clipboard.text) && (
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
-              onPress={() => onWordPick(clipboard.text!)}
+        {hasFullText && onWordPick && (
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
+            onPress={() => onWordPick(clipboard)}
+          >
+            <Text
+              style={[styles.actionButtonText, { color: theme.colors.white }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
             >
-              <Text
-                style={[styles.actionButtonText, { color: theme.colors.white }]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-              >
-                {t('clipboard.wordPick')}
-              </Text>
-            </TouchableOpacity>
-          )}
+              {t('clipboard.wordPick')}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* 远程 Text 类型：只有在不需要下载时才显示复制按钮 */}
-        {isRemote &&
-          clipboard.type === 'Text' &&
-          !requiresDownload &&
-          (Platform.OS !== 'ios' || isInlineClipboardText(clipboard)) && (
-            <TouchableOpacity
-              style={[
-                styles.actionButton,
-                styles.actionButtonLast,
-                { backgroundColor: theme.colors.primary },
-              ]}
-              onPress={() => onCopy(clipboard)}
+        {isRemote && hasFullText && (
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              styles.actionButtonLast,
+              { backgroundColor: theme.colors.primary },
+            ]}
+            onPress={() => onCopy(clipboard)}
+          >
+            <Text
+              style={[styles.actionButtonText, { color: theme.colors.white }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
             >
-              <Text
-                style={[styles.actionButtonText, { color: theme.colors.white }]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-              >
-                {t('common.copy')}
-              </Text>
-            </TouchableOpacity>
-          )}
+              {t('common.copy')}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* 非文本且有文件：打开按钮 */}
         {canOpenFile && (

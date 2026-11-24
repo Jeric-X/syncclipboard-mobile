@@ -62,6 +62,9 @@ jest.mock('../services/clipboard/LocalClipboard', () => ({
   },
 }));
 
+import { File } from 'expo-file-system';
+import { clipboardSyncState } from '../services/sync/SyncState';
+import { historyService } from '../services/history/HistoryService';
 import { downloadRemoteClipboard, setRemoteClipboard } from '../services/sync/ClipboardSyncActions';
 import { configService } from '../services/ConfigService';
 import { networkAutoSwitchService } from '../services/NetworkAutoSwitchService';
@@ -120,6 +123,21 @@ describe('downloadRemoteClipboard', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockDownloadData.mockResolvedValue({ ...remoteContent, fileUri: 'file:///remote.png' });
+  });
+
+  it('shows cached downloads on the current card without a network transfer', async () => {
+    const fileUri = 'file:///cached.png';
+    jest.mocked(File).mockImplementationOnce(() => ({ exists: true }) as File);
+    jest.mocked(historyService.getItem).mockResolvedValueOnce({
+      fileUri,
+    } as NonNullable<Awaited<ReturnType<typeof historyService.getItem>>>);
+    jest.mocked(clipboardSyncState.getState).mockReturnValue({
+      ...clipboardSyncState.getState(),
+      remoteContent,
+    });
+    await downloadRemoteClipboard(remoteContent);
+    expect(clipboardSyncState.setRemoteContent).toHaveBeenCalledWith({ ...remoteContent, fileUri });
+    expect(mockDownloadData).not.toHaveBeenCalled();
   });
 
   it('信任已获取的远程内容，下载前不重新拉取', async () => {

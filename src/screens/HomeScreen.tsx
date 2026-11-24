@@ -139,6 +139,16 @@ export function HomeScreen() {
     );
   }, [showMessage, t]);
 
+  const handleWordPick = async (content: ClipboardContent) => {
+    try {
+      setWordPickerText(await localClipboard.readTextContent(content));
+    } catch (error) {
+      const title = t('error.cannotReadFullText');
+      setError({ title, message: error instanceof Error ? error.message : String(error) });
+      showMessage(title, 'error');
+    }
+  };
+
   // 复制远程内容到本地剪贴板
   const copyRemoteToLocal = async (content: ClipboardContent, logPrefix: string = '') => {
     await localClipboard.setClipboardContent(content, true);
@@ -334,20 +344,16 @@ export function HomeScreen() {
     }
   };
 
-  // 检查是否需要下载文件
-  const needsDownload = useMemo(() => {
-    if (!remoteContent) return false;
-    return !!(remoteContent.hasData && remoteContent.fileName && !remoteContent.fileUri);
-  }, [remoteContent]);
-
   // 下载远程剪贴板的文件数据
   const handleDownloadRemoteFile = async () => {
-    if (!remoteContent || !needsDownload) return;
     try {
-      await downloadRemoteClipboard();
+      clearError();
+      await downloadRemoteClipboard(remoteContent);
     } catch (error) {
-      console.error('[HomeScreen] Failed to download remote file:', error);
-      showMessage(t('home.fileDownloadFailed'), 'error');
+      if (error instanceof Error && error.name === 'AbortError') return;
+      const title = t('home.fileDownloadFailed');
+      setError({ title, message: error instanceof Error ? error.message : String(error) });
+      showMessage(title, 'error');
     }
   };
 
@@ -426,7 +432,7 @@ export function HomeScreen() {
                       );
                     }
                   }}
-                  onWordPick={setWordPickerText}
+                  onWordPick={handleWordPick}
                 />
               )}
             </View>
@@ -444,7 +450,7 @@ export function HomeScreen() {
                 actionProgress={uploadProgress}
                 onCancelAction={handleCancelClipboardUpload}
                 onCopy={copyLocalToClipboard}
-                onWordPick={setWordPickerText}
+                onWordPick={handleWordPick}
               />
 
               {/* 错误信息卡片 */}
@@ -492,7 +498,7 @@ export function HomeScreen() {
               clipboard={currentContent}
               isRemote={false}
               onCopy={copyLocalToClipboard}
-              onWordPick={setWordPickerText}
+              onWordPick={handleWordPick}
             />
           </>
         )}

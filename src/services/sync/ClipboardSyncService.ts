@@ -16,6 +16,7 @@ import { ClipboardChangeCallback } from '../../types/clipboard';
 import type { ClipboardContent } from '../../types/clipboard';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import { localClipboard } from '../clipboard/LocalClipboard';
+import { clearJustUploadedHash } from './JustSetHash';
 import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
 import type { AppConfig } from '../../types/storage';
@@ -104,9 +105,10 @@ class ClipboardSyncService {
     this._bgDownloadEnabled = !!cfg?.enableBackgroundDownload;
 
     const activeServer = cfg?.servers?.[cfg.activeServerIndex] ?? null;
-    const newServerKey = activeServer ? JSON.stringify(activeServer) : null;
+    const newServerKey = activeServer ? JSON.stringify({ ...activeServer, name: undefined }) : null;
     if (newServerKey !== this._activeServerKey) {
       this.endSession();
+      clearJustUploadedHash();
       clipboardSyncState.setRemoteContent(null);
       this._activeServerKey = newServerKey;
       getClipboardChangedHandler().resetLastRemoteProfileHash();

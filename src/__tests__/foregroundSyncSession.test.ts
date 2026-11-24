@@ -4,6 +4,11 @@ import { clipboardMonitor } from '../services/clipboard/ClipboardMonitor';
 import { remoteClipboardMonitor } from '../services/sync/RemoteClipboardMonitor';
 import { getClipboardSyncService } from '../services/sync/ClipboardSyncService';
 import { getClipboardChangedHandler } from '../services/sync/ClipboardChangedHandler';
+import {
+  clearJustUploadedHash,
+  getJustUploadedHash,
+  setJustUploadedHash,
+} from '../services/sync/JustSetHash';
 import { DEFAULT_APP_CONFIG } from '../types/storage';
 
 jest.mock('react-native', () => ({
@@ -91,3 +96,31 @@ it.each(['local', 'remote'])(
     }
   }
 );
+
+it('only carries an upload echo marker across configuration changes for the same server', async () => {
+  const config = {
+    ...DEFAULT_APP_CONFIG,
+    servers: [
+      { type: 'webdav' as const, url: 'https://a.example' },
+      { type: 'webdav' as const, url: 'https://b.example' },
+    ],
+    activeServerIndex: 0,
+  };
+  jest.mocked(configService.getConfig).mockResolvedValue(config);
+  const service = getClipboardSyncService();
+  await service.start();
+  try {
+    setJustUploadedHash('same-text-hash');
+    service.onConfigChanged({
+      ...config,
+      servers: [{ ...config.servers[0], name: 'Renamed' }, config.servers[1]],
+      enableBackgroundUpload: !config.enableBackgroundUpload,
+    });
+    expect(getJustUploadedHash()).toBe('same-text-hash');
+    service.onConfigChanged({ ...config, activeServerIndex: 1 });
+    expect(getJustUploadedHash()).toBeNull();
+  } finally {
+    clearJustUploadedHash();
+    await service.stop();
+  }
+});

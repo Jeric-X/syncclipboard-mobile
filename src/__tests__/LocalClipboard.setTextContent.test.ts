@@ -47,6 +47,26 @@ describe('LocalClipboard.setTextContent', () => {
     expect(Clipboard.setStringAsync).toHaveBeenCalledWith(fullText);
   });
 
+  it('reports an unreadable attachment without copying its preview', async () => {
+    MockedFile.mockImplementationOnce(() => ({
+      text: jest.fn().mockRejectedValue(new Error('missing')),
+    }));
+    const request = jest.spyOn(global, 'fetch').mockRejectedValueOnce(new Error('file missing'));
+    try {
+      await expect(
+        localClipboard.setTextContent({
+          type: 'Text',
+          text: 'preview',
+          fileUri: 'file:///missing.txt',
+          hasData: true,
+        })
+      ).rejects.toThrow('file missing');
+      expect(Clipboard.setStringAsync).not.toHaveBeenCalled();
+    } finally {
+      request.mockRestore();
+    }
+  });
+
   it('falls back to fetch when File API cannot read the text file', async () => {
     const fullText = 'fallback full text';
     MockedFile.mockImplementation((uri: string) => ({
