@@ -85,10 +85,6 @@ const en: DeepString<typeof zh> = {
 
   clipboard: {
     empty: 'Clipboard is empty',
-    noRemoteSnapshot: 'No remote preview',
-    noRemoteSnapshotHint: 'Pull to refresh the clipboard preview for this server.',
-    noTextSnapshot: 'No local text preview',
-    noTextSnapshotHint: 'Copy short text and allow pasting when prompted.',
     emptyHint: 'Copied content will appear here',
     imageFileLabel: 'Image file',
     imageFallback: 'Image',

@@ -78,10 +78,6 @@ const zh = {
 
   clipboard: {
     empty: '剪贴板为空',
-    noRemoteSnapshot: '尚未取得远端预览',
-    noRemoteSnapshotHint: '下拉刷新以查看当前服务器的剪贴板。',
-    noTextSnapshot: '尚未取得本机短文本',
-    noTextSnapshotHint: '请复制短文本，并在系统提示时允许粘贴。',
     emptyHint: '复制内容后将在此显示',
     imageFileLabel: '图片文件',
     imageFallback: '图片',

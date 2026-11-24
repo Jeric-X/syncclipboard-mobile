@@ -120,22 +120,10 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         <View style={styles.emptyContent}>
           <Text style={[styles.emptyIcon, { color: theme.colors.textTertiary }]}>📋</Text>
           <Text style={[styles.emptyTitle, { color: theme.colors.textSecondary }]}>
-            {t(
-              Platform.OS === 'ios'
-                ? isRemote
-                  ? 'clipboard.noRemoteSnapshot'
-                  : 'clipboard.noTextSnapshot'
-                : 'clipboard.empty'
-            )}
+            {t('clipboard.empty')}
           </Text>
           <Text style={[styles.emptyDescription, { color: theme.colors.textTertiary }]}>
-            {t(
-              Platform.OS === 'ios'
-                ? isRemote
-                  ? 'clipboard.noRemoteSnapshotHint'
-                  : 'clipboard.noTextSnapshotHint'
-                : 'clipboard.emptyHint'
-            )}
+            {t('clipboard.emptyHint')}
           </Text>
         </View>
       </View>
