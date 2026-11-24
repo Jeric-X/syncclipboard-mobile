@@ -23,9 +23,7 @@ function parseQuickTileUrl(url: string | null): {
   fromForeground: boolean;
   direction: SyncDirection;
 } {
-  // 磁贴链接使用 Android 的持续同步运行时。
-  if (Platform.OS !== 'android' || !url)
-    return { isQuickTile: false, fromForeground: false, direction: SyncDirection.Download };
+  if (!url) return { isQuickTile: false, fromForeground: false, direction: SyncDirection.Download };
   const fromForeground = url.includes('fg=1');
   if (url.startsWith(QUICK_UPLOAD_URL)) {
     return { isQuickTile: true, fromForeground, direction: SyncDirection.Upload };

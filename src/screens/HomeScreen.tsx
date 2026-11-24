@@ -8,8 +8,8 @@ import {
   View,
   Text,
   StyleSheet,
-  Platform,
-  Alert,
+  TextInput,
+  Button,
   ScrollView,
   RefreshControl,
   TouchableOpacity,
@@ -24,7 +24,8 @@ import { useTheme } from '@/hooks/useTheme';
 import { useLocalClipboardStore } from '@/stores/localClipboardStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useClipboardSyncServiceStore } from '@/serviceState/ClipboardSyncState';
-import { ClipboardContent, MAX_INLINE_TEXT_LENGTH, isInlineClipboardText } from '@/types/clipboard';
+import type { ServerConfig } from '@/types/api';
+import { ClipboardContent } from '@/types/clipboard';
 import { CurrentClipboardCard } from '@/components/CurrentClipboardCard';
 import { MessageToast } from '@/components/MessageToast';
 import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
@@ -32,10 +33,7 @@ import { WordPickerScreen } from '@/screens/WordPickerScreen';
 import { useMessageStore } from '@/stores/messageStore';
 import { useErrorStore } from '@/stores/errorStore';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
-import {
-  createContentFromFile,
-  createContentFromText,
-} from '@/utils/clipboard/clipboardContentUtils';
+import { createContentFromFile } from '@/utils/clipboard/clipboardContentUtils';
 import {
   setRemoteClipboard,
   uploadLocalClipboard,
@@ -54,6 +52,11 @@ export function HomeScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const navigation = useNavigation();
+  const [pasteText, setPasteText] = useState('');
+  const [pasteSession, setPasteSession] = useState<{
+    signal: AbortSignal;
+    server: ServerConfig;
+  } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [fileUploadPayload, setFileUploadPayload] = useState<{
     uri: string;
@@ -97,9 +100,6 @@ export function HomeScreen() {
   }, [isLoaded, showUpdateDialog]);
 
   const activeServer = getActiveServer();
-  const iosTextServer =
-    Platform.OS === 'ios' && activeServer?.type !== 's3' ? activeServer?.id : undefined;
-  const unsupportedIosServer = Platform.OS === 'ios' && activeServer?.type === 's3';
   const reportUploadError = useCallback(
     (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -122,48 +122,41 @@ export function HomeScreen() {
     },
     [setError, showMessage, t]
   );
-  const uploadClipboardText = useCallback(async () => {
-    if (useClipboardSyncServiceStore.getState().uploadingClipboard) return;
-    const selected = useSettingsStore.getState().getActiveServer();
-    const session = getClipboardSyncService().getSessionSignal();
-    if (!selected || !session || session.aborted) return;
-    const publish = async (input: ClipboardContent | string) => {
+  const uploadContent = useCallback(
+    async (content: ClipboardContent | string, session: AbortSignal, server: ServerConfig) => {
       if (
+        JSON.stringify(server) !== JSON.stringify(useSettingsStore.getState().getActiveServer()) ||
         session.aborted ||
-        JSON.stringify(useSettingsStore.getState().getActiveServer()) !== JSON.stringify(selected)
+        useClipboardSyncServiceStore.getState().uploadingClipboard
       )
         return;
       try {
         clearError();
-        const content = typeof input === 'string' ? await createContentFromText(input) : input;
-        const sent = await uploadLocalClipboard(content, session, selected);
-        if (session.aborted) return;
-        showMessage(
-          t(sent ? 'home.uploadSuccess' : 'home.uploadFailed'),
-          sent ? 'success' : 'error'
-        );
+        const data =
+          typeof content === 'string' ? await localClipboard.createTextContent(content) : content;
+        const sent = await uploadLocalClipboard(data, session, server);
+        if (!session.aborted)
+          showMessage(
+            t(sent ? 'home.uploadSuccess' : 'home.uploadFailed'),
+            sent ? 'success' : 'error'
+          );
+        return sent && !session.aborted;
       } catch (error) {
         if (!session.aborted) reportUploadError(error);
       }
-    };
-    const content = useLocalClipboardStore.getState().currentContent;
-    if (content && isInlineClipboardText(content) && content.text) return publish(content);
-    Alert.prompt(
-      t('home.uploadClipboardText'),
-      t('home.pasteTextHint'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('clipboard.upload'),
-          onPress: async (text?: string) => {
-            if (text && text.length <= MAX_INLINE_TEXT_LENGTH) await publish(text);
-            else showMessage(t('home.pasteTextHint'), 'error');
-          },
-        },
-      ],
-      'plain-text'
-    );
-  }, [clearError, reportUploadError, showMessage, t]);
+    },
+    [clearError, reportUploadError, showMessage, t]
+  );
+
+  const uploadClipboardText = useCallback(async () => {
+    const session = getClipboardSyncService().getSessionSignal();
+    if (!session || !activeServer) return;
+    const content = await localClipboard.getClipboardContent();
+    if (session.aborted) return;
+    if (content?.type === 'Text') return uploadContent(content, session, activeServer);
+    setPasteText('');
+    setPasteSession({ signal: session, server: activeServer });
+  }, [activeServer, uploadContent]);
 
   const handleWordPick = async (content: ClipboardContent) => {
     try {
@@ -280,24 +273,22 @@ export function HomeScreen() {
 
   // 菜单项配置
   const menuItems = useMemo<MenuItemConfig[]>(
-    () =>
-      Platform.OS === 'ios'
-        ? iosTextServer
-          ? [{ label: t('home.uploadClipboardText'), onPress: () => uploadClipboardText() }]
-          : []
-        : [
-            {
-              label: t('home.uploadImage'),
-              onPress: handleUploadImage,
-              disabled: !!fileUploadPayload,
-            },
-            {
-              label: t('home.uploadFile'),
-              onPress: handleUploadFile,
-              disabled: !!fileUploadPayload,
-            },
-          ],
-    [iosTextServer, uploadClipboardText, handleUploadImage, handleUploadFile, fileUploadPayload, t]
+    () => [
+      ...(activeServer
+        ? [{ label: t('home.uploadClipboardText'), onPress: uploadClipboardText }]
+        : []),
+      {
+        label: t('home.uploadImage'),
+        onPress: handleUploadImage,
+        disabled: !!fileUploadPayload,
+      },
+      {
+        label: t('home.uploadFile'),
+        onPress: handleUploadFile,
+        disabled: !!fileUploadPayload,
+      },
+    ],
+    [activeServer, uploadClipboardText, handleUploadImage, handleUploadFile, fileUploadPayload, t]
   );
 
   // 设置标题栏菜单按钮
@@ -319,15 +310,9 @@ export function HomeScreen() {
 
   // 快速操作
   const handleUpload = async () => {
-    try {
-      clearError();
-
-      if (iosTextServer) return await uploadClipboardText();
-      console.log('[HomeScreen] Starting upload...');
-      await uploadLocalClipboard();
-    } catch (error: unknown) {
-      reportUploadError(error);
-    }
+    const session = getClipboardSyncService().getSessionSignal();
+    if (activeServer && session && currentContent)
+      await uploadContent(currentContent, session, activeServer);
   };
 
   // 取消剪贴板上传
@@ -349,9 +334,11 @@ export function HomeScreen() {
 
   // 下载远程剪贴板的文件数据
   const handleDownloadRemoteFile = async () => {
+    const session = getClipboardSyncService().getSessionSignal();
+    if (!session) return;
     try {
       clearError();
-      await downloadRemoteClipboard(remoteContent);
+      await downloadRemoteClipboard(remoteContent, undefined, session);
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return;
       const title = t('home.fileDownloadFailed');
@@ -380,23 +367,38 @@ export function HomeScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          Platform.OS !== 'ios' || iosTextServer ? (
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={theme.colors.primary}
-            />
-          ) : undefined
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={theme.colors.primary}
+          />
         }
       >
-        {/* 当有服务器配置时显示远程和本地剪贴板 */}
-        {unsupportedIosServer ? (
-          <View style={[styles.emptyState, { backgroundColor: theme.colors.surface }]}>
-            <Text style={[styles.emptyStateTitle, { color: theme.colors.text }]}>
-              {t('home.iosS3Unavailable')}
-            </Text>
+        {pasteSession && !pasteSession.signal.aborted && pasteSession.server === activeServer && (
+          <View style={styles.section}>
+            <TextInput
+              accessibilityLabel={t('home.uploadClipboardText')}
+              placeholder={t('home.pasteTextHint')}
+              style={{ color: theme.colors.text }}
+              multiline
+              autoFocus
+              value={pasteText}
+              onChangeText={setPasteText}
+            />
+            <Button
+              title={t('clipboard.upload')}
+              disabled={!pasteText || uploadingClipboard}
+              onPress={async () => {
+                if (await uploadContent(pasteText, pasteSession.signal, pasteSession.server)) {
+                  setPasteSession((current) => (current === pasteSession ? null : current));
+                }
+              }}
+            />
+            <Button title={t('common.cancel')} onPress={() => setPasteSession(null)} />
           </View>
-        ) : activeServer ? (
+        )}
+        {/* 当有服务器配置时显示远程和本地剪贴板 */}
+        {activeServer ? (
           <>
             {/* 远程剪贴板 */}
             <View style={styles.section}>
@@ -448,7 +450,7 @@ export function HomeScreen() {
               <CurrentClipboardCard
                 clipboard={currentContent}
                 isRemote={false}
-                onAction={Platform.OS === 'ios' && !iosTextServer ? undefined : handleUpload}
+                onAction={handleUpload}
                 acting={uploadingClipboard}
                 actionProgress={uploadProgress}
                 onCancelAction={handleCancelClipboardUpload}

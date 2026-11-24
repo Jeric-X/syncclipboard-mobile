@@ -62,9 +62,7 @@ const en: DeepString<typeof zh> = {
     localClipboard: 'Local Clipboard',
     noServerTitle: 'No server configured',
     noServerDescription: 'Add a server configuration in Settings to enable sync',
-    pasteTextHint: 'Use Paste in the text field, then confirm the upload. Up to 1,000 characters.',
-    iosS3Unavailable:
-      'To sync text on iOS, select a SyncClipboard Server or WebDAV server in Settings.',
+    pasteTextHint: 'Paste the text to upload here.',
     uploadClipboardText: 'Upload clipboard text',
     uploadImage: 'Upload Image',
     uploadFile: 'Upload File',
@@ -183,8 +181,6 @@ const en: DeepString<typeof zh> = {
     syncAndHistorySection: 'Sync and History',
     syncSection: 'Sync Settings',
     autoSync: 'Auto Sync',
-    iosAutoSyncDesc:
-      'While the app is in the foreground, stay connected to SyncClipboard Server or poll WebDAV. Read the local clipboard once on entering the foreground.',
     autoSyncDesc: 'Automatically sync clipboard while in foreground',
     autoCopyTextOnly: 'Auto-copy text only',
     autoCopyTextOnlyDesc:

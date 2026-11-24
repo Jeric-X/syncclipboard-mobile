@@ -64,7 +64,7 @@ jest.mock('../longRunningTask/HistorySyncTask', () => ({
   historySyncTask: mockTask('historySyncTask'),
 }));
 jest.mock('../longRunningTask/ClipboardSyncTask', () => ({
-  clipboardSyncTask: mockTask('clipboardSyncTask'),
+  ClipboardSyncTask: jest.fn(() => mockTask('clipboardSyncTask')),
 }));
 jest.mock('../longRunningTask/RemoteClipboardMonitorTask', () => ({
   remoteClipboardMonitorTask: mockTask('remoteClipboardMonitorTask'),

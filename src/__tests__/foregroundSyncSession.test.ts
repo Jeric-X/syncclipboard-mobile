@@ -12,8 +12,7 @@ import {
 import { DEFAULT_APP_CONFIG } from '../types/storage';
 
 jest.mock('react-native', () => ({
-  Platform: { OS: 'ios' },
-  AppState: { currentState: 'active' },
+  AppState: { currentState: 'active', addEventListener: jest.fn(() => ({ remove: jest.fn() })) },
 }));
 jest.mock('../services/ConfigService', () => ({ configService: { getConfig: jest.fn() } }));
 function mockMonitor() {
@@ -33,7 +32,11 @@ jest.mock('../services/clipboard/LocalClipboard', () => ({
   localClipboard: { registerRemoteCopiedCallback: jest.fn() },
 }));
 jest.mock('../services/sync/SyncState', () => ({
-  clipboardSyncState: { clearDownloadState: jest.fn(), setRemoteContent: jest.fn() },
+  clipboardSyncState: {
+    clearUploadState: jest.fn(),
+    clearDownloadState: jest.fn(),
+    setRemoteContent: jest.fn(),
+  },
 }));
 jest.mock('../services/history/HistoryService', () => ({
   historyService: { addChangeCallback: jest.fn(), removeChangeCallback: jest.fn() },
@@ -85,6 +88,7 @@ it.each(['local', 'remote'])(
       );
       const processing = callback({ type: 'Text', text: 'A', hasData: false });
       AppState.currentState = 'background';
+      jest.mocked(AppState.addEventListener).mock.calls[0][1]('background');
       finish();
       await processing;
       await service.stop();
@@ -124,3 +128,24 @@ it('only carries an upload echo marker across configuration changes for the same
     await service.stop();
   }
 });
+
+it.each([true, false])(
+  'honors background capability %s with the same imported settings',
+  async (supported) => {
+    jest.clearAllMocks();
+    jest
+      .mocked(configService.getConfig)
+      .mockResolvedValue({ ...DEFAULT_APP_CONFIG, enableBackgroundTasks: true });
+    const service = getClipboardSyncService();
+    await service.start(supported);
+    try {
+      const signal = service.getSessionSignal();
+      AppState.currentState = 'background';
+      jest.mocked(AppState.addEventListener).mock.calls[0][1]('background');
+      expect(signal?.aborted).toBe(!supported);
+    } finally {
+      await service.stop();
+      AppState.currentState = 'active';
+    }
+  }
+);

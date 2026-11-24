@@ -187,7 +187,7 @@ Apply these principles to shared code and to platform-specific work on the iOS d
 
 - **Never use `import { ... } from 'react-native'` APIs that are Android-only without a platform guard.** (e.g., `ToastAndroid`, `BackHandler.exitApp()`).
 - **Dependency injection / strategy pattern** — when a feature fundamentally requires different implementations per platform (e.g., clipboard access), define a common interface in shared code and inject the platform-specific implementation. The `clipboardProxy.ts` fallback chain is a good example: it already has Shizuku → Overlay → expo-clipboard, and iOS can slot into this chain naturally.
-- **Implement the intended shared behavior from the start.** Keep existing actions available across platforms during staged rollouts. Add a platform guard only for a verified difference in system capabilities, permissions, or lifecycle. If an operation fails, surface the underlying error at the point of use. Fix small defects in the same PR. Document the trigger and impact of larger gaps in the follow-up plan and tell the user.
+- **Implement the intended shared behavior from the start.** Keep existing actions available across platforms during staged rollouts. For each unavoidable platform-specific change, explain the exact location and reason and obtain the user’s approval before implementing it. If an operation fails, surface the underlying error at the point of use. Fix small defects in the same PR. Document the trigger and impact of larger gaps in the follow-up plan and tell the user.
 
 ### In Native Modules (`modules/`)
 

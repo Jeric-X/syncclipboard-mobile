@@ -162,7 +162,7 @@ export interface ClipboardContent {
 /**
  * 剪贴板监听器回调
  */
-export type ClipboardChangeCallback = (content: ClipboardContent) => void;
+export type ClipboardChangeCallback = (content: ClipboardContent | null) => void;
 
 /**
  * 剪贴板监听器选项
@@ -216,16 +216,4 @@ export interface ClipboardHistoryQuery {
 
   /** 排序顺序 */
   sortOrder?: 'asc' | 'desc';
-}
-
-/** 内联文本的最大长度，超过阈值的正文通过文件传输。 */
-export const MAX_INLINE_TEXT_LENGTH = 1000;
-
-export function isInlineClipboardText(content: ClipboardContent): boolean {
-  return (
-    content.type === 'Text' &&
-    !content.hasData &&
-    typeof content.text === 'string' &&
-    content.text.length <= MAX_INLINE_TEXT_LENGTH
-  );
 }

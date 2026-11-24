@@ -1,3 +1,4 @@
+import type { ServerConfig } from '@/types/api';
 import type { ClipboardContent } from '@/types/clipboard';
 import { getAPIClient } from '../ClientFactory';
 import type { ProgressInfo } from 'native-util';
@@ -118,9 +119,10 @@ export async function downloadForStorage(
 export async function uploadForStorage(
   content: ClipboardContent,
   progress?: ProgressCallback,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  server?: ServerConfig
 ): Promise<void> {
-  const apiClient = await getAPIClient();
+  const apiClient = await getAPIClient(server);
   await apiClient.putContent(content, {
     signal,
     onProgress: progress

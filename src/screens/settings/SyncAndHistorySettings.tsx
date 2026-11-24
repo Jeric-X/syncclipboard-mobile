@@ -348,16 +348,37 @@ export const SyncAndHistorySettings = ({ showMessage }: SettingsModuleProps) => 
       <SettingsSection title={t('settings.syncSection')}>
         <SettingSwitch
           label={t('settings.autoSync')}
-          description={t(
-            Platform.OS === 'ios' ? 'settings.iosAutoSyncDesc' : 'settings.autoSyncDesc'
-          )}
+          description={t('settings.autoSyncDesc')}
           value={localAutoSyncEnabled}
           onChange={handleToggleAutoSync}
         />
 
-        {(Platform.OS === 'ios'
-          ? activeServer?.type === 'webdav'
-          : activeServer?.type !== 'syncclipboard') && (
+        <SettingSwitch
+          label={t('settings.autoCopyTextOnly')}
+          description={t('settings.autoCopyTextOnlyDesc')}
+          value={localAutoCopyTextOnly}
+          onChange={handleToggleAutoCopyTextOnly}
+        />
+
+        <SettingSwitch
+          label={t('settings.syncToast')}
+          description={t('settings.syncToastDesc')}
+          value={localSyncToastEnabled}
+          onChange={handleToggleSyncToast}
+        />
+
+        <SettingInput
+          label={t('settings.autoDownloadMaxSize')}
+          description={t('settings.autoDownloadMaxSizeDesc')}
+          value={maxSizeInput}
+          onChangeText={setMaxSizeInput}
+          onBlur={handleMaxSizeBlur}
+          unit="MB"
+          keyboardType="number-pad"
+          placeholder="5"
+        />
+
+        {activeServer?.type !== 'syncclipboard' && (
           <SettingInput
             label={t('settings.remotePollingInterval')}
             value={remotePollingInput}
@@ -370,60 +391,31 @@ export const SyncAndHistorySettings = ({ showMessage }: SettingsModuleProps) => 
           />
         )}
 
-        {Platform.OS !== 'ios' && (
-          <>
-            <SettingSwitch
-              label={t('settings.autoCopyTextOnly')}
-              description={t('settings.autoCopyTextOnlyDesc')}
-              value={localAutoCopyTextOnly}
-              onChange={handleToggleAutoCopyTextOnly}
-            />
+        <SettingInput
+          label={t('settings.localPollingInterval')}
+          value={localPollingInput}
+          onChangeText={setLocalPollingInput}
+          onBlur={handleLocalPollingBlur}
+          unit={t('settings.unitSecond')}
+          keyboardType="number-pad"
+          placeholder="1"
+          filter={filterPositiveInteger}
+        />
 
-            <SettingSwitch
-              label={t('settings.syncToast')}
-              description={t('settings.syncToastDesc')}
-              value={localSyncToastEnabled}
-              onChange={handleToggleSyncToast}
-            />
+        <SettingSwitch
+          label={t('settings.autoSaveSyncFile')}
+          description={t('settings.autoSaveSyncFileDesc')}
+          value={localAutoSaveSyncFileEnabled}
+          onChange={handleToggleAutoSaveSyncFile}
+        />
 
-            <SettingInput
-              label={t('settings.autoDownloadMaxSize')}
-              description={t('settings.autoDownloadMaxSizeDesc')}
-              value={maxSizeInput}
-              onChangeText={setMaxSizeInput}
-              onBlur={handleMaxSizeBlur}
-              unit="MB"
-              keyboardType="number-pad"
-              placeholder="5"
-            />
-
-            <SettingInput
-              label={t('settings.localPollingInterval')}
-              value={localPollingInput}
-              onChangeText={setLocalPollingInput}
-              onBlur={handleLocalPollingBlur}
-              unit={t('settings.unitSecond')}
-              keyboardType="number-pad"
-              placeholder="1"
-              filter={filterPositiveInteger}
-            />
-
-            <SettingSwitch
-              label={t('settings.autoSaveSyncFile')}
-              description={t('settings.autoSaveSyncFileDesc')}
-              value={localAutoSaveSyncFileEnabled}
-              onChange={handleToggleAutoSaveSyncFile}
-            />
-
-            {localAutoSaveSyncFileEnabled && (
-              <SettingAction
-                label={t('settings.syncFileSavePath')}
-                description={localSyncFileSavePath || t('settings.syncFileSavePathNotSet')}
-                buttonText={t('settings.syncFileSavePathPick')}
-                onPress={handlePickSyncFileSavePath}
-              />
-            )}
-          </>
+        {localAutoSaveSyncFileEnabled && (
+          <SettingAction
+            label={t('settings.syncFileSavePath')}
+            description={localSyncFileSavePath || t('settings.syncFileSavePathNotSet')}
+            buttonText={t('settings.syncFileSavePathPick')}
+            onPress={handlePickSyncFileSavePath}
+          />
         )}
       </SettingsSection>
 

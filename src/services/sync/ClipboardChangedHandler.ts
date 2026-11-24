@@ -4,7 +4,7 @@
  */
 
 import { AppState, Platform, ToastAndroid } from 'react-native';
-import { ClipboardContent, isInlineClipboardText } from '../../types/clipboard';
+import { ClipboardContent } from '../../types/clipboard';
 import type { AppConfig } from '../../types';
 import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
@@ -41,10 +41,6 @@ function shouldUseStartupBaseline(
     appState: AppState.currentState,
   });
   return useBaseline;
-}
-
-function sessionEnded(signal?: AbortSignal): boolean {
-  return !!signal?.aborted || (Platform.OS === 'ios' && AppState.currentState === 'background');
 }
 
 class ClipboardChangedHandler {
@@ -84,20 +80,17 @@ class ClipboardChangedHandler {
 
   async processRemoteClipboardContent(
     content: ClipboardContent,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    supportsBackgroundTasks = true
   ): Promise<void> {
-    if (sessionEnded(signal)) return;
-    if (Platform.OS === 'ios' && !isInlineClipboardText(content)) {
-      clipboardSyncState.setRemoteContent(content);
-      return;
-    }
+    if (signal?.aborted) return;
     const isStartupBaseline = shouldUseStartupBaseline(this.lastRemoteProfileHash, 'remote');
 
     if (!content.hasData && content.type === 'Text' && !content.profileHash && content.text) {
       content.profileHash = await calculateTextHash(content.text);
     }
 
-    if (sessionEnded(signal)) return;
+    if (signal?.aborted) return;
     const currentHash = content.profileHash || content.text;
 
     // 如果匹配刚上传的 hash，跳过处理
@@ -119,7 +112,7 @@ class ClipboardChangedHandler {
     }
 
     const config = await configService.getConfig();
-    if (sessionEnded(signal)) return;
+    if (signal?.aborted) return;
     if (currentHash === this.lastRemoteProfileHash) return;
     this.lastRemoteProfileHash = currentHash;
 
@@ -134,24 +127,25 @@ class ClipboardChangedHandler {
       console.log('[ClipboardChangedHandler] Found existing file in history');
       content = { ...content, fileUri };
     } else if (content.hasData && content.fileName && content.fileSize !== undefined) {
-      const downloadedContent = await this.tryAutoDownload(content, config);
+      const downloadedContent = await this.tryAutoDownload(content, config, signal);
       if (!downloadedContent) {
         return;
       }
       content = downloadedContent;
     }
 
-    if (sessionEnded(signal)) return;
+    if (signal?.aborted) return;
     clipboardSyncState.setRemoteContent(content);
 
     if (isStartupBaseline) return;
 
-    await this.tryAutoCopyToClipboard(content, config, signal);
+    await this.tryAutoCopyToClipboard(content, config, signal, supportsBackgroundTasks);
   }
 
   private async tryAutoDownload(
     content: ClipboardContent,
-    config: AppConfig
+    config: AppConfig,
+    signal?: AbortSignal
   ): Promise<ClipboardContent | null> {
     const autoDownloadMaxSize = config?.autoDownloadMaxSize ?? 5 * 1024 * 1024;
 
@@ -163,7 +157,7 @@ class ClipboardChangedHandler {
     }
 
     try {
-      const result = await downloadRemoteClipboard(content);
+      const result = await downloadRemoteClipboard(content, undefined, signal);
       console.log('[ClipboardChangedHandler] Auto-download completed');
       return result;
     } catch (error) {
@@ -178,14 +172,15 @@ class ClipboardChangedHandler {
   private async tryAutoCopyToClipboard(
     content: ClipboardContent,
     config: AppConfig,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    supportsBackgroundTasks = true
   ): Promise<void> {
     if (content.type !== 'Text' && content.type !== 'Image') return;
     if (content.type === 'Image' && (config.autoCopyTextOnly || !content.fileUri)) return;
 
     const autoSyncEnabled = config?.autoSync ?? false;
     const bgDownloadEnabled =
-      Platform.OS === 'android' &&
+      supportsBackgroundTasks &&
       !!(config?.enableBackgroundTasks && config?.enableBackgroundDownload);
     const isAppActive = AppState.currentState === 'active';
     const shouldAutoCopy = autoSyncEnabled || (!isAppActive && bgDownloadEnabled);
@@ -196,7 +191,7 @@ class ClipboardChangedHandler {
     const localMatchesRemote = remoteHash === this.lastLocalProfileHash;
     const activeServer = await configService.getActiveServer();
 
-    if (sessionEnded(signal) || localMatchesRemote || !activeServer) {
+    if (signal?.aborted || localMatchesRemote || !activeServer) {
       return;
     }
 
@@ -206,7 +201,7 @@ class ClipboardChangedHandler {
     }
 
     try {
-      await this.copyToLocalClipboard(content);
+      await this.copyToLocalClipboard(content, signal);
       if (Platform.OS === 'android') {
         const preview = this.getContentPreview(content);
         updateForegroundNotification(false, preview);
@@ -226,26 +221,33 @@ class ClipboardChangedHandler {
     return content.fileName || content.type;
   }
 
-  private async copyToLocalClipboard(content: ClipboardContent): Promise<void> {
-    await localClipboard.setClipboardContent(content, true);
+  private async copyToLocalClipboard(
+    content: ClipboardContent,
+    signal?: AbortSignal
+  ): Promise<void> {
+    await localClipboard.setClipboardContent(content, true, signal);
     this.lastLocalProfileHash = content.profileHash || content.text;
     console.log('[ClipboardChangedHandler] Copied to local clipboard');
   }
 
-  async handleAutoUpload(content: ClipboardContent, signal?: AbortSignal): Promise<void> {
-    if (sessionEnded(signal) || (Platform.OS === 'ios' && !isInlineClipboardText(content))) return;
+  async handleAutoUpload(
+    content: ClipboardContent,
+    signal?: AbortSignal,
+    supportsBackgroundTasks = true
+  ): Promise<void> {
+    if (signal?.aborted) return;
     const isStartupBaseline = shouldUseStartupBaseline(this.lastLocalProfileHash, 'local');
     const config = await configService.getConfig();
 
     const autoSync = config?.autoSync ?? false;
     const bgUpload =
-      Platform.OS === 'android' && config?.enableBackgroundTasks && config?.enableBackgroundUpload;
+      supportsBackgroundTasks && config?.enableBackgroundTasks && config?.enableBackgroundUpload;
     if (!autoSync && !bgUpload) return;
 
     const activeServer = await configService.getActiveServer();
-    if (!activeServer || (Platform.OS === 'ios' && activeServer.type === 's3')) return;
+    if (!activeServer) return;
 
-    if (sessionEnded(signal)) return;
+    if (signal?.aborted) return;
     const currentHash = content.profileHash || content.text;
 
     // 如果匹配刚设置到本地剪贴板的 hash，跳过自动上传
@@ -268,11 +270,7 @@ class ClipboardChangedHandler {
 
     try {
       const uploaded = signal
-        ? await uploadLocalClipboard(
-            content,
-            signal,
-            Platform.OS === 'ios' ? activeServer : undefined
-          )
+        ? await uploadLocalClipboard(content, signal, activeServer)
         : await uploadLocalClipboard(content);
       if (uploaded && Platform.OS === 'android') {
         const preview = this.getContentPreview(content);
@@ -280,8 +278,8 @@ class ClipboardChangedHandler {
         if (config?.syncToastEnabled !== false) {
           ToastAndroid.show(i18n.t('common.uploaded', { preview }), ToastAndroid.SHORT);
         }
-        remoteClipboardMonitor.refresh().catch(() => {});
       }
+      if (uploaded && !signal?.aborted) remoteClipboardMonitor.refresh().catch(() => {});
     } catch (e: unknown) {
       if (!(e instanceof DOMException && e.name === 'AbortError')) {
         console.error('[ClipboardChangedHandler] Auto-upload failed:', e);

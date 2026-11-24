@@ -24,7 +24,7 @@ export class ClipboardMonitor {
   private nativeClipboardListenerGeneration = 0;
   private nativeClipboardListenerOperation: Promise<unknown> = Promise.resolve();
   private monitoringGeneration = 0;
-  private lastContent: ClipboardContent | null = null;
+  private lastContent?: ClipboardContent | null;
 
   /**
    * 注入的回调集合，用于查询“后台运行是否需要持续”。
@@ -35,7 +35,7 @@ export class ClipboardMonitor {
 
   // 配置选项
   private options: Required<ClipboardMonitorOptions> = {
-    pollingInterval: 1000,
+    pollingInterval: 1000, // iOS 默认 1 秒轮询
   };
 
   private isChecking: boolean = false;
@@ -48,13 +48,7 @@ export class ClipboardMonitor {
     // 注册复制生命周期回调，避免循环引用
     clipboardManager.registerCopyLifecycleCallbacks({
       onBeforeCopy: () => this.pauseMonitoring(),
-      onAfterCopy: async (written) => {
-        if (Platform.OS !== 'ios') return this.resumeMonitoring();
-        if (written && this.hasContentChanged(written)) {
-          await this.setLastContent(written);
-          this.notifyCallbacks(written);
-        }
-      },
+      onAfterCopy: (written) => this.resumeMonitoring(written),
     });
 
     if (options) {
@@ -85,8 +79,7 @@ export class ClipboardMonitor {
     }
 
     this.isMonitoring = true;
-    if (Platform.OS === 'ios') await this.checkClipboard();
-    else await this.startMonitoring();
+    await this.startMonitoring();
 
     console.log('[ClipboardMonitor] Started monitoring');
   }
@@ -290,20 +283,29 @@ export class ClipboardMonitor {
   private async checkClipboard(): Promise<void> {
     if (!this.isMonitoring) return;
     // 互斥锁：如果上一次检查还在进行中（大图片 hash 计算耗时），跳过本次
-    if (this.isChecking && Platform.OS !== 'ios') return;
+    if (this.isChecking) return;
     this.isChecking = true;
     this.recheckAfterReconnect = false;
     const gen = this.checkGeneration;
+    const startedInForeground = AppState.currentState === 'active';
     try {
       const content = await measureStartup('local.readContent', () =>
-        this.clipboardManager.getClipboardContent(Platform.OS === 'ios')
+        this.clipboardManager.getClipboardContent()
       );
 
       // 如果在 getClipboardContent 期间 setLastContent 被调用，丢弃本次结果
-      if (gen !== this.checkGeneration) return;
+      if (gen !== this.checkGeneration || content === undefined) return;
 
       if (!content) {
-        if (Platform.OS === 'ios') this.lastContent = null;
+        // 后台读取可能因失去焦点返回空，只在前台确认剪贴板已清空。
+        if (
+          startedInForeground &&
+          AppState.currentState === 'active' &&
+          this.lastContent !== null
+        ) {
+          this.lastContent = null;
+          this.notifyCallbacks(null);
+        }
         return;
       }
 
@@ -314,7 +316,6 @@ export class ClipboardMonitor {
         this.notifyCallbacks(content);
       }
     } catch (error) {
-      if (Platform.OS === 'ios' && gen === this.checkGeneration) this.lastContent = null;
       console.error('[ClipboardMonitor] Failed to check clipboard:', error);
     } finally {
       this.isChecking = false;
@@ -359,7 +360,7 @@ export class ClipboardMonitor {
    * 通知所有回调（带防抖）
    * 使用 native-timer 替代 JS setTimeout，确保 Android 后台也能可靠触发
    */
-  private notifyCallbacks(content: ClipboardContent): void {
+  private notifyCallbacks(content: ClipboardContent | null): void {
     this.callbacks.forEach((callback) => {
       try {
         callback(content);
@@ -389,7 +390,6 @@ export class ClipboardMonitor {
    * 立即触发一次检查；只有轮询计时器和事件监听都不存在时才恢复监控。
    */
   handleForeground(): void {
-    if (Platform.OS === 'ios') return;
     if (this.isMonitoring) {
       void this.checkClipboard();
       if (!this.pollingTimerTag && !this.nativeClipboardListenerCleanup) {
@@ -402,7 +402,6 @@ export class ClipboardMonitor {
    * 手动触发一次检查
    */
   async triggerCheck(): Promise<void> {
-    if (Platform.OS === 'ios') return;
     await this.checkClipboard();
   }
 
@@ -410,7 +409,7 @@ export class ClipboardMonitor {
    * 获取上次已知的本地剪贴板内容缓存（不触发系统 API 读取）
    */
   getLastContent(): ClipboardContent | null {
-    return this.lastContent;
+    return this.lastContent ?? null;
   }
 
   /**
@@ -435,19 +434,19 @@ export class ClipboardMonitor {
    * 同时立即触发一次检查，不必等待下一个周期。
    * 后台且后台上传未启用时，不恢复监控（避免后台写入剪贴板后误重启）。
    */
-  async resumeMonitoring(): Promise<void> {
-    if (Platform.OS === 'ios') return;
+  async resumeMonitoring(written?: ClipboardContent): Promise<void> {
     if (!this.isMonitoring) return;
 
     // 后台且后台上传未启用时，不恢复任何监控。
     const currentState = AppState.currentState;
-    if (
-      (currentState === 'background' || currentState === 'inactive') &&
-      !this._isBgRunningEnabled()
-    ) {
+    if (currentState === 'background' && !this._isBgRunningEnabled()) {
       return;
     }
 
+    if (written && this.hasContentChanged(written)) {
+      await this.setLastContent(written);
+      this.notifyCallbacks(written);
+    }
     await this.startMonitoring();
   }
 
@@ -473,7 +472,7 @@ export class ClipboardMonitor {
    * 重置监听器状态
    */
   reset(): void {
-    this.lastContent = null;
+    this.lastContent = undefined;
   }
 }
 

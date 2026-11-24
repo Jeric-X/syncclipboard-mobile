@@ -78,10 +78,13 @@ configService.subscribe((config) => {
  * 获取当前激活服务器的 API 客户端（带缓存）。
  * 仅当激活服务器配置变化后才重新创建实例。
  */
-export async function getAPIClient(): Promise<ISyncClipboardAPI> {
-  if (_cachedClient) return _cachedClient;
+export async function getAPIClient(selected?: ServerConfig): Promise<ISyncClipboardAPI> {
+  if (_cachedClient && (!selected || JSON.stringify(selected) === _cachedServerKey))
+    return _cachedClient;
 
   const server = await configService.getActiveServer();
+  if (selected && JSON.stringify(selected) !== JSON.stringify(server))
+    return createClientFromConfig(selected);
   if (!server) {
     throw new ConfigurationError('No active server configured');
   }

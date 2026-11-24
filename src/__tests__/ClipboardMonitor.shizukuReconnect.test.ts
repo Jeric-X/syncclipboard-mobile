@@ -1,6 +1,6 @@
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { ClipboardMonitor } from '../services/clipboard/ClipboardMonitor';
-import type { LocalClipboard } from '../services/clipboard/LocalClipboard';
+import type { CopyLifecycleCallbacks, LocalClipboard } from '../services/clipboard/LocalClipboard';
 import { setTimer, clearTimer } from 'native-timer';
 import { configService } from '../services/ConfigService';
 import { requireNativeModule } from 'expo-modules-core';
@@ -32,6 +32,7 @@ jest.mock('../services/StartupTiming', () => ({
 
 const native = jest.mocked(requireNativeModule).mock.results[0].value;
 let monitor: ClipboardMonitor;
+let copyCallbacks: CopyLifecycleCallbacks;
 let readClipboard: jest.Mock;
 let events: Map<string, () => void>;
 
@@ -51,7 +52,9 @@ beforeEach(() => {
   } as Awaited<ReturnType<typeof configService.getConfig>>);
   readClipboard = jest.fn(async () => null);
   monitor = new ClipboardMonitor({
-    registerCopyLifecycleCallbacks: jest.fn(),
+    registerCopyLifecycleCallbacks: (callbacks: CopyLifecycleCallbacks) => {
+      copyCallbacks = callbacks;
+    },
     getClipboardContent: readClipboard,
   } as unknown as LocalClipboard);
 });
@@ -186,36 +189,63 @@ it('恢复时若旧轮询仍在读取，结束后仍须补读最新内容', asyn
   expect(changed).toHaveBeenCalledWith(content);
 });
 
-it('iOS samples once per foreground session and never polls or rereads after an app write', async () => {
+it('polls repeatedly when native events are unavailable and stops the timer on stop', async () => {
   const previous = Platform.OS;
   Platform.OS = 'ios';
   try {
     await monitor.start();
-    monitor.handleForeground();
-    await monitor.refreshListeningMode();
-    await monitor.resumeMonitoring();
-    await monitor.triggerCheck();
-    expect(readClipboard).toHaveBeenCalledTimes(1);
-    expect(setTimer).not.toHaveBeenCalled();
+    const tick = jest.mocked(setTimer).mock.calls[0][0];
+    await tick();
+    await tick();
+    expect(readClipboard).toHaveBeenCalledTimes(3);
+    expect(native.startPrimaryClipChangedListener).not.toHaveBeenCalled();
     await monitor.stop();
-    await monitor.start();
-    expect(readClipboard).toHaveBeenCalledTimes(2);
+    expect(clearTimer).toHaveBeenCalledWith('poll');
+    await tick();
+    expect(readClipboard).toHaveBeenCalledTimes(3);
   } finally {
     Platform.OS = previous;
   }
 });
 
-it('clears the previous iOS sample when the new foreground read fails', async () => {
-  const previous = Platform.OS;
-  Platform.OS = 'ios';
+it('delivers app writes immediately and deduplicates the subsequent system read', async () => {
+  const changed = jest.fn();
+  monitor.addCallback(changed);
+  await monitor.start();
+  changed.mockClear();
+  const written = { type: 'Text' as const, text: 'written', hasData: false, profileHash: 'hash' };
+  await copyCallbacks.onBeforeCopy();
+  readClipboard.mockImplementation(async () => {
+    expect(changed).toHaveBeenCalledWith(written);
+    return written;
+  });
+  await copyCallbacks.onAfterCopy(written);
+  await monitor.triggerCheck();
+  expect(changed).toHaveBeenCalledTimes(1);
+});
+
+it('publishes an empty sample once and detects a later copy of the same text', async () => {
+  const content = { type: 'Text', text: 'first', hasData: false };
+  const changed = jest.fn();
+  monitor.addCallback(changed);
+  readClipboard.mockResolvedValue(content);
+  await monitor.start();
+  await monitor.triggerCheck();
+  readClipboard.mockResolvedValue(undefined);
+  await monitor.triggerCheck();
+  expect(monitor.getLastContent()).toEqual(content);
+  readClipboard.mockResolvedValue(null);
+  AppState.currentState = 'background';
   try {
-    readClipboard.mockResolvedValueOnce({ type: 'Text', text: 'old' });
-    await monitor.start();
-    await monitor.stop();
-    readClipboard.mockRejectedValueOnce(new Error('read failed'));
-    await monitor.start();
-    expect(monitor.getLastContent()).toBeNull();
+    await monitor.triggerCheck();
+    expect(monitor.getLastContent()).toEqual(content);
   } finally {
-    Platform.OS = previous;
+    AppState.currentState = 'active';
   }
+  await monitor.triggerCheck();
+  await monitor.triggerCheck();
+  expect(monitor.getLastContent()).toBeNull();
+  readClipboard.mockResolvedValue(content);
+  await monitor.triggerCheck();
+  expect(changed.mock.calls).toEqual([[content], [null], [content]]);
 });

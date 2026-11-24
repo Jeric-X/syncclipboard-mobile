@@ -45,6 +45,18 @@ describe('shared sync runtime lifecycle', () => {
     expect(sync.start).toHaveBeenCalledTimes(2);
   });
 
+  it('ignores a queued foreground start after the app returned to the background', async () => {
+    const manager = new LongRunningTaskCoordinator(
+      async () => ({ foreground: false, backgroundEnabled: false }),
+      jest.fn()
+    );
+    const sync = new TestTask('sync');
+    manager.register(sync);
+    await manager.startAll();
+    await Promise.all([manager.refresh(false, true), manager.refresh(false, false)]);
+    expect(sync.start).not.toHaveBeenCalled();
+  });
+
   it('applies background policy immediately on a cold start without AppState events', async () => {
     const manager = new LongRunningTaskCoordinator(
       async () => ({ foreground: false, backgroundEnabled: false }),

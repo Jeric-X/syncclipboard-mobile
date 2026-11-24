@@ -120,10 +120,12 @@ export async function downloadRemoteClipboard(
 ): Promise<ClipboardContent | null> {
   const actualContent = content ?? clipboardSyncState.getState().remoteContent;
   if (!actualContent) return null;
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
   // 检查历史记录中是否已有该文件
   if (actualContent.profileHash) {
     const cachedItem = await historyService.getItem(actualContent.profileHash);
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     if (cachedItem?.fileUri) {
       const cachedFile = new File(cachedItem.fileUri);
       if (cachedFile.exists) {
@@ -148,6 +150,7 @@ export async function downloadRemoteClipboard(
         },
         sig
       );
+      if (sig.aborted) throw new DOMException('Aborted', 'AbortError');
       clipboardSyncState.setState({ remoteContent: result });
 
       return result;

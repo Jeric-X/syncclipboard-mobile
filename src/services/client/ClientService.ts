@@ -2,7 +2,7 @@ import type { ClipboardContent } from '@/types/clipboard';
 import type { ProgressCallback } from '../history/HistoryTransferQueue';
 import { configService } from '../ConfigService';
 import type { ServerConfig } from '@/types/api';
-import { createClientFromConfig, getAPIClient } from '../ClientFactory';
+import { getAPIClient } from '../ClientFactory';
 import { contentToProfileDto } from '@/utils/clipboard/convert';
 import { downloadForStorage, uploadForStorage } from './StorageClient';
 import { downloadForSyncClipboard, uploadForSyncClipboard } from './SyncClipboardClient';
@@ -42,21 +42,15 @@ export class ClientService {
   async uploadData(
     content: ClipboardContent,
     progress?: ProgressCallback,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    selected?: ServerConfig
   ): Promise<ClipboardContent | void> {
-    const server = await configService.getActiveServer();
-    if (!server) {
-      throw new Error('No active server configured');
+    const server = selected ?? (await configService.getActiveServer());
+    if (!server) throw new Error('No active server configured');
+    if (server.type === 'syncclipboard' && (await configService.getConfig()).enableHistorySync) {
+      return uploadForSyncClipboard(content, progress, signal, server);
     }
-
-    if (server.type === 'syncclipboard') {
-      const config = await configService.getConfig();
-      if (!config.enableHistorySync) {
-        return uploadForStorage(content, progress, signal);
-      }
-      return uploadForSyncClipboard(content, progress, signal);
-    }
-    return uploadForStorage(content, progress, signal);
+    return uploadForStorage(content, progress, signal, server);
   }
 
   async setRemoteClipboard(
@@ -65,11 +59,15 @@ export class ClientService {
     signal?: AbortSignal,
     selected?: ServerConfig
   ): Promise<void> {
+    const server = selected ?? (await configService.getActiveServer());
+    if (!server) throw new Error('No active server configured');
     if (content.hasData) {
-      await this.uploadData(content, progress, signal);
+      // 存储后端由 putContent 发布 profile；历史队列只上传附件，需继续发布。
+      const historyContent = await this.uploadData(content, progress, signal, server);
+      if (!historyContent) return;
     }
-
-    const apiClient = selected ? createClientFromConfig(selected) : await getAPIClient();
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    const apiClient = await getAPIClient(server);
     const profile = await contentToProfileDto(content, { signal });
     await apiClient.putClipboard(profile, signal);
   }

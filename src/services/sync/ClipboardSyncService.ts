@@ -11,7 +11,7 @@
  * 生命周期由 LongRunningTaskManager 统一控制。
  */
 
-import { AppState, Platform } from 'react-native';
+import { AppState } from 'react-native';
 import { ClipboardChangeCallback } from '../../types/clipboard';
 import type { ClipboardContent } from '../../types/clipboard';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
@@ -19,6 +19,7 @@ import { localClipboard } from '../clipboard/LocalClipboard';
 import { clearJustUploadedHash } from './JustSetHash';
 import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
+import { backgroundRuntimeState } from '../BackgroundRuntimeState';
 import type { AppConfig } from '../../types/storage';
 import { remoteClipboardMonitor } from './RemoteClipboardMonitor';
 import type { RemoteClipboardChangedCallback } from './RemoteClipboardMonitor';
@@ -35,7 +36,6 @@ class ClipboardSyncService {
 
   private endSession(): void {
     this.session.abort();
-    this.session = new AbortController();
     const handler = getClipboardChangedHandler();
     if (this.pendingLocal) {
       // 上传被中断时，下次采样同一内容仍须派发给共用处理器。
@@ -56,6 +56,8 @@ class ClipboardSyncService {
   private static instance: ClipboardSyncService | null = null;
 
   private _isStarted = false;
+  private supportsBackgroundTasks = false;
+  private backgroundEnabled = false;
   private _bgUploadEnabled = false;
   private _bgDownloadEnabled = false;
   private _activeServerKey: string | null = null;
@@ -74,9 +76,15 @@ class ClipboardSyncService {
     return this._isStarted;
   }
 
-  async start(): Promise<void> {
+  async start(supportsBackgroundTasks = false): Promise<void> {
     if (this._isStarted) return;
     this._isStarted = true;
+    this.supportsBackgroundTasks = supportsBackgroundTasks;
+    this.session = new AbortController();
+    const listener = AppState.addEventListener('change', (state) => {
+      if (state === 'background' && !this.canSyncInBackground()) this.endSession();
+    });
+    this._cleanups.push(() => listener.remove());
 
     const cfg = await configService.getConfig();
     this._applyConfig(cfg);
@@ -100,9 +108,14 @@ class ClipboardSyncService {
     this._applyConfig(cfg);
   }
 
+  private canSyncInBackground(): boolean {
+    return this.backgroundEnabled && !backgroundRuntimeState.isTempDisabled();
+  }
+
   private _applyConfig(cfg: AppConfig | null): void {
-    this._bgUploadEnabled = !!cfg?.enableBackgroundUpload;
-    this._bgDownloadEnabled = !!cfg?.enableBackgroundDownload;
+    this.backgroundEnabled = this.supportsBackgroundTasks && !!cfg?.enableBackgroundTasks;
+    this._bgUploadEnabled = this.backgroundEnabled && !!cfg?.enableBackgroundUpload;
+    this._bgDownloadEnabled = this.backgroundEnabled && !!cfg?.enableBackgroundDownload;
 
     const activeServer = cfg?.servers?.[cfg.activeServerIndex] ?? null;
     const newServerKey = activeServer ? JSON.stringify({ ...activeServer, name: undefined }) : null;
@@ -112,6 +125,11 @@ class ClipboardSyncService {
       clipboardSyncState.setRemoteContent(null);
       this._activeServerKey = newServerKey;
       getClipboardChangedHandler().resetLastRemoteProfileHash();
+    }
+    if (AppState.currentState === 'background' && !this.canSyncInBackground()) {
+      this.endSession();
+    } else if (this.session.signal.aborted) {
+      this.session = new AbortController();
     }
   }
 
@@ -142,9 +160,14 @@ class ClipboardSyncService {
 
   private _subscribeToRemoteClipboard(): void {
     const callback: RemoteClipboardChangedCallback = async (content) => {
+      if (this.session.signal.aborted) {
+        remoteClipboardMonitor.setLastContentHash(null);
+        return;
+      }
       const pending = getClipboardChangedHandler().processRemoteClipboardContent(
         content,
-        this.session.signal
+        this.session.signal,
+        this.supportsBackgroundTasks
       );
       this.pendingRemote = pending;
       try {
@@ -152,12 +175,7 @@ class ClipboardSyncService {
       } catch (e) {
         console.error('[ClipboardSyncService] Remote change callback error:', e);
       } finally {
-        // AppState 先于任务队列变为后台。保留这次操作，交给 stop 作废去重状态。
-        if (
-          this.pendingRemote === pending &&
-          !(Platform.OS === 'ios' && AppState.currentState === 'background')
-        )
-          this.pendingRemote = undefined;
+        if (this.pendingRemote === pending) this.pendingRemote = undefined;
       }
     };
     remoteClipboardMonitor.addCallback(callback);
@@ -166,19 +184,23 @@ class ClipboardSyncService {
 
   private _subscribeToClipboardChanges(): void {
     const callback: ClipboardChangeCallback = async (content) => {
-      const pending = getClipboardChangedHandler().handleAutoUpload(content, this.session.signal);
+      if (!content) return;
+      if (this.session.signal.aborted) {
+        clipboardMonitor.reset();
+        return;
+      }
+      const pending = getClipboardChangedHandler().handleAutoUpload(
+        content,
+        this.session.signal,
+        this.supportsBackgroundTasks
+      );
       this.pendingLocal = pending;
       try {
         await pending;
       } catch (error) {
         console.error('[ClipboardSyncService] Local change callback error:', error);
       } finally {
-        // AppState 先于任务队列变为后台。保留这次操作，交给 stop 作废去重状态。
-        if (
-          this.pendingLocal === pending &&
-          !(Platform.OS === 'ios' && AppState.currentState === 'background')
-        )
-          this.pendingLocal = undefined;
+        if (this.pendingLocal === pending) this.pendingLocal = undefined;
       }
     };
     clipboardMonitor.addCallback(callback);
@@ -197,6 +219,7 @@ class ClipboardSyncService {
     queue.onTaskStatusChanged(handler);
     this._cleanups.push(() => {
       queue.offTaskStatusChanged(handler);
+      clipboardSyncState.clearUploadState();
       clipboardSyncState.clearDownloadState();
     });
   }

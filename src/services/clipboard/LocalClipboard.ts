@@ -3,9 +3,6 @@
  * 剪贴板管理器 - 处理剪贴板读写操作
  */
 
-import { MAX_INLINE_TEXT_LENGTH } from '@/types/clipboard';
-import { Platform } from 'react-native';
-import { createContentFromText } from '@/utils/clipboard/textContent';
 import * as Clipboard from 'expo-clipboard';
 import * as ClipboardProxy from '@/utils/clipboardProxy';
 import * as FileSystem from 'expo-file-system';
@@ -50,18 +47,8 @@ export class LocalClipboard {
   /**
    * 获取当前剪贴板内容
    */
-  async getClipboardContent(inlineTextOnly = false): Promise<ClipboardContent | null> {
+  async getClipboardContent(): Promise<ClipboardContent | null | undefined> {
     try {
-      if (inlineTextOnly) {
-        // iOS 的文件 URL 和图片也可能提供文本表示。阶段 2 只采样可确认的短文本。
-        if (await Clipboard.hasImageAsync()) return null;
-        const url = (await Clipboard.hasUrlAsync()) ? await Clipboard.getUrlAsync() : undefined;
-        if (url === null || url?.startsWith('file:')) return null;
-        const text =
-          url && !(await Clipboard.hasStringAsync()) ? url : await Clipboard.getStringAsync();
-        if (!text || text.length > MAX_INLINE_TEXT_LENGTH) return null;
-        return this.getTextContentFromString(text);
-      }
       // 先检查文本类型，避免 Android 将图片 URI 强制转换成文字并重新上传。
       const hasText = await measureStartup('local.hasText', () => ClipboardProxy.hasStringAsync());
       if (hasText) {
@@ -69,9 +56,7 @@ export class LocalClipboard {
           ClipboardProxy.getStringAsync()
         );
         if (text && text.length > 0) {
-          return await measureStartup('local.buildTextContent', () =>
-            this.getTextContentFromString(text)
-          );
+          return await measureStartup('local.buildTextContent', () => this.createTextContent(text));
         }
       }
 
@@ -81,18 +66,18 @@ export class LocalClipboard {
         return await measureStartup('local.buildImageContent', () => this.getImageContent());
       }
 
-      // 没有内容
-      return null;
+      // 声明有文本却无法取值时保留上次样本，例如用户拒绝粘贴授权。
+      return hasText ? undefined : null;
     } catch (error) {
       console.error('[ClipboardManager] Failed to get clipboard content:', error);
-      return null;
+      return undefined;
     }
   }
 
   /**
    * 获取文本内容（从已获取的文本字符串构建）
    */
-  private async getTextContentFromString(text: string): Promise<ClipboardContent> {
+  async createTextContent(text: string): Promise<ClipboardContent> {
     const profileHash = await measureStartup('local.textHash', () => calculateTextHash(text));
     const timestamp = Date.now();
 
@@ -154,7 +139,7 @@ export class LocalClipboard {
     const TEXT_PREVIEW_MAX_LENGTH = 200;
 
     // 如果文本长度超过阈值，保存为文件
-    if (text.length > MAX_INLINE_TEXT_LENGTH) {
+    if (text.length > 1000) {
       try {
         // 生成文件名
         const fileName = `${profileHash}.txt`;
@@ -335,33 +320,20 @@ export class LocalClipboard {
     }
   }
 
-  /** App 内的文本复制在 iOS 直接发布已写入的内容，避免再次弹出粘贴授权。 */
+  /** 将 App 内复制的文本写入系统剪贴板，并通知本地监听器。 */
   async copyText(text: string): Promise<void> {
-    if (Platform.OS === 'ios') {
-      await this.setClipboardContent(await createContentFromText(text));
-    } else {
-      await Clipboard.setStringAsync(text);
-    }
+    await this.setClipboardContent(await this.createTextContent(text));
   }
 
-  async setTextContent(content: ClipboardContent): Promise<boolean> {
-    try {
-      const text = await this.readTextContent(content);
-      if (isTextInvalid(text)) {
-        return false;
-      }
-      const written = await Clipboard.setStringAsync(text!);
-      if (written === false) throw new Error(i18n.t('clipboard.copyFailed'));
-      return true;
-    } catch (error) {
-      console.error('[ClipboardManager] Failed to set text content:', error);
-
-      // 保留原始错误信息，特别是 TransactionTooLargeException
-      if (error instanceof Error) {
-        throw error; // 直接抛出原始错误，保留详细信息
-      }
-      throw new Error('Failed to set text to clipboard');
+  async setTextContent(content: ClipboardContent, signal?: AbortSignal): Promise<boolean> {
+    const text = await this.readTextContent(content);
+    if (isTextInvalid(text)) {
+      return false;
     }
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    const written = await Clipboard.setStringAsync(text!);
+    if (written === false) throw new Error(i18n.t('clipboard.copyFailed'));
+    return true;
   }
 
   /**
@@ -384,13 +356,17 @@ export class LocalClipboard {
    * 设置剪贴板内容。写入期间自动暂停剪贴板监听，完成后恢复并立即触发一次检查。
    * 写入失败时直接抛出异常，由调用方处理。
    */
-  async setClipboardContent(content: ClipboardContent, isFromRemote = false): Promise<void> {
+  async setClipboardContent(
+    content: ClipboardContent,
+    isFromRemote = false,
+    signal?: AbortSignal
+  ): Promise<void> {
     let written: ClipboardContent | undefined;
     await this.copyLifecycleCallbacks?.onBeforeCopy();
     try {
       switch (content.type) {
         case 'Text':
-          if (!(await this.setTextContent(content))) return;
+          if (!(await this.setTextContent(content, signal))) return;
           break;
 
         case 'Image': {
@@ -403,6 +379,7 @@ export class LocalClipboard {
               await historyStorage.updateItem(content.profileHash, { localClipboardHash });
             }
           }
+          if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
           await this.setImageContent(content.fileUri);
           this.lastCopiedImage = content.profileHash
             ? { profileHash: content.profileHash, localClipboardHash }

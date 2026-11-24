@@ -99,7 +99,12 @@ describe('ClientService.uploadData', () => {
     await getClientService().uploadData(content);
 
     expect(mockUploadForStorage).toHaveBeenCalledTimes(1);
-    expect(mockUploadForStorage).toHaveBeenCalledWith(content, undefined, undefined);
+    expect(mockUploadForStorage).toHaveBeenCalledWith(
+      content,
+      undefined,
+      undefined,
+      expect.objectContaining({ type: 'syncclipboard' })
+    );
     expect(mockUploadForSyncClipboard).not.toHaveBeenCalled();
   });
 
@@ -113,7 +118,12 @@ describe('ClientService.uploadData', () => {
     await getClientService().uploadData(content);
 
     expect(mockUploadForSyncClipboard).toHaveBeenCalledTimes(1);
-    expect(mockUploadForSyncClipboard).toHaveBeenCalledWith(content, undefined, undefined);
+    expect(mockUploadForSyncClipboard).toHaveBeenCalledWith(
+      content,
+      undefined,
+      undefined,
+      expect.objectContaining({ type: 'syncclipboard' })
+    );
     expect(mockUploadForStorage).not.toHaveBeenCalled();
   });
 });

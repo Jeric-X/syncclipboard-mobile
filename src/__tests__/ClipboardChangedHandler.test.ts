@@ -147,7 +147,7 @@ describe('ClipboardChangedHandler 启动基线窗口', () => {
 
     await handler.processRemoteClipboardContent({ ...content });
 
-    expect(copyToLocalClipboard).toHaveBeenCalledWith(content);
+    expect(copyToLocalClipboard).toHaveBeenCalledWith(content, undefined);
     expect(clipboardSyncState.setRemoteContent).toHaveBeenCalledWith(content);
   });
 
@@ -172,7 +172,7 @@ describe('ClipboardChangedHandler 启动基线窗口', () => {
     await handler.processRemoteClipboardContent(next);
 
     expect(copyToLocalClipboard).toHaveBeenCalledTimes(1);
-    expect(copyToLocalClipboard).toHaveBeenCalledWith(next);
+    expect(copyToLocalClipboard).toHaveBeenCalledWith(next, undefined);
   });
 });
 
@@ -213,7 +213,11 @@ describe('远程图片自动复制', () => {
 
     expect(downloadRemoteClipboard).toHaveBeenCalledTimes(1);
     expect(localClipboard.setClipboardContent).toHaveBeenCalledTimes(1);
-    expect(localClipboard.setClipboardContent).toHaveBeenCalledWith(downloadedImage, true);
+    expect(localClipboard.setClipboardContent).toHaveBeenCalledWith(
+      downloadedImage,
+      true,
+      undefined
+    );
   });
 
   it('开启仅自动复制文字后仍下载图片，但不复制图片，文字仍正常复制', async () => {
@@ -225,12 +229,12 @@ describe('远程图片自动复制', () => {
 
     await handler.processRemoteClipboardContent({ ...image });
 
-    expect(downloadRemoteClipboard).toHaveBeenCalledWith(image);
+    expect(downloadRemoteClipboard).toHaveBeenCalledWith(image, undefined, undefined);
     expect(clipboardSyncState.setRemoteContent).toHaveBeenCalledWith(downloadedImage);
     expect(localClipboard.setClipboardContent).not.toHaveBeenCalled();
 
     await handler.processRemoteClipboardContent({ ...content });
-    expect(localClipboard.setClipboardContent).toHaveBeenCalledWith(content, true);
+    expect(localClipboard.setClipboardContent).toHaveBeenCalledWith(content, true, undefined);
   });
 
   it.each([false, true])('后台下载遵守仅自动复制文字开关：%s', async (textOnly) => {
@@ -268,7 +272,11 @@ describe('远程图片自动复制', () => {
     await handler.processRemoteClipboardContent({ ...image });
 
     expect(downloadRemoteClipboard).not.toHaveBeenCalled();
-    expect(localClipboard.setClipboardContent).toHaveBeenCalledWith(downloadedImage, true);
+    expect(localClipboard.setClipboardContent).toHaveBeenCalledWith(
+      downloadedImage,
+      true,
+      undefined
+    );
   });
 
   it('超过大小限制的图片不下载也不复制', async () => {

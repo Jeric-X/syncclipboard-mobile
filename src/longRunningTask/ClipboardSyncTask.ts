@@ -14,11 +14,15 @@ import { LongRunningTask } from './LongRunningTask';
 import { getClipboardSyncService } from '../services/sync/ClipboardSyncService';
 import { configService } from '../services/ConfigService';
 
-class ClipboardSyncTask extends LongRunningTask {
+export class ClipboardSyncTask extends LongRunningTask {
   readonly name = 'clipboardSync';
 
+  constructor(private readonly supportsBackgroundTasks: boolean) {
+    super();
+  }
+
   async start(): Promise<void> {
-    await getClipboardSyncService().start();
+    await getClipboardSyncService().start(this.supportsBackgroundTasks);
   }
 
   async stop(): Promise<void> {
@@ -34,5 +38,3 @@ class ClipboardSyncTask extends LongRunningTask {
     getClipboardSyncService().onConfigChanged(cfg);
   }
 }
-
-export const clipboardSyncTask = new ClipboardSyncTask();

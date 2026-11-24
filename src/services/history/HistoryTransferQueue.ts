@@ -3,6 +3,7 @@
  * 历史记录传输队列 - 管理数据上传/下载任务
  */
 
+import type { ServerConfig } from '@/types/api';
 import type { IHistoryAPI } from '@/api/history';
 import { HistoryAPINotInitializedError, RecordNotFoundError } from '@/errors';
 import { HistoryStorage } from '../../storage/HistoryStorage';
@@ -41,6 +42,7 @@ export interface TransferTask {
   abortController: AbortController;
   userCancelled?: boolean;
   isImmediateTask?: boolean;
+  uploadTargetVersion?: number;
   externalProgressReporter?: ProgressCallback;
   awaiter: Promise<ClipboardContent>;
 }
@@ -64,14 +66,16 @@ const DEFAULT_CONFIG: TransferQueueConfig = {
 export class HistoryTransferQueue {
   private historyStorage: HistoryStorage;
   private historyAPI: IHistoryAPI | null = null;
+  private targetKey?: string;
+  private targetVersion = 0;
 
   private pendingTasks: TransferTask[] = [];
   private activeTasks: Map<string, TransferTask> = new Map();
   private taskStatusCallbacks: Set<TaskStatusChangedCallback> = new Set();
-  private taskCompletionResolvers: Map<
-    string,
+  private taskCompletionResolvers: WeakMap<
+    TransferTask,
     { resolve: (content: ClipboardContent) => void; reject: (error: Error) => void }
-  > = new Map();
+  > = new WeakMap();
 
   private config: TransferQueueConfig;
   private isRunning = false;
@@ -87,7 +91,10 @@ export class HistoryTransferQueue {
   /**
    * 设置 History API
    */
-  setHistoryAPI(api: IHistoryAPI): void {
+  setHistoryAPI(api: IHistoryAPI, server?: ServerConfig): void {
+    const key = server && JSON.stringify({ ...server, name: undefined });
+    if (this.targetKey !== undefined && key !== this.targetKey) this.targetVersion++;
+    this.targetKey = key;
     this.historyAPI = api;
     this.signalQueue();
   }
@@ -118,6 +125,7 @@ export class HistoryTransferQueue {
 
     // 取消待处理任务
     for (const task of this.pendingTasks) {
+      this.rejectPendingTask(task);
       task.abortController.abort();
       task.status = 'cancelled';
       this.notifyStatusChanged(task);
@@ -154,6 +162,7 @@ export class HistoryTransferQueue {
 
     // 清空待处理队列
     for (const task of this.pendingTasks) {
+      this.rejectPendingTask(task);
       task.abortController.abort();
       task.status = 'cancelled';
       this.notifyStatusChanged(task);
@@ -176,7 +185,6 @@ export class HistoryTransferQueue {
     const item = parsed ? await this.historyStorage.getItem(parsed.hash) : null;
     const displayName = item?.text || profileId;
 
-    const key = this.getTaskKey(profileId, 'download');
     let resolveAwaiter: (content: ClipboardContent) => void;
     let rejectAwaiter: (error: Error) => void;
     const awaiter = new Promise<ClipboardContent>((resolve, reject) => {
@@ -197,7 +205,7 @@ export class HistoryTransferQueue {
       awaiter,
     };
 
-    this.taskCompletionResolvers.set(key, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
+    this.taskCompletionResolvers.set(task, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
     this.pendingTasks.push(task);
     this.notifyStatusChanged(task);
     this.signalQueue();
@@ -210,6 +218,7 @@ export class HistoryTransferQueue {
    * 添加上传任务
    */
   async addUploadTask(profileId: string): Promise<TransferTask> {
+    const uploadTargetVersion = this.targetVersion;
     const existingTask = this.findTask(profileId, 'upload');
     if (existingTask) {
       return existingTask;
@@ -219,7 +228,6 @@ export class HistoryTransferQueue {
     const item = parsed ? await this.historyStorage.getItem(parsed.hash) : null;
     const displayName = item?.text || profileId;
 
-    const key = this.getTaskKey(profileId, 'upload');
     let resolveAwaiter: (content: ClipboardContent) => void;
     let rejectAwaiter: (error: Error) => void;
     const awaiter = new Promise<ClipboardContent>((resolve, reject) => {
@@ -231,6 +239,7 @@ export class HistoryTransferQueue {
       profileId,
       displayName,
       type: 'upload',
+      uploadTargetVersion,
       status: 'pending',
       progress: -1,
       bytesTransferred: 0,
@@ -240,7 +249,7 @@ export class HistoryTransferQueue {
       awaiter,
     };
 
-    this.taskCompletionResolvers.set(key, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
+    this.taskCompletionResolvers.set(task, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
     this.pendingTasks.push(task);
     this.notifyStatusChanged(task);
     this.signalQueue();
@@ -305,7 +314,7 @@ export class HistoryTransferQueue {
       awaiter,
     };
 
-    this.taskCompletionResolvers.set(key, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
+    this.taskCompletionResolvers.set(task, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
     this.activeTasks.set(key, task);
     this.notifyStatusChanged(task);
 
@@ -326,13 +335,20 @@ export class HistoryTransferQueue {
   async executeImmediateUpload(
     content: ClipboardContent,
     progress?: ProgressCallback,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    server?: ServerConfig
   ): Promise<ClipboardContent> {
+    if (server && this.targetKey !== JSON.stringify({ ...server, name: undefined })) {
+      throw new Error('History upload is not ready for the selected server');
+    }
+    const uploadTargetVersion = this.targetVersion;
     const profileId = getProfileId(content.type, content.profileHash!);
 
     const existingTask = this.findTask(profileId, 'upload');
 
     if (existingTask) {
+      if (existingTask.uploadTargetVersion !== uploadTargetVersion)
+        throw new Error('An upload to the previous server is still finishing');
       existingTask.isImmediateTask = true;
       if (progress) {
         existingTask.externalProgressReporter = progress;
@@ -365,6 +381,7 @@ export class HistoryTransferQueue {
       profileId,
       displayName,
       type: 'upload',
+      uploadTargetVersion,
       status: 'pending',
       progress: -1,
       bytesTransferred: 0,
@@ -376,7 +393,7 @@ export class HistoryTransferQueue {
       awaiter,
     };
 
-    this.taskCompletionResolvers.set(key, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
+    this.taskCompletionResolvers.set(task, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
     this.activeTasks.set(key, task);
     this.notifyStatusChanged(task);
 
@@ -408,6 +425,7 @@ export class HistoryTransferQueue {
       (t) => t.profileId === profileId && t.type === type
     );
     if (pendingIndex >= 0) {
+      this.rejectPendingTask(task);
       this.pendingTasks.splice(pendingIndex, 1);
     }
 
@@ -416,6 +434,13 @@ export class HistoryTransferQueue {
     this.activeTasks.delete(key);
 
     return true;
+  }
+
+  private rejectPendingTask(task: TransferTask): void {
+    // 自动排队的任务可能没有等待者；显式加入的调用方仍能观察取消。
+    void task.awaiter.catch(() => {});
+    this.taskCompletionResolvers.get(task)?.reject(new Error('Task cancelled'));
+    this.taskCompletionResolvers.delete(task);
   }
 
   /**
@@ -566,11 +591,11 @@ export class HistoryTransferQueue {
     } finally {
       this.notifyStatusChanged(task);
       const key = this.getTaskKey(task.profileId, task.type);
-      this.activeTasks.delete(key);
+      if (this.activeTasks.get(key) === task) this.activeTasks.delete(key);
 
-      const resolver = this.taskCompletionResolvers.get(key);
+      const resolver = this.taskCompletionResolvers.get(task);
       if (resolver) {
-        this.taskCompletionResolvers.delete(key);
+        this.taskCompletionResolvers.delete(task);
         if (task.status === 'completed' && resultContent) {
           resolver.resolve(resultContent);
         } else if (task.status === 'failed') {
@@ -683,7 +708,13 @@ export class HistoryTransferQueue {
    * 3. 如果不存在，执行上传
    */
   private async executeUploadTask(task: TransferTask): Promise<ClipboardContent> {
-    if (!this.historyAPI) {
+    const api = this.historyAPI;
+    const checkTarget = () => {
+      if (task.uploadTargetVersion !== this.targetVersion)
+        throw new DOMException('Upload destination changed', 'AbortError');
+    };
+    checkTarget();
+    if (!api) {
       throw new HistoryAPINotInitializedError();
     }
 
@@ -699,10 +730,7 @@ export class HistoryTransferQueue {
 
     // 先检查服务器上是否已存在该记录
     try {
-      const existingRecord = await this.historyAPI.getRecord(
-        task.profileId,
-        task.abortController.signal
-      );
+      const existingRecord = await api.getRecord(task.profileId, task.abortController.signal);
       // 如果服务器记录已删除，视为不存在，继续上传
       if (existingRecord.isDeleted) {
         console.log(
@@ -710,6 +738,7 @@ export class HistoryTransferQueue {
         );
       } else {
         // 服务器已存在且未删除，直接标记为成功
+        checkTarget();
         await this.historyStorage.updateItem(parsed.hash, {
           version: existingRecord.version,
           lastModified: existingRecord.lastModified
@@ -740,7 +769,8 @@ export class HistoryTransferQueue {
 
     const dto = historyItemToDto(item);
 
-    await this.historyAPI.uploadRecord(dto, item.fileUri, task.abortController.signal, (info) => {
+    checkTarget();
+    await api.uploadRecord(dto, item.fileUri, task.abortController.signal, (info) => {
       task.bytesTransferred = info.bytesTransferred;
       task.totalBytes = info.totalBytes;
       if (info.progress >= 0) {
@@ -759,6 +789,7 @@ export class HistoryTransferQueue {
       }
     });
 
+    checkTarget();
     await this.historyStorage.updateSyncStatus(parsed.hash, HistorySyncStatus.Synced);
 
     return historyItemToContent(item);

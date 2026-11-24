@@ -47,6 +47,23 @@ describe('LocalClipboard.setTextContent', () => {
     expect(Clipboard.setStringAsync).toHaveBeenCalledWith(fullText);
   });
 
+  it('does not write an attachment if its session ends while reading the full text', async () => {
+    const session = new AbortController();
+    MockedFile.mockImplementationOnce(() => ({
+      text: async () => {
+        session.abort();
+        return 'full text';
+      },
+    }));
+    await expect(
+      localClipboard.setTextContent(
+        { type: 'Text', hasData: true, fileUri: 'file:///full.txt', text: 'preview' },
+        session.signal
+      )
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(Clipboard.setStringAsync).not.toHaveBeenCalled();
+  });
+
   it('reports an unreadable attachment without copying its preview', async () => {
     MockedFile.mockImplementationOnce(() => ({
       text: jest.fn().mockRejectedValue(new Error('missing')),
