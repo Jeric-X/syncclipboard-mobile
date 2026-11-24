@@ -14,10 +14,12 @@ import {
   RefreshControl,
   TouchableOpacity,
 } from 'react-native';
+import { isAxiosError, isCancel } from 'axios';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
+import { APIError } from '@/errors';
 import { useTheme } from '@/hooks/useTheme';
 import { useLocalClipboardStore } from '@/stores/localClipboardStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -98,25 +100,50 @@ export function HomeScreen() {
   const iosTextServer =
     Platform.OS === 'ios' && activeServer?.type !== 's3' ? activeServer?.id : undefined;
   const unsupportedIosServer = Platform.OS === 'ios' && activeServer?.type === 's3';
+  const reportUploadError = useCallback(
+    (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        isCancel(error) ||
+        (error instanceof Error && error.name === 'AbortError') ||
+        /^(?:task (?:was )?)?(?:cancelled|canceled|aborted)$/i.test(message)
+      )
+        return;
+      const title = t('home.uploadFailed');
+      const data =
+        error instanceof APIError
+          ? error.response
+          : isAxiosError(error)
+            ? error.response?.data
+            : undefined;
+      const detail = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+      setError({ title, message: detail ? `${message}\n${detail}` : message });
+      showMessage(title, 'error');
+    },
+    [setError, showMessage, t]
+  );
   const uploadClipboardText = useCallback(async () => {
     if (useClipboardSyncServiceStore.getState().uploadingClipboard) return;
     const selected = useSettingsStore.getState().getActiveServer();
     const session = getClipboardSyncService().getSessionSignal();
     if (!selected || !session || session.aborted) return;
-    const publish = async (content: ClipboardContent) => {
+    const publish = async (input: ClipboardContent | string) => {
       if (
         session.aborted ||
         JSON.stringify(useSettingsStore.getState().getActiveServer()) !== JSON.stringify(selected)
       )
         return;
       try {
+        clearError();
+        const content = typeof input === 'string' ? await createContentFromText(input) : input;
         const sent = await uploadLocalClipboard(content, session, selected);
+        if (session.aborted) return;
         showMessage(
           t(sent ? 'home.uploadSuccess' : 'home.uploadFailed'),
           sent ? 'success' : 'error'
         );
-      } catch {
-        showMessage(t('home.uploadFailed'), 'error');
+      } catch (error) {
+        if (!session.aborted) reportUploadError(error);
       }
     };
     const content = useLocalClipboardStore.getState().currentContent;
@@ -129,15 +156,14 @@ export function HomeScreen() {
         {
           text: t('clipboard.upload'),
           onPress: async (text?: string) => {
-            if (text && text.length <= MAX_INLINE_TEXT_LENGTH)
-              await publish(await createContentFromText(text));
-            else showMessage(t('home.uploadFailed'), 'error');
+            if (text && text.length <= MAX_INLINE_TEXT_LENGTH) await publish(text);
+            else showMessage(t('home.pasteTextHint'), 'error');
           },
         },
       ],
       'plain-text'
     );
-  }, [showMessage, t]);
+  }, [clearError, reportUploadError, showMessage, t]);
 
   const handleWordPick = async (content: ClipboardContent) => {
     try {
@@ -300,30 +326,7 @@ export function HomeScreen() {
       console.log('[HomeScreen] Starting upload...');
       await uploadLocalClipboard();
     } catch (error: unknown) {
-      console.error('[HomeScreen] Upload exception:', error);
-      const errorMessage = error instanceof Error ? error.message : t('home.cantUploadToServer');
-      const normalizedMessage = errorMessage.toLowerCase();
-      const isCanceled =
-        (error instanceof Error && error.name === 'AbortError') ||
-        normalizedMessage.includes('abort') ||
-        normalizedMessage.includes('canceled') ||
-        normalizedMessage.includes('cancelled');
-
-      if (isCanceled) {
-        return;
-      }
-
-      const errorObj = error instanceof Error ? (error as unknown as Record<string, unknown>) : {};
-      const errorDetails =
-        error instanceof Error && errorObj.response
-          ? JSON.stringify((errorObj.response as Record<string, unknown>).data, null, 2)
-          : errorMessage;
-      console.log('[HomeScreen] Setting error details:', errorDetails);
-      setError({
-        title: t('home.uploadFailed'),
-        message: errorDetails,
-      });
-      showMessage(t('home.uploadFailed'), 'error');
+      reportUploadError(error);
     }
   };
 
