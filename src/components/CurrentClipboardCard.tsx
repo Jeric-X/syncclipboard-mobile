@@ -208,11 +208,10 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
     return false;
   };
 
-  const requiresDownload = needsFileDownload();
+  const showActionButton = isRemote ? !!(onAction && needsFileDownload()) : !!onAction;
   const hasFullText =
     clipboard.type === 'Text' &&
     (clipboard.hasData ? !!clipboard.fileUri : !isTextInvalid(clipboard.text));
-  const showActionButton = !!onAction && (!isRemote || requiresDownload);
 
   // 可以"打开"的非文本类型（有 fileUri）- Group类型不支持打开
   const canOpenFile =
@@ -556,7 +555,6 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
               styles.actionButtonLast,
               { borderColor: theme.colors.primary },
             ]}
-            disabled={acting && !onCancelAction}
             onPress={acting ? onCancelAction : onAction}
           >
             {acting && actionProgress && (
@@ -584,7 +582,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
                     actionProgress.bytesTransferred
                   )} / ${formatFileSize(actionProgress.totalBytes)}`
                 : acting
-                  ? t(onCancelAction ? 'common.cancel' : 'quickTile.uploadingClipboard')
+                  ? t('common.cancel')
                   : isRemote
                     ? t('clipboard.download')
                     : t('clipboard.upload')}
