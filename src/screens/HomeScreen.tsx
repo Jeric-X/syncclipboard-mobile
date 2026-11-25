@@ -5,12 +5,12 @@
 
 import React, { useState, useLayoutEffect, useMemo, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
-import { isAxiosError, isCancel } from 'axios';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
+import { localClipboard } from '@/services/clipboard/LocalClipboard';
+import * as ClipboardProxy from '@/utils/clipboardProxy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { APIError } from '@/errors';
 import { useTheme } from '@/hooks/useTheme';
 import { useLocalClipboardStore } from '@/stores/localClipboardStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -32,8 +32,6 @@ import {
   cancelRemoteClipboardDownload,
   refreshMonitor,
 } from '@/services/sync/ClipboardSyncActions';
-import { getClipboardSyncService } from '@/services/sync/ClipboardSyncService';
-import { localClipboard } from '@/services/clipboard/LocalClipboard';
 import type { ProgressInfo } from '@/types/progress';
 import { updateService } from '@/services/update';
 import { useUpdateDialog } from '@/hooks/useUpdateDialog';
@@ -85,28 +83,7 @@ export function HomeScreen() {
   }, [isLoaded, showUpdateDialog]);
 
   const activeServer = getActiveServer();
-  const reportUploadError = useCallback(
-    (error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      if (
-        isCancel(error) ||
-        (error instanceof Error && error.name === 'AbortError') ||
-        /^(?:task (?:was )?)?(?:cancelled|canceled|aborted)$/i.test(message)
-      )
-        return;
-      const title = t('home.uploadFailed');
-      const data =
-        error instanceof APIError
-          ? error.response
-          : isAxiosError(error)
-            ? error.response?.data
-            : undefined;
-      const detail = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-      setError({ title, message: detail ? `${message}\n${detail}` : message });
-      showMessage(title, 'error');
-    },
-    [setError, showMessage, t]
-  );
+
   const handleWordPick = async (content: ClipboardContent) => {
     try {
       setWordPickerText(await localClipboard.readTextContent(content));
@@ -256,27 +233,36 @@ export function HomeScreen() {
 
   // 快速操作
   const handleUpload = async () => {
-    const session = getClipboardSyncService().getSessionSignal();
-    if (
-      !currentContent ||
-      !activeServer ||
-      !session ||
-      session.aborted ||
-      JSON.stringify(activeServer) !==
-        JSON.stringify(useSettingsStore.getState().getActiveServer()) ||
-      useClipboardSyncServiceStore.getState().uploadingClipboard
-    )
-      return;
     try {
       clearError();
-      const sent = await uploadLocalClipboard(currentContent, session, activeServer);
-      if (!session.aborted)
-        showMessage(
-          t(sent ? 'home.uploadSuccess' : 'home.uploadFailed'),
-          sent ? 'success' : 'error'
-        );
-    } catch (error) {
-      if (!session.aborted) reportUploadError(error);
+
+      console.log('[HomeScreen] Starting upload...');
+      await uploadLocalClipboard();
+    } catch (error: unknown) {
+      console.error('[HomeScreen] Upload exception:', error);
+      const errorMessage = error instanceof Error ? error.message : t('home.cantUploadToServer');
+      const normalizedMessage = errorMessage.toLowerCase();
+      const isCanceled =
+        (error instanceof Error && error.name === 'AbortError') ||
+        normalizedMessage.includes('abort') ||
+        normalizedMessage.includes('canceled') ||
+        normalizedMessage.includes('cancelled');
+
+      if (isCanceled) {
+        return;
+      }
+
+      const errorObj = error instanceof Error ? (error as unknown as Record<string, unknown>) : {};
+      const errorDetails =
+        error instanceof Error && errorObj.response
+          ? JSON.stringify((errorObj.response as Record<string, unknown>).data, null, 2)
+          : errorMessage;
+      console.log('[HomeScreen] Setting error details:', errorDetails);
+      setError({
+        title: t('home.uploadFailed'),
+        message: errorDetails,
+      });
+      showMessage(t('home.uploadFailed'), 'error');
     }
   };
 
@@ -292,23 +278,25 @@ export function HomeScreen() {
 
   const handleCopyError = async () => {
     if (error) {
-      await localClipboard.copyText(`${error.title}\n\n${error.message}`);
+      await ClipboardProxy.setStringAsync(`${error.title}\n\n${error.message}`);
       showMessage(t('home.errorCopied'), 'success');
     }
   };
 
+  // 检查是否需要下载文件
+  const needsDownload = useMemo(() => {
+    if (!remoteContent) return false;
+    return !!(remoteContent.hasData && remoteContent.fileName && !remoteContent.fileUri);
+  }, [remoteContent]);
+
   // 下载远程剪贴板的文件数据
   const handleDownloadRemoteFile = async () => {
-    const session = getClipboardSyncService().getSessionSignal();
-    if (!session) return;
+    if (!remoteContent || !needsDownload) return;
     try {
-      clearError();
-      await downloadRemoteClipboard(remoteContent, undefined, session);
+      await downloadRemoteClipboard();
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') return;
-      const title = t('home.fileDownloadFailed');
-      setError({ title, message: error instanceof Error ? error.message : String(error) });
-      showMessage(title, 'error');
+      console.error('[HomeScreen] Failed to download remote file:', error);
+      showMessage(t('home.fileDownloadFailed'), 'error');
     }
   };
 
