@@ -1,4 +1,3 @@
-import type { ServerConfig } from '@/types/api';
 import type { ClipboardContent } from '@/types/clipboard';
 import { getHistoryTransferQueue, type ProgressCallback } from '../history/HistoryTransferQueue';
 import { historyService } from '../history/HistoryService';
@@ -31,13 +30,12 @@ export async function downloadForSyncClipboard(
 export async function uploadForSyncClipboard(
   content: ClipboardContent,
   progress?: ProgressCallback,
-  signal?: AbortSignal,
-  server?: ServerConfig
+  signal?: AbortSignal
 ): Promise<ClipboardContent> {
   if (!content.profileHash) {
     throw new Error('No profileHash in content');
   }
 
   const queue = getHistoryTransferQueue();
-  return await queue.executeImmediateUpload(content, progress, signal, server);
+  return await queue.executeImmediateUpload(content, progress, signal);
 }

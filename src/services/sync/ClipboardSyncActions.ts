@@ -1,4 +1,3 @@
-import type { ServerConfig } from '@/types/api';
 import type { ClipboardContent } from '@/types/clipboard';
 import type { ProgressInfo } from '@/types/progress';
 import type { ProgressDetail } from '@/types/progress';
@@ -40,8 +39,7 @@ const _downloadOp = new DedupedOperation<ClipboardContent, ClipboardContent | nu
 export async function setRemoteClipboard(
   content: ClipboardContent,
   signal: AbortSignal,
-  onProgress?: (info: ProgressInfo) => void,
-  selected?: ServerConfig
+  onProgress?: (info: ProgressInfo) => void
 ): Promise<boolean> {
   // 设置刚上传的 hash，防止上传的内容被立即下载回来（竞态条件）
   const profileHash = content.profileHash || content.text;
@@ -52,14 +50,13 @@ export async function setRemoteClipboard(
   return _uploadOp.execute(content, onProgress, signal, async (sig, notify) => {
     if (sig.aborted) throw new DOMException('Aborted', 'AbortError');
 
-    const server = selected ?? (await configService.getActiveServer());
+    const server = await configService.getActiveServer();
     if (!server) throw new Error(i18n.t('common.serverNotConfigured'));
 
     await historyService.addLocalContent(content);
 
     if (sig.aborted) throw new DOMException('Aborted', 'AbortError');
-    if (selected) await getClientService().setRemoteClipboard(content, notify, sig, selected);
-    else await getClientService().setRemoteClipboard(content, notify, sig);
+    await getClientService().setRemoteClipboard(content, notify, sig);
     if (sig.aborted) throw new DOMException('Aborted', 'AbortError');
 
     // 上传完成后，更新 remoteContent
@@ -76,8 +73,7 @@ export async function setRemoteClipboard(
  */
 export async function uploadLocalClipboard(
   content?: ClipboardContent | null,
-  signal?: AbortSignal,
-  selected?: ServerConfig
+  signal?: AbortSignal
 ): Promise<boolean> {
   const actualContent = content ?? clipboardMonitor.getLastContent();
   if (!actualContent) return false;
@@ -86,14 +82,9 @@ export async function uploadLocalClipboard(
   clipboardSyncState.setUploadingClipboard(true);
   clipboardSyncState.setUploadProgress(null);
   try {
-    return await setRemoteClipboard(
-      actualContent,
-      uploadSignal,
-      (info) => {
-        clipboardSyncState.setUploadProgress(info);
-      },
-      selected
-    );
+    return await setRemoteClipboard(actualContent, uploadSignal, (info) => {
+      clipboardSyncState.setUploadProgress(info);
+    });
   } finally {
     clipboardSyncState.setUploadingClipboard(false);
     clipboardSyncState.setUploadProgress(null);

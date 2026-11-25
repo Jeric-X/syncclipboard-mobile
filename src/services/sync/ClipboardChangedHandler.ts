@@ -269,9 +269,7 @@ class ClipboardChangedHandler {
     if (isStartupBaseline) return;
 
     try {
-      const uploaded = signal
-        ? await uploadLocalClipboard(content, signal, activeServer)
-        : await uploadLocalClipboard(content);
+      const uploaded = await uploadLocalClipboard(content, signal);
       if (uploaded && Platform.OS === 'android') {
         const preview = this.getContentPreview(content);
         updateForegroundNotification(true, preview);

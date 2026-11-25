@@ -83,7 +83,7 @@ export class HistorySyncService {
       historyService.addChangeCallback(this.storageChangeCallback);
 
       const transferQueue = getHistoryTransferQueue();
-      transferQueue.setHistoryAPI(config.historyAPI, config.serverConfig);
+      transferQueue.setHistoryAPI(config.historyAPI);
       await transferQueue.start();
     } catch (error) {
       await this.destroy();
@@ -141,7 +141,7 @@ export class HistorySyncService {
 
     // 更新传输队列 API
     const transferQueue = getHistoryTransferQueue();
-    transferQueue.setHistoryAPI(config.historyAPI, config.serverConfig);
+    transferQueue.setHistoryAPI(config.historyAPI);
 
     // 生命周期只等待本地配置；旧同步退出后在后台同步最新服务器。
     const previous = this.syncOperation;
@@ -1116,8 +1116,8 @@ export class HistorySyncService {
 
     if (this.isInitialized()) {
       const serverChanged =
-        JSON.stringify({ ...this.serverConfig, name: undefined }) !==
-        JSON.stringify({ ...serverConfig, name: undefined });
+        this.serverConfig?.url !== serverConfig.url ||
+        this.serverConfig?.username !== serverConfig.username;
 
       if (serverChanged) {
         console.log('[HistorySyncService] Server changed, switching...');

@@ -1,7 +1,6 @@
 import type { ClipboardContent } from '@/types/clipboard';
 import type { ProgressCallback } from '../history/HistoryTransferQueue';
 import { configService } from '../ConfigService';
-import type { ServerConfig } from '@/types/api';
 import { getAPIClient } from '../ClientFactory';
 import { contentToProfileDto } from '@/utils/clipboard/convert';
 import { downloadForStorage, uploadForStorage } from './StorageClient';
@@ -42,32 +41,33 @@ export class ClientService {
   async uploadData(
     content: ClipboardContent,
     progress?: ProgressCallback,
-    signal?: AbortSignal,
-    selected?: ServerConfig
+    signal?: AbortSignal
   ): Promise<ClipboardContent | void> {
-    const server = selected ?? (await configService.getActiveServer());
-    if (!server) throw new Error('No active server configured');
-    if (server.type === 'syncclipboard' && (await configService.getConfig()).enableHistorySync) {
-      return uploadForSyncClipboard(content, progress, signal, server);
+    const server = await configService.getActiveServer();
+    if (!server) {
+      throw new Error('No active server configured');
     }
-    return uploadForStorage(content, progress, signal, server);
+
+    if (server.type === 'syncclipboard') {
+      const config = await configService.getConfig();
+      if (!config.enableHistorySync) {
+        return uploadForStorage(content, progress, signal);
+      }
+      return uploadForSyncClipboard(content, progress, signal);
+    }
+    return uploadForStorage(content, progress, signal);
   }
 
   async setRemoteClipboard(
     content: ClipboardContent,
     progress?: ProgressCallback,
-    signal?: AbortSignal,
-    selected?: ServerConfig
+    signal?: AbortSignal
   ): Promise<void> {
-    const server = selected ?? (await configService.getActiveServer());
-    if (!server) throw new Error('No active server configured');
     if (content.hasData) {
-      // 存储后端由 putContent 发布 profile；历史队列只上传附件，需继续发布。
-      const historyContent = await this.uploadData(content, progress, signal, server);
-      if (!historyContent) return;
+      await this.uploadData(content, progress, signal);
     }
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    const apiClient = await getAPIClient(server);
+
+    const apiClient = await getAPIClient();
     const profile = await contentToProfileDto(content, { signal });
     await apiClient.putClipboard(profile, signal);
   }

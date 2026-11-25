@@ -131,7 +131,7 @@ describe('ClipboardChangedHandler 启动基线窗口', () => {
 
     await handler.handleAutoUpload(content);
 
-    expect(uploadLocalClipboard).toHaveBeenCalledWith(content);
+    expect(uploadLocalClipboard).toHaveBeenCalledWith(content, undefined);
   });
 
   it('两秒内首次远程内容仅建立基线', async () => {
@@ -160,7 +160,7 @@ describe('ClipboardChangedHandler 启动基线窗口', () => {
     await handler.handleAutoUpload(next);
 
     expect(uploadLocalClipboard).toHaveBeenCalledTimes(1);
-    expect(uploadLocalClipboard).toHaveBeenCalledWith(next);
+    expect(uploadLocalClipboard).toHaveBeenCalledWith(next, undefined);
   });
 
   it('两秒内建立远端基线后，新变化仍正常复制', async () => {

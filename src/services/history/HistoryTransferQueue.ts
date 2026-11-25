@@ -3,7 +3,6 @@
  * 历史记录传输队列 - 管理数据上传/下载任务
  */
 
-import type { ServerConfig } from '@/types/api';
 import type { IHistoryAPI } from '@/api/history';
 import { HistoryAPINotInitializedError, RecordNotFoundError } from '@/errors';
 import { HistoryStorage } from '../../storage/HistoryStorage';
@@ -42,7 +41,6 @@ export interface TransferTask {
   abortController: AbortController;
   userCancelled?: boolean;
   isImmediateTask?: boolean;
-  uploadTargetVersion?: number;
   externalProgressReporter?: ProgressCallback;
   awaiter: Promise<ClipboardContent>;
 }
@@ -66,8 +64,6 @@ const DEFAULT_CONFIG: TransferQueueConfig = {
 export class HistoryTransferQueue {
   private historyStorage: HistoryStorage;
   private historyAPI: IHistoryAPI | null = null;
-  private targetKey?: string;
-  private targetVersion = 0;
 
   private pendingTasks: TransferTask[] = [];
   private activeTasks: Map<string, TransferTask> = new Map();
@@ -91,10 +87,7 @@ export class HistoryTransferQueue {
   /**
    * 设置 History API
    */
-  setHistoryAPI(api: IHistoryAPI, server?: ServerConfig): void {
-    const key = server && JSON.stringify({ ...server, name: undefined });
-    if (this.targetKey !== undefined && key !== this.targetKey) this.targetVersion++;
-    this.targetKey = key;
+  setHistoryAPI(api: IHistoryAPI): void {
     this.historyAPI = api;
     this.signalQueue();
   }
@@ -218,7 +211,6 @@ export class HistoryTransferQueue {
    * 添加上传任务
    */
   async addUploadTask(profileId: string): Promise<TransferTask> {
-    const uploadTargetVersion = this.targetVersion;
     const existingTask = this.findTask(profileId, 'upload');
     if (existingTask) {
       return existingTask;
@@ -239,7 +231,6 @@ export class HistoryTransferQueue {
       profileId,
       displayName,
       type: 'upload',
-      uploadTargetVersion,
       status: 'pending',
       progress: -1,
       bytesTransferred: 0,
@@ -335,20 +326,13 @@ export class HistoryTransferQueue {
   async executeImmediateUpload(
     content: ClipboardContent,
     progress?: ProgressCallback,
-    signal?: AbortSignal,
-    server?: ServerConfig
+    signal?: AbortSignal
   ): Promise<ClipboardContent> {
-    if (server && this.targetKey !== JSON.stringify({ ...server, name: undefined })) {
-      throw new Error('History upload is not ready for the selected server');
-    }
-    const uploadTargetVersion = this.targetVersion;
     const profileId = getProfileId(content.type, content.profileHash!);
 
     const existingTask = this.findTask(profileId, 'upload');
 
     if (existingTask) {
-      if (existingTask.uploadTargetVersion !== uploadTargetVersion)
-        throw new Error('An upload to the previous server is still finishing');
       existingTask.isImmediateTask = true;
       if (progress) {
         existingTask.externalProgressReporter = progress;
@@ -381,7 +365,6 @@ export class HistoryTransferQueue {
       profileId,
       displayName,
       type: 'upload',
-      uploadTargetVersion,
       status: 'pending',
       progress: -1,
       bytesTransferred: 0,
@@ -708,13 +691,7 @@ export class HistoryTransferQueue {
    * 3. 如果不存在，执行上传
    */
   private async executeUploadTask(task: TransferTask): Promise<ClipboardContent> {
-    const api = this.historyAPI;
-    const checkTarget = () => {
-      if (task.uploadTargetVersion !== this.targetVersion)
-        throw new DOMException('Upload destination changed', 'AbortError');
-    };
-    checkTarget();
-    if (!api) {
+    if (!this.historyAPI) {
       throw new HistoryAPINotInitializedError();
     }
 
@@ -730,7 +707,10 @@ export class HistoryTransferQueue {
 
     // 先检查服务器上是否已存在该记录
     try {
-      const existingRecord = await api.getRecord(task.profileId, task.abortController.signal);
+      const existingRecord = await this.historyAPI.getRecord(
+        task.profileId,
+        task.abortController.signal
+      );
       // 如果服务器记录已删除，视为不存在，继续上传
       if (existingRecord.isDeleted) {
         console.log(
@@ -738,7 +718,6 @@ export class HistoryTransferQueue {
         );
       } else {
         // 服务器已存在且未删除，直接标记为成功
-        checkTarget();
         await this.historyStorage.updateItem(parsed.hash, {
           version: existingRecord.version,
           lastModified: existingRecord.lastModified
@@ -769,8 +748,7 @@ export class HistoryTransferQueue {
 
     const dto = historyItemToDto(item);
 
-    checkTarget();
-    await api.uploadRecord(dto, item.fileUri, task.abortController.signal, (info) => {
+    await this.historyAPI.uploadRecord(dto, item.fileUri, task.abortController.signal, (info) => {
       task.bytesTransferred = info.bytesTransferred;
       task.totalBytes = info.totalBytes;
       if (info.progress >= 0) {
@@ -789,7 +767,6 @@ export class HistoryTransferQueue {
       }
     });
 
-    checkTarget();
     await this.historyStorage.updateSyncStatus(parsed.hash, HistorySyncStatus.Synced);
 
     return historyItemToContent(item);
