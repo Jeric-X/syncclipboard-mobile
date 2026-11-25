@@ -91,8 +91,7 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
   }
 
   override async onForeground(): Promise<void> {
-    if (this._started && this._activeServer)
-      this.runInBackground(() => remoteClipboardMonitor.handleForeground());
+    if (this._started) this.runInBackground(() => remoteClipboardMonitor.handleForeground());
   }
 
   private runInBackground(operation: () => Promise<void>): void {
