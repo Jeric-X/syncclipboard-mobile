@@ -62,8 +62,6 @@ const en: DeepString<typeof zh> = {
     localClipboard: 'Local Clipboard',
     noServerTitle: 'No server configured',
     noServerDescription: 'Add a server configuration in Settings to enable sync',
-    pasteTextHint: 'Paste the text to upload here.',
-    uploadClipboardText: 'Upload clipboard text',
     uploadImage: 'Upload Image',
     uploadFile: 'Upload File',
     cancelingUpload: 'Canceling upload...',

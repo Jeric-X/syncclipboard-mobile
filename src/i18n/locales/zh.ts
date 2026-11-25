@@ -55,8 +55,6 @@ const zh = {
     localClipboard: '本地剪贴板',
     noServerTitle: '未配置服务器',
     noServerDescription: '请在"设置"页面添加服务器配置以启用同步功能',
-    pasteTextHint: '在此粘贴要上传的文本。',
-    uploadClipboardText: '上传本机剪贴板文本',
     uploadImage: '上传图片',
     uploadFile: '上传文件',
     cancelingUpload: '正在取消上传...',

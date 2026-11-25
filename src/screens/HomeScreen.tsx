@@ -4,16 +4,7 @@
  */
 
 import React, { useState, useLayoutEffect, useMemo, useCallback, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  Button,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { isAxiosError, isCancel } from 'axios';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
@@ -24,7 +15,6 @@ import { useTheme } from '@/hooks/useTheme';
 import { useLocalClipboardStore } from '@/stores/localClipboardStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useClipboardSyncServiceStore } from '@/serviceState/ClipboardSyncState';
-import type { ServerConfig } from '@/types/api';
 import { ClipboardContent } from '@/types/clipboard';
 import { CurrentClipboardCard } from '@/components/CurrentClipboardCard';
 import { MessageToast } from '@/components/MessageToast';
@@ -52,11 +42,6 @@ export function HomeScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const navigation = useNavigation();
-  const [pasteText, setPasteText] = useState('');
-  const [pasteSession, setPasteSession] = useState<{
-    signal: AbortSignal;
-    server: ServerConfig;
-  } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [fileUploadPayload, setFileUploadPayload] = useState<{
     uri: string;
@@ -122,42 +107,6 @@ export function HomeScreen() {
     },
     [setError, showMessage, t]
   );
-  const uploadContent = useCallback(
-    async (content: ClipboardContent | string, session: AbortSignal, server: ServerConfig) => {
-      if (
-        JSON.stringify(server) !== JSON.stringify(useSettingsStore.getState().getActiveServer()) ||
-        session.aborted ||
-        useClipboardSyncServiceStore.getState().uploadingClipboard
-      )
-        return;
-      try {
-        clearError();
-        const data =
-          typeof content === 'string' ? await localClipboard.createTextContent(content) : content;
-        const sent = await uploadLocalClipboard(data, session, server);
-        if (!session.aborted)
-          showMessage(
-            t(sent ? 'home.uploadSuccess' : 'home.uploadFailed'),
-            sent ? 'success' : 'error'
-          );
-        return sent && !session.aborted;
-      } catch (error) {
-        if (!session.aborted) reportUploadError(error);
-      }
-    },
-    [clearError, reportUploadError, showMessage, t]
-  );
-
-  const uploadClipboardText = useCallback(async () => {
-    const session = getClipboardSyncService().getSessionSignal();
-    if (!session || !activeServer) return;
-    const content = await localClipboard.getClipboardContent();
-    if (session.aborted) return;
-    if (content?.type === 'Text') return uploadContent(content, session, activeServer);
-    setPasteText('');
-    setPasteSession({ signal: session, server: activeServer });
-  }, [activeServer, uploadContent]);
-
   const handleWordPick = async (content: ClipboardContent) => {
     try {
       setWordPickerText(await localClipboard.readTextContent(content));
@@ -274,9 +223,6 @@ export function HomeScreen() {
   // 菜单项配置
   const menuItems = useMemo<MenuItemConfig[]>(
     () => [
-      ...(activeServer
-        ? [{ label: t('home.uploadClipboardText'), onPress: uploadClipboardText }]
-        : []),
       {
         label: t('home.uploadImage'),
         onPress: handleUploadImage,
@@ -288,13 +234,13 @@ export function HomeScreen() {
         disabled: !!fileUploadPayload,
       },
     ],
-    [activeServer, uploadClipboardText, handleUploadImage, handleUploadFile, fileUploadPayload, t]
+    [handleUploadImage, handleUploadFile, fileUploadPayload, t]
   );
 
   // 设置标题栏菜单按钮
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerRight: () => (menuItems.length ? <TopRightMenu items={menuItems} /> : null),
+      headerRight: () => <TopRightMenu items={menuItems} />,
     });
   }, [navigation, menuItems]);
 
@@ -311,8 +257,27 @@ export function HomeScreen() {
   // 快速操作
   const handleUpload = async () => {
     const session = getClipboardSyncService().getSessionSignal();
-    if (activeServer && session && currentContent)
-      await uploadContent(currentContent, session, activeServer);
+    if (
+      !currentContent ||
+      !activeServer ||
+      !session ||
+      session.aborted ||
+      JSON.stringify(activeServer) !==
+        JSON.stringify(useSettingsStore.getState().getActiveServer()) ||
+      useClipboardSyncServiceStore.getState().uploadingClipboard
+    )
+      return;
+    try {
+      clearError();
+      const sent = await uploadLocalClipboard(currentContent, session, activeServer);
+      if (!session.aborted)
+        showMessage(
+          t(sent ? 'home.uploadSuccess' : 'home.uploadFailed'),
+          sent ? 'success' : 'error'
+        );
+    } catch (error) {
+      if (!session.aborted) reportUploadError(error);
+    }
   };
 
   // 取消剪贴板上传
@@ -374,29 +339,6 @@ export function HomeScreen() {
           />
         }
       >
-        {pasteSession && !pasteSession.signal.aborted && pasteSession.server === activeServer && (
-          <View style={styles.section}>
-            <TextInput
-              accessibilityLabel={t('home.uploadClipboardText')}
-              placeholder={t('home.pasteTextHint')}
-              style={{ color: theme.colors.text }}
-              multiline
-              autoFocus
-              value={pasteText}
-              onChangeText={setPasteText}
-            />
-            <Button
-              title={t('clipboard.upload')}
-              disabled={!pasteText || uploadingClipboard}
-              onPress={async () => {
-                if (await uploadContent(pasteText, pasteSession.signal, pasteSession.server)) {
-                  setPasteSession((current) => (current === pasteSession ? null : current));
-                }
-              }}
-            />
-            <Button title={t('common.cancel')} onPress={() => setPasteSession(null)} />
-          </View>
-        )}
         {/* 当有服务器配置时显示远程和本地剪贴板 */}
         {activeServer ? (
           <>
