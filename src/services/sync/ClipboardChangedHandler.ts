@@ -214,7 +214,7 @@ export class ClipboardChangedHandler {
     console.log('[ClipboardChangedHandler] Copied to local clipboard');
   }
 
-  async handleAutoUpload(content: ClipboardContent, signal?: AbortSignal): Promise<void> {
+  async handleAutoUpload(content: ClipboardContent): Promise<void> {
     const isStartupBaseline = shouldUseStartupBaseline(this.lastLocalProfileHash, 'local');
     const config = await this.getConfig();
 
@@ -246,7 +246,7 @@ export class ClipboardChangedHandler {
     if (isStartupBaseline) return;
 
     try {
-      const uploaded = await uploadLocalClipboard(content, signal);
+      const uploaded = await uploadLocalClipboard(content);
       if (uploaded && Platform.OS === 'android') {
         const preview = this.getContentPreview(content);
         updateForegroundNotification(true, preview);

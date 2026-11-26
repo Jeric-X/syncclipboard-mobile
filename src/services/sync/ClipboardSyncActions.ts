@@ -69,17 +69,14 @@ export async function setRemoteClipboard(
  * @param content 剪贴板内容；为 null/undefined 时自动从本地剪贴板读取
  * @returns `true` 表示上传已完成，`false` 表示无内容可上传
  */
-export async function uploadLocalClipboard(
-  content?: ClipboardContent | null,
-  signal?: AbortSignal
-): Promise<boolean> {
+export async function uploadLocalClipboard(content?: ClipboardContent | null): Promise<boolean> {
   const actualContent = content ?? clipboardMonitor.getLastContent();
   if (!actualContent) return false;
-  const uploadSignal = signal ?? new AbortController().signal;
+  const controller = new AbortController();
   clipboardSyncState.setUploadingClipboard(true);
   clipboardSyncState.setUploadProgress(null);
   try {
-    return await setRemoteClipboard(actualContent, uploadSignal, (info) => {
+    return await setRemoteClipboard(actualContent, controller.signal, (info) => {
       clipboardSyncState.setUploadProgress(info);
     });
   } finally {

@@ -97,8 +97,11 @@ it.each(['local', 'remote'])(
         listener('background');
       }
       service.onConfigChanged(DEFAULT_APP_CONFIG);
-      const signal = handle.mock.calls[0][1];
-      expect(signal.aborted).toBe(false);
+      if (side === 'local') {
+        expect(handle.mock.calls[0]).toHaveLength(1);
+      } else {
+        expect(handle.mock.calls[0][1].aborted).toBe(false);
+      }
       await callback({ type: 'Text', text: 'B', hasData: false });
       expect(handle).toHaveBeenCalledTimes(1);
       expect(clipboardSyncState.clearUploadState).not.toHaveBeenCalled();

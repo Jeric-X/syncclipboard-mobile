@@ -31,18 +31,11 @@ import { createTransferQueueChangedHandler } from './historyTransferQueueChanged
 
 class ClipboardSyncService {
   private session: AbortController | null = null;
-  private pendingLocal?: Promise<void>;
   private pendingRemote?: Promise<void>;
 
   private endSession(): void {
     this.session?.abort();
     this.session = null;
-    if (this.pendingLocal) {
-      // 上传被中断时，下次采样同一内容仍须派发给共用处理器。
-      clipboardMonitor.reset();
-      this.handler.resetLastLocalProfileHash();
-      this.pendingLocal = undefined;
-    }
     if (this.pendingRemote) {
       this.handler.resetLastRemoteProfileHash();
       this.pendingRemote = undefined;
@@ -202,19 +195,14 @@ class ClipboardSyncService {
 
   private _subscribeToClipboardChanges(): void {
     const callback: ClipboardChangeCallback = async (content) => {
-      const signal = this.getSessionSignal();
-      if (!signal) {
+      if (!this.getSessionSignal()) {
         clipboardMonitor.reset();
         return;
       }
-      const pending = this.handler.handleAutoUpload(content, signal);
-      this.pendingLocal = pending;
       try {
-        await pending;
+        await this.handler.handleAutoUpload(content);
       } catch (error) {
         console.error('[ClipboardSyncService] Local change callback error:', error);
-      } finally {
-        if (this.pendingLocal === pending) this.pendingLocal = undefined;
       }
     };
     clipboardMonitor.addCallback(callback);
