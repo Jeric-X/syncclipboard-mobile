@@ -162,7 +162,7 @@ export interface ClipboardContent {
 /**
  * 剪贴板监听器回调
  */
-export type ClipboardChangeCallback = (content: ClipboardContent | null) => void;
+export type ClipboardChangeCallback = (content: ClipboardContent) => void;
 
 /**
  * 剪贴板监听器选项

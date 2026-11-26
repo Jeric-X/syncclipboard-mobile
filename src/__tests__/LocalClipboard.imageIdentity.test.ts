@@ -84,7 +84,7 @@ test.each([false, true])(
       mimeType: 'image/png',
     });
     const clipboard = new LocalClipboard();
-    let readback: ClipboardContent | null | undefined = null;
+    let readback: ClipboardContent | null = null;
     const remoteCopied = jest.fn();
     clipboard.registerRemoteCopiedCallback(remoteCopied);
     clipboard.registerCopyLifecycleCallbacks({

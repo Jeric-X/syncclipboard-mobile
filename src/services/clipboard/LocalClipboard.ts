@@ -47,7 +47,7 @@ export class LocalClipboard {
   /**
    * 获取当前剪贴板内容
    */
-  async getClipboardContent(): Promise<ClipboardContent | null | undefined> {
+  async getClipboardContent(): Promise<ClipboardContent | null> {
     try {
       // 先检查文本类型，避免 Android 将图片 URI 强制转换成文字并重新上传。
       const hasText = await measureStartup('local.hasText', () => ClipboardProxy.hasStringAsync());
@@ -66,11 +66,11 @@ export class LocalClipboard {
         return await measureStartup('local.buildImageContent', () => this.getImageContent());
       }
 
-      // 声明有文本却无法取值时保留上次样本，例如用户拒绝粘贴授权。
-      return hasText ? undefined : null;
+      // 没有内容
+      return null;
     } catch (error) {
       console.error('[ClipboardManager] Failed to get clipboard content:', error);
-      return undefined;
+      return null;
     }
   }
 

@@ -287,25 +287,16 @@ export class ClipboardMonitor {
     this.isChecking = true;
     this.recheckAfterReconnect = false;
     const gen = this.checkGeneration;
-    const startedInForeground = AppState.currentState === 'active';
     try {
       const content = await measureStartup('local.readContent', () =>
         this.clipboardManager.getClipboardContent()
       );
 
       // 如果在 getClipboardContent 期间 setLastContent 被调用，丢弃本次结果
-      if (gen !== this.checkGeneration || content === undefined) return;
+      if (gen !== this.checkGeneration) return;
 
       if (!content) {
-        // 后台读取可能因失去焦点返回空，只在前台确认剪贴板已清空。
-        if (
-          startedInForeground &&
-          AppState.currentState === 'active' &&
-          this.lastContent !== null
-        ) {
-          this.lastContent = null;
-          this.notifyCallbacks(null);
-        }
+        // console.log('[ClipboardMonitor] Poll: clipboard is empty');
         return;
       }
 
@@ -360,7 +351,7 @@ export class ClipboardMonitor {
    * 通知所有回调（带防抖）
    * 使用 native-timer 替代 JS setTimeout，确保 Android 后台也能可靠触发
    */
-  private notifyCallbacks(content: ClipboardContent | null): void {
+  private notifyCallbacks(content: ClipboardContent): void {
     this.callbacks.forEach((callback) => {
       try {
         callback(content);

@@ -17,7 +17,7 @@ interface ClipboardState {
 
   // 动作
   /** 仅更新本地剪贴板卡片显示，不写系统剪贴板、不添加历史记录 */
-  setCurrentContentDisplay: (content: ClipboardContent | null) => void;
+  setCurrentContentDisplay: (content: ClipboardContent) => void;
 }
 
 /**
@@ -26,7 +26,7 @@ interface ClipboardState {
 export const useLocalClipboardStore = create<ClipboardState>((set) => ({
   currentContent: null,
 
-  setCurrentContentDisplay: (content: ClipboardContent | null) => {
+  setCurrentContentDisplay: (content: ClipboardContent) => {
     set({ currentContent: content });
   },
 }));

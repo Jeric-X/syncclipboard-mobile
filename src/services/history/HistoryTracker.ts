@@ -9,7 +9,7 @@ import { loadLastTrackedHash, saveLastTrackedHash } from './lastTrackedHashStora
 import { historyService } from './HistoryService';
 
 export class HistoryTracker {
-  private _clipboardCallback: ((content: ClipboardContent | null) => Promise<void>) | null = null;
+  private _clipboardCallback: ((content: ClipboardContent) => Promise<void>) | null = null;
   private lastTrackedHash: string | null = null;
 
   /**
@@ -27,8 +27,7 @@ export class HistoryTracker {
       })
       .catch(() => {});
 
-    const callback = async (content: ClipboardContent | null): Promise<void> => {
-      if (!content) return;
+    const callback = async (content: ClipboardContent): Promise<void> => {
       // hash 去重：与上次记录的 hash 相同则跳过
       const currentHash = content.localClipboardHash ?? content.profileHash ?? null;
       if (currentHash && currentHash === this.lastTrackedHash) return;

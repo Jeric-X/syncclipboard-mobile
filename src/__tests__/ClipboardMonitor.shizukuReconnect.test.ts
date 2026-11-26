@@ -1,4 +1,4 @@
-import { AppState, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { ClipboardMonitor } from '../services/clipboard/ClipboardMonitor';
 import type { CopyLifecycleCallbacks, LocalClipboard } from '../services/clipboard/LocalClipboard';
 import { setTimer, clearTimer } from 'native-timer';
@@ -221,30 +221,4 @@ it('delivers app writes immediately and deduplicates the subsequent system read'
   await copyCallbacks.onAfterCopy(written);
   await monitor.triggerCheck();
   expect(changed).toHaveBeenCalledTimes(1);
-});
-
-it('publishes an empty sample once and detects a later copy of the same text', async () => {
-  const content = { type: 'Text', text: 'first', hasData: false };
-  const changed = jest.fn();
-  monitor.addCallback(changed);
-  readClipboard.mockResolvedValue(content);
-  await monitor.start();
-  await monitor.triggerCheck();
-  readClipboard.mockResolvedValue(undefined);
-  await monitor.triggerCheck();
-  expect(monitor.getLastContent()).toEqual(content);
-  readClipboard.mockResolvedValue(null);
-  AppState.currentState = 'background';
-  try {
-    await monitor.triggerCheck();
-    expect(monitor.getLastContent()).toEqual(content);
-  } finally {
-    AppState.currentState = 'active';
-  }
-  await monitor.triggerCheck();
-  await monitor.triggerCheck();
-  expect(monitor.getLastContent()).toBeNull();
-  readClipboard.mockResolvedValue(content);
-  await monitor.triggerCheck();
-  expect(changed.mock.calls).toEqual([[content], [null], [content]]);
 });

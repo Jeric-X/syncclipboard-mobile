@@ -184,7 +184,6 @@ class ClipboardSyncService {
 
   private _subscribeToClipboardChanges(): void {
     const callback: ClipboardChangeCallback = async (content) => {
-      if (!content) return;
       if (this.session.signal.aborted) {
         clipboardMonitor.reset();
         return;
