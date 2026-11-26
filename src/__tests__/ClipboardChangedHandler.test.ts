@@ -69,7 +69,7 @@ import {
   downloadRemoteClipboard,
 } from '../services/sync/ClipboardSyncActions';
 import { localClipboard } from '../services/clipboard/LocalClipboard';
-import { getClipboardChangedHandler } from '../services/sync/ClipboardChangedHandler';
+import { ClipboardChangedHandler } from '../services/sync/ClipboardChangedHandler';
 import * as startupClock from '../services/StartupTiming';
 
 const SYSTEM_START_TIME_MS = 2_728_733_964;
@@ -82,7 +82,7 @@ const content: ClipboardContent = {
 };
 
 describe('ClipboardChangedHandler 启动基线窗口', () => {
-  const handler = getClipboardChangedHandler();
+  const handler = new ClipboardChangedHandler(() => configService.getConfig());
   let copyToLocalClipboard: jest.SpyInstance;
 
   beforeEach(() => {
@@ -177,7 +177,7 @@ describe('ClipboardChangedHandler 启动基线窗口', () => {
 });
 
 describe('远程图片自动复制', () => {
-  const handler = getClipboardChangedHandler();
+  const handler = new ClipboardChangedHandler(() => configService.getConfig());
   const image: ClipboardContent = {
     type: 'Image',
     text: '',

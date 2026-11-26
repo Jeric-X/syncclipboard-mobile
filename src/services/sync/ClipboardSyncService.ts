@@ -25,7 +25,7 @@ import { remoteClipboardMonitor } from './RemoteClipboardMonitor';
 import type { RemoteClipboardChangedCallback } from './RemoteClipboardMonitor';
 import { historyService } from '../history/HistoryService';
 import { getHistoryTransferQueue } from '../history/HistoryTransferQueue';
-import { getClipboardChangedHandler } from './ClipboardChangedHandler';
+import { ClipboardChangedHandler } from './ClipboardChangedHandler';
 import { createHistoryChangedHandler } from './historyChangedHandler';
 import { createTransferQueueChangedHandler } from './historyTransferQueueChangedHandler';
 
@@ -37,15 +37,14 @@ class ClipboardSyncService {
   private endSession(): void {
     this.session?.abort();
     this.session = null;
-    const handler = getClipboardChangedHandler();
     if (this.pendingLocal) {
       // 上传被中断时，下次采样同一内容仍须派发给共用处理器。
       clipboardMonitor.reset();
-      handler.resetLastLocalProfileHash();
+      this.handler.resetLastLocalProfileHash();
       this.pendingLocal = undefined;
     }
     if (this.pendingRemote) {
-      handler.resetLastRemoteProfileHash();
+      this.handler.resetLastRemoteProfileHash();
       this.pendingRemote = undefined;
     }
   }
@@ -63,6 +62,10 @@ class ClipboardSyncService {
   private _bgDownloadEnabled = false;
   private _activeServerKey: string | null = null;
   private readonly _cleanups: Array<() => void> = [];
+
+  private readonly handler = new ClipboardChangedHandler(async () =>
+    this.effectiveConfig(await configService.getConfig())
+  );
 
   private constructor() {}
 
@@ -112,10 +115,21 @@ class ClipboardSyncService {
     return this.backgroundEnabled && !backgroundRuntimeState.isTempDisabled();
   }
 
+  private effectiveConfig(cfg: AppConfig): AppConfig {
+    if (this.supportsBackgroundTasks && cfg.enableBackgroundTasks) return cfg;
+    return {
+      ...cfg,
+      enableBackgroundTasks: false,
+      enableBackgroundUpload: false,
+      enableBackgroundDownload: false,
+    };
+  }
+
   private _applyConfig(cfg: AppConfig | null): void {
-    this.backgroundEnabled = this.supportsBackgroundTasks && !!cfg?.enableBackgroundTasks;
-    this._bgUploadEnabled = this.backgroundEnabled && !!cfg?.enableBackgroundUpload;
-    this._bgDownloadEnabled = this.backgroundEnabled && !!cfg?.enableBackgroundDownload;
+    const config = cfg && this.effectiveConfig(cfg);
+    this.backgroundEnabled = !!config?.enableBackgroundTasks;
+    this._bgUploadEnabled = !!config?.enableBackgroundUpload;
+    this._bgDownloadEnabled = !!config?.enableBackgroundDownload;
 
     const activeServer = cfg?.servers?.[cfg.activeServerIndex] ?? null;
     const newServerKey = activeServer ? JSON.stringify({ ...activeServer, name: undefined }) : null;
@@ -124,7 +138,7 @@ class ClipboardSyncService {
       clearJustUploadedHash();
       clipboardSyncState.setRemoteContent(null);
       this._activeServerKey = newServerKey;
-      getClipboardChangedHandler().resetLastRemoteProfileHash();
+      this.handler.resetLastRemoteProfileHash();
     }
     if (AppState.currentState === 'background' && !this.canSyncInBackground()) {
       this.endSession();
@@ -152,7 +166,7 @@ class ClipboardSyncService {
   private _registerRemoteCopiedCallback(): void {
     const callback = (content: ClipboardContent) => {
       const hash = content.profileHash || content.text || null;
-      if (hash) getClipboardChangedHandler().setLastLocalProfileHash(hash);
+      if (hash) this.handler.setLastLocalProfileHash(hash);
     };
     localClipboard.registerRemoteCopiedCallback(callback);
     this._cleanups.push(() => localClipboard.registerRemoteCopiedCallback(null));
@@ -164,11 +178,7 @@ class ClipboardSyncService {
         remoteClipboardMonitor.setLastContentHash(null);
         return;
       }
-      const pending = getClipboardChangedHandler().processRemoteClipboardContent(
-        content,
-        this.session.signal,
-        this.supportsBackgroundTasks
-      );
+      const pending = this.handler.processRemoteClipboardContent(content, this.session.signal);
       this.pendingRemote = pending;
       try {
         await pending;
@@ -188,11 +198,7 @@ class ClipboardSyncService {
         clipboardMonitor.reset();
         return;
       }
-      const pending = getClipboardChangedHandler().handleAutoUpload(
-        content,
-        this.session.signal,
-        this.supportsBackgroundTasks
-      );
+      const pending = this.handler.handleAutoUpload(content, this.session.signal);
       this.pendingLocal = pending;
       try {
         await pending;

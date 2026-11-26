@@ -43,19 +43,11 @@ function shouldUseStartupBaseline(
   return useBaseline;
 }
 
-class ClipboardChangedHandler {
-  private static instance: ClipboardChangedHandler | null = null;
+export class ClipboardChangedHandler {
   private lastRemoteProfileHash: string | null = null;
   private lastLocalProfileHash: string | null = null;
 
-  private constructor() {}
-
-  static getInstance(): ClipboardChangedHandler {
-    if (!ClipboardChangedHandler.instance) {
-      ClipboardChangedHandler.instance = new ClipboardChangedHandler();
-    }
-    return ClipboardChangedHandler.instance;
-  }
+  constructor(private readonly getConfig: () => Promise<AppConfig>) {}
 
   resetLastRemoteProfileHash(): void {
     this.lastRemoteProfileHash = null;
@@ -80,8 +72,7 @@ class ClipboardChangedHandler {
 
   async processRemoteClipboardContent(
     content: ClipboardContent,
-    signal?: AbortSignal,
-    supportsBackgroundTasks = true
+    signal?: AbortSignal
   ): Promise<void> {
     const isStartupBaseline = shouldUseStartupBaseline(this.lastRemoteProfileHash, 'remote');
 
@@ -109,7 +100,7 @@ class ClipboardChangedHandler {
       clipboardSyncState.setRemoteContent(content);
     }
 
-    const config = await configService.getConfig();
+    const config = await this.getConfig();
     if (currentHash === this.lastRemoteProfileHash) return;
     this.lastRemoteProfileHash = currentHash;
 
@@ -135,7 +126,7 @@ class ClipboardChangedHandler {
 
     if (isStartupBaseline) return;
 
-    await this.tryAutoCopyToClipboard(content, config, signal, supportsBackgroundTasks);
+    await this.tryAutoCopyToClipboard(content, config, signal);
   }
 
   private async tryAutoDownload(
@@ -168,16 +159,13 @@ class ClipboardChangedHandler {
   private async tryAutoCopyToClipboard(
     content: ClipboardContent,
     config: AppConfig,
-    signal?: AbortSignal,
-    supportsBackgroundTasks = true
+    signal?: AbortSignal
   ): Promise<void> {
     if (content.type !== 'Text' && content.type !== 'Image') return;
     if (content.type === 'Image' && (config.autoCopyTextOnly || !content.fileUri)) return;
 
     const autoSyncEnabled = config?.autoSync ?? false;
-    const bgDownloadEnabled =
-      supportsBackgroundTasks &&
-      !!(config?.enableBackgroundTasks && config?.enableBackgroundDownload);
+    const bgDownloadEnabled = config.enableBackgroundDownload;
     const isAppActive = AppState.currentState === 'active';
     const shouldAutoCopy = autoSyncEnabled || (!isAppActive && bgDownloadEnabled);
 
@@ -226,17 +214,12 @@ class ClipboardChangedHandler {
     console.log('[ClipboardChangedHandler] Copied to local clipboard');
   }
 
-  async handleAutoUpload(
-    content: ClipboardContent,
-    signal?: AbortSignal,
-    supportsBackgroundTasks = true
-  ): Promise<void> {
+  async handleAutoUpload(content: ClipboardContent, signal?: AbortSignal): Promise<void> {
     const isStartupBaseline = shouldUseStartupBaseline(this.lastLocalProfileHash, 'local');
-    const config = await configService.getConfig();
+    const config = await this.getConfig();
 
     const autoSync = config?.autoSync ?? false;
-    const bgUpload =
-      supportsBackgroundTasks && config?.enableBackgroundTasks && config?.enableBackgroundUpload;
+    const bgUpload = config.enableBackgroundUpload;
     if (!autoSync && !bgUpload) return;
 
     const activeServer = await configService.getActiveServer();
@@ -278,8 +261,4 @@ class ClipboardChangedHandler {
       }
     }
   }
-}
-
-export function getClipboardChangedHandler(): ClipboardChangedHandler {
-  return ClipboardChangedHandler.getInstance();
 }

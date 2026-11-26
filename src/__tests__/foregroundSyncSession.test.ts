@@ -3,7 +3,6 @@ import { configService } from '../services/ConfigService';
 import { clipboardMonitor } from '../services/clipboard/ClipboardMonitor';
 import { remoteClipboardMonitor } from '../services/sync/RemoteClipboardMonitor';
 import { getClipboardSyncService } from '../services/sync/ClipboardSyncService';
-import { getClipboardChangedHandler } from '../services/sync/ClipboardChangedHandler';
 import {
   clearJustUploadedHash,
   getJustUploadedHash,
@@ -53,15 +52,19 @@ jest.mock('../services/sync/historyChangedHandler', () => ({
 jest.mock('../services/sync/historyTransferQueueChangedHandler', () => ({
   createTransferQueueChangedHandler: jest.fn(),
 }));
-jest.mock('../services/sync/ClipboardChangedHandler', () => {
-  const handler = {
-    handleAutoUpload: jest.fn(),
-    processRemoteClipboardContent: jest.fn(),
-    resetLastLocalProfileHash: jest.fn(),
-    resetLastRemoteProfileHash: jest.fn(),
-  };
-  return { getClipboardChangedHandler: () => handler };
-});
+const mockHandler = {
+  handleAutoUpload: jest.fn(),
+  processRemoteClipboardContent: jest.fn(),
+  resetLastLocalProfileHash: jest.fn(),
+  resetLastRemoteProfileHash: jest.fn(),
+};
+let mockReadConfig: () => ReturnType<typeof configService.getConfig>;
+jest.mock('../services/sync/ClipboardChangedHandler', () => ({
+  ClipboardChangedHandler: jest.fn((getConfig) => {
+    mockReadConfig = getConfig;
+    return mockHandler;
+  }),
+}));
 
 it.each(['local', 'remote'])(
   'invalidates a %s change that finishes in background before the task stops',
@@ -70,7 +73,7 @@ it.each(['local', 'remote'])(
     AppState.currentState = 'active';
     jest.mocked(configService.getConfig).mockResolvedValue(DEFAULT_APP_CONFIG);
     const service = getClipboardSyncService();
-    const handler = getClipboardChangedHandler();
+    const handler = mockHandler;
     await service.start();
     try {
       const monitor = side === 'local' ? clipboardMonitor : remoteClipboardMonitor;
@@ -133,12 +136,22 @@ it.each([true, false])(
   'honors background capability %s with the same imported settings',
   async (supported) => {
     jest.clearAllMocks();
-    jest
-      .mocked(configService.getConfig)
-      .mockResolvedValue({ ...DEFAULT_APP_CONFIG, enableBackgroundTasks: true });
+    jest.mocked(configService.getConfig).mockResolvedValue({
+      ...DEFAULT_APP_CONFIG,
+      autoSync: false,
+      enableBackgroundTasks: true,
+      enableBackgroundUpload: true,
+      enableBackgroundDownload: true,
+    });
     const service = getClipboardSyncService();
     await service.start(supported);
     try {
+      AppState.currentState = 'inactive';
+      expect(await mockReadConfig()).toMatchObject({
+        autoSync: false,
+        enableBackgroundUpload: supported,
+        enableBackgroundDownload: supported,
+      });
       const signal = service.getSessionSignal();
       AppState.currentState = 'background';
       jest.mocked(AppState.addEventListener).mock.calls[0][1]('background');
