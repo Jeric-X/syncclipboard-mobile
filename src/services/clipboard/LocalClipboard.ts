@@ -368,24 +368,23 @@ export class LocalClipboard {
           await this.setTextContent(content, signal);
           break;
 
-        case 'Image':
-          if (content.fileUri) {
-            // 旧记录可能没有文件字节哈希；恢复监听前补齐，使读回图片能沿用原记录身份。
-            const localClipboardHash = await calculateFileHash(content.fileUri, signal);
-            if (content.profileHash) {
-              const item = await historyStorage.getItem(content.profileHash);
-              if (item && item.localClipboardHash !== localClipboardHash) {
-                await historyStorage.updateItem(content.profileHash, { localClipboardHash });
-              }
+        case 'Image': {
+          if (!content.fileUri) throw new Error(i18n.t('history.localFileNotFound'));
+          // 旧记录可能没有文件字节哈希；恢复监听前补齐，使读回图片能沿用原记录身份。
+          const localClipboardHash = await calculateFileHash(content.fileUri, signal);
+          if (content.profileHash) {
+            const item = await historyStorage.getItem(content.profileHash);
+            if (item && item.localClipboardHash !== localClipboardHash) {
+              await historyStorage.updateItem(content.profileHash, { localClipboardHash });
             }
-            await this.setImageContent(content.fileUri);
-            this.lastCopiedImage = content.profileHash
-              ? { profileHash: content.profileHash, localClipboardHash }
-              : null;
-            content = { ...content, localClipboardHash };
-            break;
           }
-          return;
+          await this.setImageContent(content.fileUri);
+          this.lastCopiedImage = content.profileHash
+            ? { profileHash: content.profileHash, localClipboardHash }
+            : null;
+          content = { ...content, localClipboardHash };
+          break;
+        }
 
         case 'File':
         case 'Group':
