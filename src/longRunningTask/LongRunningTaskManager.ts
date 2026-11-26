@@ -14,27 +14,38 @@ import { remoteClipboardMonitorTask } from './RemoteClipboardMonitorTask';
 import { networkAutoSwitchTask } from './NetworkAutoSwitchTask';
 import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
+import { isBackgroundSyncEnabled } from '../utils/config';
 import { AppState, Platform } from 'react-native';
 import { LongRunningTaskCoordinator } from './LongRunningTaskCoordinator';
 
 class LongRunningTaskManager extends LongRunningTaskCoordinator {
   constructor() {
+    let iosForeground = AppState.currentState === 'active';
     super(
       async () => ({
-        foreground: AppState.currentState === 'active',
+        foreground: Platform.OS === 'ios' ? iosForeground : AppState.currentState === 'active',
         backgroundEnabled:
           !backgroundRuntimeState.isTempDisabled() &&
-          !!(await configService.getConfig()).enableBackgroundTasks,
+          isBackgroundSyncEnabled(await configService.getConfig()),
       }),
       (name, error) => console.error(`[LongRunningTaskManager] Task "${name}" failed:`, error)
     );
     configService.subscribe(() => this.requestRefresh(true));
     backgroundRuntimeState.subscribe(() => this.requestRefresh(true));
-    AppState.addEventListener('change', () => this.requestRefresh());
+    AppState.addEventListener('change', (state) => {
+      if (Platform.OS === 'ios') {
+        // 系统授权弹窗也会进入 inactive；保留原状态，关闭弹窗不触发第二次读板。
+        if (state === 'inactive') return;
+        iosForeground = state === 'active';
+        this.requestRefresh(false, !iosForeground);
+      } else {
+        this.requestRefresh();
+      }
+    });
   }
 
-  private requestRefresh(configChanged = false): void {
-    this.refresh(configChanged).catch((error) => {
+  private requestRefresh(configChanged = false, enteredBackground = false): void {
+    this.refresh(configChanged, enteredBackground).catch((error) => {
       console.error('[LongRunningTaskManager] Failed to reconcile tasks:', error);
     });
   }
@@ -42,7 +53,6 @@ class LongRunningTaskManager extends LongRunningTaskCoordinator {
 
 export const longRunningTaskManager = new LongRunningTaskManager();
 
-// 这些任务属于 Android 的持续同步运行时。iOS 冷启动只初始化前台界面。
 if (Platform.OS === 'android') {
   // 网络选择与同步回调先于监听器启动，保证 Headless 冷启动也能收到首次变化。
   longRunningTaskManager.register(networkAutoSwitchTask, true);
@@ -55,4 +65,9 @@ if (Platform.OS === 'android') {
   longRunningTaskManager.register(historySyncTask, true);
   longRunningTaskManager.register(foregroundServiceTask);
   longRunningTaskManager.register(shizukuRecoveryTask);
+} else if (Platform.OS === 'ios') {
+  // 传输与进度订阅跨前后台保留。只有两个监听任务随前台状态启停。
+  longRunningTaskManager.register(clipboardSyncTask, true);
+  longRunningTaskManager.register(clipboardMonitorTask);
+  longRunningTaskManager.register(remoteClipboardMonitorTask);
 }

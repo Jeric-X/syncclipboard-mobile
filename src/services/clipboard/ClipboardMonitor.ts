@@ -35,9 +35,11 @@ export class ClipboardMonitor {
 
   // 配置选项
   private options: Required<ClipboardMonitorOptions> = {
-    pollingInterval: 1000, // iOS 默认 1 秒轮询
+    pollingInterval: 1000,
   };
 
+  // iOS 的自动读取只在真正进入前台时发起一次，系统粘贴授权可能异步返回。
+  private readonly readOncePerForeground = Platform.OS === 'ios';
   private isChecking: boolean = false;
   private recheckAfterReconnect = false;
   private checkGeneration: number = 0;
@@ -80,7 +82,13 @@ export class ClipboardMonitor {
     }
 
     this.isMonitoring = true;
-    await this.startMonitoring();
+    if (this.readOncePerForeground) {
+      this.recheckAfterReconnect = this.isChecking;
+      void this.checkClipboard();
+    } else {
+      await this.startMonitoring();
+      await this.triggerCheck();
+    }
 
     console.log('[ClipboardMonitor] Started monitoring');
   }
@@ -389,7 +397,7 @@ export class ClipboardMonitor {
    * 立即触发一次检查；只有轮询计时器和事件监听都不存在时才恢复监控。
    */
   handleForeground(): void {
-    if (this.isMonitoring) {
+    if (this.isMonitoring && !this.readOncePerForeground) {
       void this.checkClipboard();
       if (!this.pollingTimerTag && !this.nativeClipboardListenerCleanup) {
         void this.startMonitoring();
@@ -449,7 +457,7 @@ export class ClipboardMonitor {
       this.notifiedWhileStopped = this.isMonitoring ? undefined : new WeakSet(this.callbacks);
       this.notifyCallbacks(written);
     }
-    if (!this.isMonitoring) return;
+    if (!this.isMonitoring || this.readOncePerForeground) return;
     await this.startMonitoring();
   }
 

@@ -46,7 +46,7 @@ export class LongRunningTaskCoordinator {
     });
   }
 
-  refresh(configChanged = false): Promise<void> {
+  refresh(configChanged = false, enteredBackground = false): Promise<void> {
     return this.enqueue(async () => {
       if (!this.enabled) return;
       if (configChanged) {
@@ -54,7 +54,7 @@ export class LongRunningTaskCoordinator {
           if (task.isRunning()) await this.safely(task, () => task.onConfigChanged());
         }
       }
-      await this.reconcile();
+      await this.reconcile(enteredBackground);
     });
   }
 
@@ -86,12 +86,14 @@ export class LongRunningTaskCoordinator {
     }
   }
 
-  private async reconcile(): Promise<void> {
+  private async reconcile(enteredBackground = false): Promise<void> {
     const policy = await this.getPolicy();
+    // 已发生的退后台必须停止监听；排队的前台事件仅在仍处于前台时才启动。
+    const inForeground = !enteredBackground && policy.foreground;
     const active: ILongRunningTask[] = [];
     // 注册顺序保证网络选择和同步回调先于剪贴板监听初始化。
     for (const { task, keepAlive } of this.tasks.values()) {
-      if (keepAlive || policy.foreground || policy.backgroundEnabled) {
+      if (keepAlive || inForeground || policy.backgroundEnabled) {
         if (!task.isRunning()) {
           await this.safely(task, () =>
             measureStartup(`task.${task.name}.start`, () => task.start())
@@ -106,7 +108,7 @@ export class LongRunningTaskCoordinator {
     for (const task of active) {
       await this.safely(task, () =>
         measureStartup(`task.${task.name}.initialPolicy`, () =>
-          policy.foreground ? task.onForeground() : task.onBackground()
+          inForeground ? task.onForeground() : task.onBackground()
         )
       );
     }
