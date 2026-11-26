@@ -150,6 +150,7 @@ it('启动尚未完成时暂停监控，不得在结果返回后启动轮询', a
   resolveStart(false);
   await Promise.all([starting, stopping]);
   expect(setTimer).not.toHaveBeenCalled();
+  expect(readClipboard).not.toHaveBeenCalled();
   expect(native.stopPrimaryClipChangedListener).toHaveBeenCalledTimes(1);
 });
 

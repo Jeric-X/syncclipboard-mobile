@@ -87,7 +87,6 @@ export class ClipboardMonitor {
       void this.checkClipboard();
     } else {
       await this.startMonitoring();
-      await this.triggerCheck();
     }
 
     console.log('[ClipboardMonitor] Started monitoring');
