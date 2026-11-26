@@ -55,7 +55,9 @@ export class LocalClipboard {
           ClipboardProxy.getStringAsync()
         );
         if (text && text.length > 0) {
-          return await measureStartup('local.buildTextContent', () => this.createTextContent(text));
+          return await measureStartup('local.buildTextContent', () =>
+            this.getTextContentFromString(text)
+          );
         }
       }
 
@@ -76,7 +78,7 @@ export class LocalClipboard {
   /**
    * 获取文本内容（从已获取的文本字符串构建）
    */
-  async createTextContent(text: string): Promise<ClipboardContent> {
+  private async getTextContentFromString(text: string): Promise<ClipboardContent> {
     const profileHash = await measureStartup('local.textHash', () => calculateTextHash(text));
     const timestamp = Date.now();
 
@@ -135,10 +137,11 @@ export class LocalClipboard {
 
     // 历史记录中没有找到或文件不存在，继续处理
     // 文本长度阈值（字符数），超过此长度将保存为文件
+    const TEXT_STORAGE_THRESHOLD = 1000;
     const TEXT_PREVIEW_MAX_LENGTH = 200;
 
     // 如果文本长度超过阈值，保存为文件
-    if (text.length > 1000) {
+    if (text.length > TEXT_STORAGE_THRESHOLD) {
       try {
         // 生成文件名
         const fileName = `${profileHash}.txt`;
@@ -310,9 +313,11 @@ export class LocalClipboard {
     if (!content.hasData) return content.text;
     if (!content.fileUri) throw new Error(i18n.t('error.cannotReadFullText'));
     try {
-      return await new FileSystem.File(content.fileUri).text();
+      const file = new FileSystem.File(content.fileUri);
+      return await file.text();
     } catch (fileSystemError) {
       console.warn('[ClipboardManager] Failed to read text via File API:', fileSystemError);
+
       const response = await fetch(content.fileUri);
       if (response.status >= 400) throw new Error(i18n.t('error.cannotReadFullText'));
       return await response.text();
@@ -321,7 +326,7 @@ export class LocalClipboard {
 
   /** 将 App 内复制的文本写入系统剪贴板，并通知本地监听器。 */
   async copyText(text: string): Promise<void> {
-    await this.setClipboardContent(await this.createTextContent(text));
+    await this.setClipboardContent(await this.getTextContentFromString(text));
   }
 
   async setTextContent(content: ClipboardContent, signal?: AbortSignal): Promise<void> {
@@ -364,24 +369,25 @@ export class LocalClipboard {
           await this.setTextContent(content, signal);
           break;
 
-        case 'Image': {
-          if (!content.fileUri) return;
-          // 旧记录可能没有文件字节哈希；恢复监听前补齐，使读回图片能沿用原记录身份。
-          const localClipboardHash = await calculateFileHash(content.fileUri);
-          if (content.profileHash) {
-            const item = await historyStorage.getItem(content.profileHash);
-            if (item && item.localClipboardHash !== localClipboardHash) {
-              await historyStorage.updateItem(content.profileHash, { localClipboardHash });
+        case 'Image':
+          if (content.fileUri) {
+            // 旧记录可能没有文件字节哈希；恢复监听前补齐，使读回图片能沿用原记录身份。
+            const localClipboardHash = await calculateFileHash(content.fileUri);
+            if (content.profileHash) {
+              const item = await historyStorage.getItem(content.profileHash);
+              if (item && item.localClipboardHash !== localClipboardHash) {
+                await historyStorage.updateItem(content.profileHash, { localClipboardHash });
+              }
             }
+            if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+            await this.setImageContent(content.fileUri);
+            this.lastCopiedImage = content.profileHash
+              ? { profileHash: content.profileHash, localClipboardHash }
+              : null;
+            content = { ...content, localClipboardHash };
+            break;
           }
-          if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-          await this.setImageContent(content.fileUri);
-          this.lastCopiedImage = content.profileHash
-            ? { profileHash: content.profileHash, localClipboardHash }
-            : null;
-          content = { ...content, localClipboardHash };
-          break;
-        }
+          return;
 
         case 'File':
         case 'Group':
