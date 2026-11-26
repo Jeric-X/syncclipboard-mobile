@@ -2,6 +2,7 @@ import { AppState } from 'react-native';
 import { configService } from '../services/ConfigService';
 import { clipboardMonitor } from '../services/clipboard/ClipboardMonitor';
 import { remoteClipboardMonitor } from '../services/sync/RemoteClipboardMonitor';
+import { clipboardSyncState } from '../services/sync/SyncState';
 import { getClipboardSyncService } from '../services/sync/ClipboardSyncService';
 import {
   clearJustUploadedHash,
@@ -21,6 +22,7 @@ function mockMonitor() {
     addCallback: jest.fn(),
     removeCallback: jest.fn(),
     reset: jest.fn(),
+    setLastContentHash: jest.fn(),
   };
 }
 jest.mock('../services/clipboard/ClipboardMonitor', () => ({ clipboardMonitor: mockMonitor() }));
@@ -67,7 +69,7 @@ jest.mock('../services/sync/ClipboardChangedHandler', () => ({
 }));
 
 it.each(['local', 'remote'])(
-  'invalidates a %s change that finishes in background before the task stops',
+  'keeps an in-flight %s transfer and its progress when monitoring pauses',
   async (side) => {
     jest.clearAllMocks();
     AppState.currentState = 'active';
@@ -91,12 +93,19 @@ it.each(['local', 'remote'])(
       );
       const processing = callback({ type: 'Text', text: 'A', hasData: false });
       AppState.currentState = 'background';
-      jest.mocked(AppState.addEventListener).mock.calls[0][1]('background');
+      for (const [, listener] of jest.mocked(AppState.addEventListener).mock.calls) {
+        listener('background');
+      }
+      service.onConfigChanged(DEFAULT_APP_CONFIG);
+      const signal = handle.mock.calls[0][1];
+      expect(signal.aborted).toBe(false);
+      await callback({ type: 'Text', text: 'B', hasData: false });
+      expect(handle).toHaveBeenCalledTimes(1);
+      expect(clipboardSyncState.clearUploadState).not.toHaveBeenCalled();
+      expect(clipboardSyncState.clearDownloadState).not.toHaveBeenCalled();
       finish();
       await processing;
-      await service.stop();
-      expect(reset).toHaveBeenCalled();
-      if (side === 'local') expect(clipboardMonitor.reset).toHaveBeenCalled();
+      expect(reset).not.toHaveBeenCalled();
     } finally {
       await service.stop();
       AppState.currentState = 'active';
@@ -152,10 +161,10 @@ it.each([true, false])(
         enableBackgroundUpload: supported,
         enableBackgroundDownload: supported,
       });
-      const signal = service.getSessionSignal();
       AppState.currentState = 'background';
-      jest.mocked(AppState.addEventListener).mock.calls[0][1]('background');
-      expect(signal?.aborted).toBe(!supported);
+      const callback = jest.mocked(clipboardMonitor.addCallback).mock.calls[0][0];
+      await callback({ type: 'Text', text: 'A', hasData: false });
+      expect(mockHandler.handleAutoUpload).toHaveBeenCalledTimes(supported ? 1 : 0);
     } finally {
       await service.stop();
       AppState.currentState = 'active';

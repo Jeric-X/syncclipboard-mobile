@@ -7,9 +7,11 @@ export interface TaskRuntimePolicy {
   backgroundEnabled: boolean;
 }
 
+type KeepAlive = boolean | 'whileRunning';
+
 /** 串行化生命周期操作，防止多个入口或配置通知交错启动、停止同一任务。 */
 export class LongRunningTaskCoordinator {
-  private tasks = new Map<string, { task: ILongRunningTask; keepAlive: boolean }>();
+  private tasks = new Map<string, { task: ILongRunningTask; keepAlive: KeepAlive }>();
   private queue: Promise<void> = Promise.resolve();
   private enabled = false;
   private backgroundTransitions = 0;
@@ -19,7 +21,7 @@ export class LongRunningTaskCoordinator {
     private readonly reportError: (name: string, error: unknown) => void
   ) {}
 
-  register(task: ILongRunningTask, keepAlive = false): void {
+  register(task: ILongRunningTask, keepAlive: KeepAlive = false): void {
     this.tasks.set(task.name, { task, keepAlive });
   }
 
@@ -96,11 +98,19 @@ export class LongRunningTaskCoordinator {
     // 注册顺序保证网络选择和同步回调先于剪贴板监听初始化。
     for (const { task, keepAlive } of this.tasks.values()) {
       if (isForeground && transitions !== this.backgroundTransitions) return;
-      if (keepAlive || isForeground || policy.backgroundEnabled) {
+      if (
+        keepAlive === true ||
+        isForeground ||
+        policy.backgroundEnabled ||
+        (keepAlive === 'whileRunning' && task.isRunning())
+      ) {
         if (!task.isRunning()) {
           await this.safely(task, () =>
             measureStartup(`task.${task.name}.start`, () => task.start())
           );
+        } else if (keepAlive === 'whileRunning' && foreground === true && isForeground) {
+          // 保留的服务回前台时重新应用配置，历史初始化失败可重试，现有队列继续使用。
+          await this.safely(task, () => task.onConfigChanged());
         }
         active.push(task);
       } else {

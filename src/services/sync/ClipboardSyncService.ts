@@ -49,7 +49,8 @@ class ClipboardSyncService {
     }
   }
 
-  getSessionSignal(): AbortSignal | undefined {
+  private getSessionSignal(): AbortSignal | undefined {
+    if (AppState.currentState === 'background' && !this.canSyncInBackground()) return;
     return this.session?.signal;
   }
 
@@ -84,10 +85,12 @@ class ClipboardSyncService {
     if (this._isStarted) return;
     this._isStarted = true;
     this.supportsBackgroundTasks = supportsBackgroundTasks;
-    const listener = AppState.addEventListener('change', (state) => {
-      if (state === 'background' && !this.canSyncInBackground()) this.endSession();
-    });
-    this._cleanups.push(() => listener.remove());
+    if (supportsBackgroundTasks) {
+      const listener = AppState.addEventListener('change', (state) => {
+        if (state === 'background' && !this.canSyncInBackground()) this.endSession();
+      });
+      this._cleanups.push(() => listener.remove());
+    }
 
     const cfg = await configService.getConfig();
     this._applyConfig(cfg);
@@ -140,7 +143,11 @@ class ClipboardSyncService {
       this._activeServerKey = newServerKey;
       this.handler.resetLastRemoteProfileHash();
     }
-    if (AppState.currentState === 'background' && !this.canSyncInBackground()) {
+    if (
+      this.supportsBackgroundTasks &&
+      AppState.currentState === 'background' &&
+      !this.canSyncInBackground()
+    ) {
       this.endSession();
     } else if (this._isStarted) {
       this.session ??= new AbortController();
@@ -174,11 +181,12 @@ class ClipboardSyncService {
 
   private _subscribeToRemoteClipboard(): void {
     const callback: RemoteClipboardChangedCallback = async (content) => {
-      if (!this.session) {
+      const signal = this.getSessionSignal();
+      if (!signal) {
         remoteClipboardMonitor.setLastContentHash(null);
         return;
       }
-      const pending = this.handler.processRemoteClipboardContent(content, this.session.signal);
+      const pending = this.handler.processRemoteClipboardContent(content, signal);
       this.pendingRemote = pending;
       try {
         await pending;
@@ -194,11 +202,12 @@ class ClipboardSyncService {
 
   private _subscribeToClipboardChanges(): void {
     const callback: ClipboardChangeCallback = async (content) => {
-      if (!this.session) {
+      const signal = this.getSessionSignal();
+      if (!signal) {
         clipboardMonitor.reset();
         return;
       }
-      const pending = this.handler.handleAutoUpload(content, this.session.signal);
+      const pending = this.handler.handleAutoUpload(content, signal);
       this.pendingLocal = pending;
       try {
         await pending;

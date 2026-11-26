@@ -55,11 +55,15 @@ export const longRunningTaskManager = new LongRunningTaskManager();
 
 // 两端共享注册顺序。原生服务可在后台运行时，沿用原有 keepAlive 策略。
 longRunningTaskManager.register(networkAutoSwitchTask, supportsBackgroundTasks);
-longRunningTaskManager.register(new ClipboardSyncTask(supportsBackgroundTasks));
+// 前台监听暂停时保留已启动的传输服务、进度订阅和共享附件队列。
+longRunningTaskManager.register(
+  new ClipboardSyncTask(supportsBackgroundTasks),
+  supportsBackgroundTasks ? false : 'whileRunning'
+);
 longRunningTaskManager.register(smsForwardingTask, supportsBackgroundTasks);
 longRunningTaskManager.register(historyTrackerTask, supportsBackgroundTasks);
 longRunningTaskManager.register(clipboardMonitorTask, supportsBackgroundTasks);
 longRunningTaskManager.register(remoteClipboardMonitorTask, supportsBackgroundTasks);
-longRunningTaskManager.register(historySyncTask, supportsBackgroundTasks);
+longRunningTaskManager.register(historySyncTask, supportsBackgroundTasks || 'whileRunning');
 longRunningTaskManager.register(foregroundServiceTask);
 longRunningTaskManager.register(shizukuRecoveryTask);

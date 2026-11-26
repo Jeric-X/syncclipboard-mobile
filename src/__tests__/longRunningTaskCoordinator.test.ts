@@ -38,9 +38,14 @@ describe('shared sync runtime lifecycle', () => {
       jest.fn()
     );
     const sync = new TestTask('sync');
+    const transfers = new TestTask('transfers');
+    manager.register(transfers, 'whileRunning');
     manager.register(sync);
     await manager.startAll();
     await Promise.all([manager.refresh(false, false), manager.refresh(false, true)]);
+    expect(transfers.onConfigChanged).toHaveBeenCalledTimes(1);
+    expect(transfers.stop).not.toHaveBeenCalled();
+    expect(transfers.start).toHaveBeenCalledTimes(1);
     expect(sync.stop).toHaveBeenCalledTimes(1);
     expect(sync.start).toHaveBeenCalledTimes(2);
   });
@@ -51,9 +56,13 @@ describe('shared sync runtime lifecycle', () => {
       jest.fn()
     );
     const sync = new TestTask('sync');
-    manager.register(sync);
+    const retained = new TestTask('transfers');
+    retained.running = true;
+    manager.register(retained, 'whileRunning');
+    manager.register(sync, 'whileRunning');
     await manager.startAll();
     await Promise.all([manager.refresh(false, true), manager.refresh(false, false)]);
+    expect(retained.onConfigChanged).not.toHaveBeenCalled();
     expect(sync.start).not.toHaveBeenCalled();
   });
 
