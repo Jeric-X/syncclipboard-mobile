@@ -446,7 +446,8 @@ export class ClipboardMonitor {
     const currentState = AppState.currentState;
     if (
       this.isMonitoring &&
-      (currentState === 'background' || currentState === 'inactive') &&
+      (currentState === 'background' ||
+        (currentState === 'inactive' && !this.readOncePerForeground)) &&
       !this._isBgRunningEnabled()
     ) {
       return;

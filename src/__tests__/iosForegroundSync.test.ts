@@ -188,11 +188,17 @@ it('粘贴授权、调整设置和 App 内复制都不重复读板，手动刷�
   await drain();
   expect(localClipboard.getClipboardContent).toHaveBeenCalledTimes(1);
 
+  // 系统弹窗出现前开始的 App 内写入，在 inactive 期间完成仍应通知卡片。
+  jest.mocked(configService.getConfig).mockResolvedValue(DEFAULT_APP_CONFIG);
+  setAppState('inactive');
+  await longRunningTaskManager.refresh(true);
   const written = { type: 'Text' as const, text: 'copied', hasData: false };
   await onCopy.onBeforeCopy();
   await onCopy.onAfterCopy(written);
   expect(getClipboardChangedHandler().handleAutoUpload).toHaveBeenCalledWith(written);
   expect(localClipboard.getClipboardContent).toHaveBeenCalledTimes(1);
+  setAppState('active');
+  await longRunningTaskManager.refresh();
   await clipboardMonitor.triggerCheck();
   expect(localClipboard.getClipboardContent).toHaveBeenCalledTimes(2);
 });
