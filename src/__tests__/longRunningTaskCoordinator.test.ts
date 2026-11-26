@@ -32,40 +32,6 @@ describe('shared sync runtime lifecycle', () => {
     expect(task.onForeground).not.toHaveBeenCalled();
   });
 
-  it('stops and restarts foreground tasks when a rapid background transition was queued', async () => {
-    const manager = new LongRunningTaskCoordinator(
-      async () => ({ foreground: true, backgroundEnabled: false }),
-      jest.fn()
-    );
-    const sync = new TestTask('sync');
-    const transfers = new TestTask('transfers');
-    manager.register(transfers, 'whileRunning');
-    manager.register(sync);
-    await manager.startAll();
-    await Promise.all([manager.refresh(false, false), manager.refresh(false, true)]);
-    expect(transfers.onConfigChanged).toHaveBeenCalledTimes(1);
-    expect(transfers.stop).not.toHaveBeenCalled();
-    expect(transfers.start).toHaveBeenCalledTimes(1);
-    expect(sync.stop).toHaveBeenCalledTimes(1);
-    expect(sync.start).toHaveBeenCalledTimes(2);
-  });
-
-  it('ignores a queued foreground start after the app returned to the background', async () => {
-    const manager = new LongRunningTaskCoordinator(
-      async () => ({ foreground: false, backgroundEnabled: false }),
-      jest.fn()
-    );
-    const sync = new TestTask('sync');
-    const retained = new TestTask('transfers');
-    retained.running = true;
-    manager.register(retained, 'whileRunning');
-    manager.register(sync, 'whileRunning');
-    await manager.startAll();
-    await Promise.all([manager.refresh(false, true), manager.refresh(false, false)]);
-    expect(retained.onConfigChanged).not.toHaveBeenCalled();
-    expect(sync.start).not.toHaveBeenCalled();
-  });
-
   it('applies background policy immediately on a cold start without AppState events', async () => {
     const manager = new LongRunningTaskCoordinator(
       async () => ({ foreground: false, backgroundEnabled: false }),

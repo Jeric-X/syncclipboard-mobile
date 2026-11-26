@@ -7,21 +7,18 @@ export interface TaskRuntimePolicy {
   backgroundEnabled: boolean;
 }
 
-type KeepAlive = boolean | 'whileRunning';
-
 /** 串行化生命周期操作，防止多个入口或配置通知交错启动、停止同一任务。 */
 export class LongRunningTaskCoordinator {
-  private tasks = new Map<string, { task: ILongRunningTask; keepAlive: KeepAlive }>();
+  private tasks = new Map<string, { task: ILongRunningTask; keepAlive: boolean }>();
   private queue: Promise<void> = Promise.resolve();
   private enabled = false;
-  private backgroundTransitions = 0;
 
   constructor(
     private readonly getPolicy: () => Promise<TaskRuntimePolicy>,
     private readonly reportError: (name: string, error: unknown) => void
   ) {}
 
-  register(task: ILongRunningTask, keepAlive: KeepAlive = false): void {
+  register(task: ILongRunningTask, keepAlive = false): void {
     this.tasks.set(task.name, { task, keepAlive });
   }
 
@@ -49,8 +46,7 @@ export class LongRunningTaskCoordinator {
     });
   }
 
-  refresh(configChanged = false, foreground?: boolean): Promise<void> {
-    if (foreground === false) this.backgroundTransitions++;
+  refresh(configChanged = false): Promise<void> {
     return this.enqueue(async () => {
       if (!this.enabled) return;
       if (configChanged) {
@@ -58,7 +54,7 @@ export class LongRunningTaskCoordinator {
           if (task.isRunning()) await this.safely(task, () => task.onConfigChanged());
         }
       }
-      await this.reconcile(foreground);
+      await this.reconcile();
     });
   }
 
@@ -90,27 +86,16 @@ export class LongRunningTaskCoordinator {
     }
   }
 
-  private async reconcile(foreground?: boolean): Promise<void> {
-    const transitions = this.backgroundTransitions;
+  private async reconcile(): Promise<void> {
     const policy = await this.getPolicy();
-    const isForeground = foreground !== false && policy.foreground;
     const active: ILongRunningTask[] = [];
     // 注册顺序保证网络选择和同步回调先于剪贴板监听初始化。
     for (const { task, keepAlive } of this.tasks.values()) {
-      if (isForeground && transitions !== this.backgroundTransitions) return;
-      if (
-        keepAlive === true ||
-        isForeground ||
-        policy.backgroundEnabled ||
-        (keepAlive === 'whileRunning' && task.isRunning())
-      ) {
+      if (keepAlive || policy.foreground || policy.backgroundEnabled) {
         if (!task.isRunning()) {
           await this.safely(task, () =>
             measureStartup(`task.${task.name}.start`, () => task.start())
           );
-        } else if (keepAlive === 'whileRunning' && foreground === true && isForeground) {
-          // 保留的服务回前台时重新应用配置，历史初始化失败可重试，现有队列继续使用。
-          await this.safely(task, () => task.onConfigChanged());
         }
         active.push(task);
       } else {
@@ -119,10 +104,9 @@ export class LongRunningTaskCoordinator {
     }
     // 无 Activity 的冷启动不会收到一次 background 事件，必须主动应用状态。
     for (const task of active) {
-      if (isForeground && transitions !== this.backgroundTransitions) return;
       await this.safely(task, () =>
         measureStartup(`task.${task.name}.initialPolicy`, () =>
-          isForeground ? task.onForeground() : task.onBackground()
+          policy.foreground ? task.onForeground() : task.onBackground()
         )
       );
     }

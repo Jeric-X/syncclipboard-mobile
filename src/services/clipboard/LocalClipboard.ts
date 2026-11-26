@@ -8,11 +8,15 @@ import * as ClipboardProxy from '@/utils/clipboardProxy';
 import * as FileSystem from 'expo-file-system';
 import { ClipboardContent } from '@/types';
 import { calculateTextHash, calculateFileHash } from '@/utils/hash';
+import { isTextInvalid } from '@/utils/index';
 import { historyStorage } from '../../storage/HistoryStorage';
 import { prepareTempFilePath, CLIPBOARD_TEMP_DIR, getHistoryFileUri } from '@/utils/fileStorage';
 import { nativeSetClipboardImageFromFile } from 'native-util';
 import i18n from '@/i18n';
 import { measureStartup } from '@/services/StartupTiming';
+
+/** 超过此字符数时，本机剪贴板将文本保存为附件。 */
+const TEXT_STORAGE_THRESHOLD = 1000;
 
 /**
  * 剪贴板复制生命周期回调，由外部模块（如 ClipboardMonitor）注册
@@ -28,6 +32,7 @@ export interface CopyLifecycleCallbacks {
  * 剪贴板管理器类
  */
 export class LocalClipboard {
+  private copyVersion = 0;
   private lastCopiedImage: { profileHash: string; localClipboardHash: string } | null = null;
   private copyLifecycleCallbacks: CopyLifecycleCallbacks | null = null;
   private remoteCopiedCallback: ((content: ClipboardContent) => void) | null = null;
@@ -136,8 +141,6 @@ export class LocalClipboard {
     }
 
     // 历史记录中没有找到或文件不存在，继续处理
-    // 文本长度阈值（字符数），超过此长度将保存为文件
-    const TEXT_STORAGE_THRESHOLD = 1000;
     const TEXT_PREVIEW_MAX_LENGTH = 200;
 
     // 如果文本长度超过阈值，保存为文件
@@ -308,31 +311,61 @@ export class LocalClipboard {
     }
   }
 
-  /** 取得完整正文，文件型文本必须从附件读取。 */
-  async readTextContent(content: ClipboardContent, signal?: AbortSignal): Promise<string> {
-    if (!content.hasData) return content.text;
-    if (!content.fileUri) throw new Error(i18n.t('error.cannotReadFullText'));
+  /**
+   * 设置文本到剪贴板
+   */
+  private async readTextFromFileUri(fileUri: string): Promise<string> {
     try {
-      const file = new FileSystem.File(content.fileUri);
+      const file = new FileSystem.File(fileUri);
       return await file.text();
     } catch (fileSystemError) {
       console.warn('[ClipboardManager] Failed to read text via File API:', fileSystemError);
 
-      const response = await fetch(content.fileUri, { signal });
-      if (response.status >= 400) throw new Error(i18n.t('error.cannotReadFullText'));
+      const response = await fetch(fileUri);
       return await response.text();
     }
   }
 
-  /** 将 App 内复制的文本写入系统剪贴板，并通知本地监听器。 */
+  /** App 内复制的文本沿用同一套写入及通知流程。 */
   async copyText(text: string): Promise<void> {
-    await this.setClipboardContent(await this.getTextContentFromString(text));
+    await this.setClipboardContent({ type: 'Text', text, hasData: false });
   }
 
-  async setTextContent(content: ClipboardContent, signal?: AbortSignal): Promise<void> {
-    const text = await this.readTextContent(content, signal);
-    const written = await Clipboard.setStringAsync(text);
-    if (written === false) throw new Error(i18n.t('clipboard.copyFailed'));
+  async setTextContent(content: ClipboardContent): Promise<ClipboardContent | undefined> {
+    try {
+      let text = content.text;
+      let readFullText = false;
+      if (content.type === 'Text' && content.fileUri && content.hasData) {
+        try {
+          text = await this.readTextFromFileUri(content.fileUri);
+          readFullText = true;
+          console.log(
+            `[ClipboardManager] Read complete text from file for profileHash: ${content.profileHash}, length: ${text.length}`
+          );
+        } catch (error) {
+          console.error('[ClipboardManager] Failed to read text file:', error);
+          if (isTextInvalid(content.text)) {
+            throw new Error(i18n.t('error.cannotReadFullText'));
+          }
+          // fallback to preview text
+        }
+      }
+      if (isTextInvalid(text)) {
+        return;
+      }
+      if ((await Clipboard.setStringAsync(text!)) === false)
+        throw new Error(i18n.t('clipboard.copyFailed'));
+      if (content.profileHash && (!content.hasData || readFullText)) return content;
+      return { type: 'Text', text, hasData: false };
+    } catch (error) {
+      console.error('[ClipboardManager] Failed to set text content:', error);
+
+      // 保留原始错误信息，特别是 TransactionTooLargeException
+      if (error instanceof Error) {
+        throw error; // 直接抛出原始错误，保留详细信息
+      }
+      throw new Error('Failed to set text to clipboard');
+    }
   }
 
   /**
@@ -351,49 +384,66 @@ export class LocalClipboard {
     }
   }
 
+  private async getWrittenContent(
+    content: ClipboardContent
+  ): Promise<ClipboardContent | undefined> {
+    const version = ++this.copyVersion;
+    const timestamp = Date.now();
+    if (content.type === 'Text' && !content.hasData && !content.text) return;
+    if (
+      content.type === 'Text' &&
+      (!content.profileHash || (!content.hasData && content.text.length > TEXT_STORAGE_THRESHOLD))
+    ) {
+      try {
+        content = await this.getTextContentFromString(content.text);
+      } catch (error) {
+        console.warn('[LocalClipboard] Failed to load copied text metadata:', error);
+        return;
+      }
+      if (version !== this.copyVersion) return;
+    }
+    return { ...content, timestamp };
+  }
+
   /**
    * 设置剪贴板内容。写入期间自动暂停剪贴板监听，完成后恢复并立即触发一次检查。
    * 写入失败时直接抛出异常，由调用方处理。
    */
-  async setClipboardContent(
-    content: ClipboardContent,
-    isFromRemote = false,
-    signal?: AbortSignal
-  ): Promise<void> {
+  async setClipboardContent(content: ClipboardContent, isFromRemote = false): Promise<void> {
     let written: ClipboardContent | undefined;
     await this.copyLifecycleCallbacks?.onBeforeCopy();
     try {
       switch (content.type) {
         case 'Text':
-          await this.setTextContent(content, signal);
+          written = await this.setTextContent(content);
           break;
 
-        case 'Image': {
-          if (!content.fileUri) throw new Error(i18n.t('history.localFileNotFound'));
-          // 旧记录可能没有文件字节哈希；恢复监听前补齐，使读回图片能沿用原记录身份。
-          const localClipboardHash = await calculateFileHash(content.fileUri, signal);
-          if (content.profileHash) {
-            const item = await historyStorage.getItem(content.profileHash);
-            if (item && item.localClipboardHash !== localClipboardHash) {
-              await historyStorage.updateItem(content.profileHash, { localClipboardHash });
+        case 'Image':
+          if (content.fileUri) {
+            // 旧记录可能没有文件字节哈希；恢复监听前补齐，使读回图片能沿用原记录身份。
+            const localClipboardHash = await calculateFileHash(content.fileUri);
+            if (content.profileHash) {
+              const item = await historyStorage.getItem(content.profileHash);
+              if (item && item.localClipboardHash !== localClipboardHash) {
+                await historyStorage.updateItem(content.profileHash, { localClipboardHash });
+              }
             }
+            await this.setImageContent(content.fileUri);
+            this.lastCopiedImage = content.profileHash
+              ? { profileHash: content.profileHash, localClipboardHash }
+              : null;
+            written = { ...content, localClipboardHash };
           }
-          await this.setImageContent(content.fileUri);
-          this.lastCopiedImage = content.profileHash
-            ? { profileHash: content.profileHash, localClipboardHash }
-            : null;
-          content = { ...content, localClipboardHash };
           break;
-        }
 
         case 'File':
         case 'Group':
         default:
           throw new Error(`Unsupported clipboard type: ${content.type}`);
       }
-      written = content;
-      if (isFromRemote) {
-        this.remoteCopiedCallback?.(content);
+      if (written) written = await this.getWrittenContent(written);
+      if (isFromRemote && written) {
+        this.remoteCopiedCallback?.(written);
       }
     } finally {
       await this.copyLifecycleCallbacks?.onAfterCopy(written);

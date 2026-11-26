@@ -1,4 +1,3 @@
-import { Platform } from 'react-native';
 import { ClipboardMonitor } from '../services/clipboard/ClipboardMonitor';
 import type { CopyLifecycleCallbacks, LocalClipboard } from '../services/clipboard/LocalClipboard';
 import { setTimer, clearTimer } from 'native-timer';
@@ -189,29 +188,9 @@ it('恢复时若旧轮询仍在读取，结束后仍须补读最新内容', asyn
   expect(changed).toHaveBeenCalledWith(content);
 });
 
-it('polls repeatedly when native events are unavailable and stops the timer on stop', async () => {
-  const previous = Platform.OS;
-  Platform.OS = 'ios';
-  try {
-    await monitor.start();
-    const tick = jest.mocked(setTimer).mock.calls[0][0];
-    await tick();
-    await tick();
-    expect(readClipboard).toHaveBeenCalledTimes(3);
-    expect(native.startPrimaryClipChangedListener).not.toHaveBeenCalled();
-    await monitor.stop();
-    expect(clearTimer).toHaveBeenCalledWith('poll');
-    await tick();
-    expect(readClipboard).toHaveBeenCalledTimes(3);
-  } finally {
-    Platform.OS = previous;
-  }
-});
-
 it('delivers app writes immediately and deduplicates the subsequent system read', async () => {
   const changed = jest.fn();
   monitor.addCallback(changed);
-  await monitor.start();
   const written = { type: 'Text' as const, text: 'written', hasData: false, profileHash: 'hash' };
   await copyCallbacks.onBeforeCopy();
   readClipboard.mockImplementation(async () => {
@@ -219,6 +198,13 @@ it('delivers app writes immediately and deduplicates the subsequent system read'
     return written;
   });
   await copyCallbacks.onAfterCopy(written);
+  expect(changed).toHaveBeenCalledWith(written);
+  expect(readClipboard).not.toHaveBeenCalled();
+  const subscribedAfterCopy = jest.fn();
+  monitor.addCallback(subscribedAfterCopy);
+  await monitor.start();
   await monitor.triggerCheck();
+  expect(readClipboard).toHaveBeenCalled();
+  expect(subscribedAfterCopy).toHaveBeenCalledWith(written);
   expect(changed).toHaveBeenCalledTimes(1);
 });

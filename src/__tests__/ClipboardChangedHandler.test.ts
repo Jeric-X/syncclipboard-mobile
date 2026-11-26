@@ -69,7 +69,7 @@ import {
   downloadRemoteClipboard,
 } from '../services/sync/ClipboardSyncActions';
 import { localClipboard } from '../services/clipboard/LocalClipboard';
-import { ClipboardChangedHandler } from '../services/sync/ClipboardChangedHandler';
+import { getClipboardChangedHandler } from '../services/sync/ClipboardChangedHandler';
 import * as startupClock from '../services/StartupTiming';
 
 const SYSTEM_START_TIME_MS = 2_728_733_964;
@@ -82,7 +82,7 @@ const content: ClipboardContent = {
 };
 
 describe('ClipboardChangedHandler 启动基线窗口', () => {
-  const handler = new ClipboardChangedHandler(() => configService.getConfig());
+  const handler = getClipboardChangedHandler();
   let copyToLocalClipboard: jest.SpyInstance;
 
   beforeEach(() => {
@@ -147,7 +147,7 @@ describe('ClipboardChangedHandler 启动基线窗口', () => {
 
     await handler.processRemoteClipboardContent({ ...content });
 
-    expect(copyToLocalClipboard).toHaveBeenCalledWith(content, undefined);
+    expect(copyToLocalClipboard).toHaveBeenCalledWith(content);
     expect(clipboardSyncState.setRemoteContent).toHaveBeenCalledWith(content);
   });
 
@@ -172,12 +172,12 @@ describe('ClipboardChangedHandler 启动基线窗口', () => {
     await handler.processRemoteClipboardContent(next);
 
     expect(copyToLocalClipboard).toHaveBeenCalledTimes(1);
-    expect(copyToLocalClipboard).toHaveBeenCalledWith(next, undefined);
+    expect(copyToLocalClipboard).toHaveBeenCalledWith(next);
   });
 });
 
 describe('远程图片自动复制', () => {
-  const handler = new ClipboardChangedHandler(() => configService.getConfig());
+  const handler = getClipboardChangedHandler();
   const image: ClipboardContent = {
     type: 'Image',
     text: '',
@@ -213,11 +213,7 @@ describe('远程图片自动复制', () => {
 
     expect(downloadRemoteClipboard).toHaveBeenCalledTimes(1);
     expect(localClipboard.setClipboardContent).toHaveBeenCalledTimes(1);
-    expect(localClipboard.setClipboardContent).toHaveBeenCalledWith(
-      downloadedImage,
-      true,
-      undefined
-    );
+    expect(localClipboard.setClipboardContent).toHaveBeenCalledWith(downloadedImage, true);
   });
 
   it('开启仅自动复制文字后仍下载图片，但不复制图片，文字仍正常复制', async () => {
@@ -229,12 +225,12 @@ describe('远程图片自动复制', () => {
 
     await handler.processRemoteClipboardContent({ ...image });
 
-    expect(downloadRemoteClipboard).toHaveBeenCalledWith(image, undefined, undefined);
+    expect(downloadRemoteClipboard).toHaveBeenCalledWith(image);
     expect(clipboardSyncState.setRemoteContent).toHaveBeenCalledWith(downloadedImage);
     expect(localClipboard.setClipboardContent).not.toHaveBeenCalled();
 
     await handler.processRemoteClipboardContent({ ...content });
-    expect(localClipboard.setClipboardContent).toHaveBeenCalledWith(content, true, undefined);
+    expect(localClipboard.setClipboardContent).toHaveBeenCalledWith(content, true);
   });
 
   it.each([false, true])('后台下载遵守仅自动复制文字开关：%s', async (textOnly) => {
@@ -272,11 +268,7 @@ describe('远程图片自动复制', () => {
     await handler.processRemoteClipboardContent({ ...image });
 
     expect(downloadRemoteClipboard).not.toHaveBeenCalled();
-    expect(localClipboard.setClipboardContent).toHaveBeenCalledWith(
-      downloadedImage,
-      true,
-      undefined
-    );
+    expect(localClipboard.setClipboardContent).toHaveBeenCalledWith(downloadedImage, true);
   });
 
   it('超过大小限制的图片不下载也不复制', async () => {

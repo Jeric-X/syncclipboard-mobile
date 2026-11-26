@@ -1,5 +1,3 @@
-import { Platform } from 'react-native';
-import { setTimer, clearTimer } from 'native-timer';
 import { RemoteClipboardMonitorTask } from '../longRunningTask/RemoteClipboardMonitorTask';
 import { remoteClipboardMonitor } from '../services/sync/RemoteClipboardMonitor';
 import { configService } from '../services/ConfigService';
@@ -137,40 +135,3 @@ it('SignalR 断线但 HTTP 仍可用时，回到前台仍拉取最新内容', as
   await flush();
   expect(getClipboard).toHaveBeenCalledTimes(2);
 });
-
-it.each(['syncclipboard', 'webdav'] as const)(
-  'iOS receives repeated %s changes in foreground and releases the transport on stop',
-  async (type) => {
-    const os = Platform.OS;
-    Platform.OS = 'ios';
-    const received = jest.fn();
-    remoteClipboardMonitor.addCallback(received);
-    try {
-      jest.mocked(configService.getActiveServer).mockResolvedValue({ ...server, type });
-      jest.mocked(setTimer).mockReturnValue('remote-poll');
-      await task.start();
-      await flush();
-      if (type === 'syncclipboard') {
-        const push = client.onRemoteClipboardChanged.mock.calls[0][0];
-        push({ type: 'Text', text: 'one', hasData: false });
-        push({ type: 'Text', text: 'two', hasData: false });
-        await task.stop();
-        push({ type: 'Text', text: 'late', hasData: false });
-        expect(client.disconnect).toHaveBeenCalled();
-      } else {
-        const poll = jest.mocked(setTimer).mock.calls[0][0];
-        for (const text of ['one', 'two']) {
-          getClipboard.mockResolvedValue({ type: 'Text', text, hasData: false });
-          poll();
-          await flush();
-        }
-        await task.stop();
-        expect(clearTimer).toHaveBeenCalledWith('remote-poll');
-      }
-      expect(received.mock.calls.map(([content]) => content.text)).toEqual(['ready', 'one', 'two']);
-    } finally {
-      remoteClipboardMonitor.removeCallback(received);
-      Platform.OS = os;
-    }
-  }
-);

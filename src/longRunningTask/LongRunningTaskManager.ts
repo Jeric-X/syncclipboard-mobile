@@ -9,7 +9,7 @@ import { foregroundServiceTask } from './ForegroundServiceTask';
 import { historySyncTask } from './HistorySyncTask';
 import { clipboardMonitorTask } from './ClipboardMonitorTask';
 import { historyTrackerTask } from './HistoryTrackerTask';
-import { ClipboardSyncTask } from './ClipboardSyncTask';
+import { clipboardSyncTask } from './ClipboardSyncTask';
 import { remoteClipboardMonitorTask } from './RemoteClipboardMonitorTask';
 import { networkAutoSwitchTask } from './NetworkAutoSwitchTask';
 import { configService } from '../services/ConfigService';
@@ -17,16 +17,12 @@ import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
 import { AppState, Platform } from 'react-native';
 import { LongRunningTaskCoordinator } from './LongRunningTaskCoordinator';
 
-const supportsBackgroundTasks = Platform.OS === 'android';
-
 class LongRunningTaskManager extends LongRunningTaskCoordinator {
   constructor() {
-    let foreground = AppState.currentState === 'active';
     super(
       async () => ({
-        foreground: foreground,
+        foreground: AppState.currentState === 'active',
         backgroundEnabled:
-          supportsBackgroundTasks &&
           !backgroundRuntimeState.isTempDisabled() &&
           !!(await configService.getConfig()).enableBackgroundTasks,
       }),
@@ -34,18 +30,11 @@ class LongRunningTaskManager extends LongRunningTaskCoordinator {
     );
     configService.subscribe(() => this.requestRefresh(true));
     backgroundRuntimeState.subscribe(() => this.requestRefresh(true));
-    AppState.addEventListener('change', (state) => {
-      // 系统弹窗产生的 inactive 不结束前台会话。
-      if (state !== 'background' && state !== 'active') return;
-      const active = state === 'active';
-      if (foreground === active) return;
-      foreground = active;
-      this.requestRefresh(false, active);
-    });
+    AppState.addEventListener('change', () => this.requestRefresh());
   }
 
-  private requestRefresh(configChanged = false, foreground?: boolean): void {
-    this.refresh(configChanged, foreground).catch((error) => {
+  private requestRefresh(configChanged = false): void {
+    this.refresh(configChanged).catch((error) => {
       console.error('[LongRunningTaskManager] Failed to reconcile tasks:', error);
     });
   }
@@ -53,17 +42,17 @@ class LongRunningTaskManager extends LongRunningTaskCoordinator {
 
 export const longRunningTaskManager = new LongRunningTaskManager();
 
-// 两端共享注册顺序。原生服务可在后台运行时，沿用原有 keepAlive 策略。
-longRunningTaskManager.register(networkAutoSwitchTask, supportsBackgroundTasks);
-// 前台监听暂停时保留已启动的传输服务、进度订阅和共享附件队列。
-longRunningTaskManager.register(
-  new ClipboardSyncTask(supportsBackgroundTasks),
-  supportsBackgroundTasks ? false : 'whileRunning'
-);
-longRunningTaskManager.register(smsForwardingTask, supportsBackgroundTasks);
-longRunningTaskManager.register(historyTrackerTask, supportsBackgroundTasks);
-longRunningTaskManager.register(clipboardMonitorTask, supportsBackgroundTasks);
-longRunningTaskManager.register(remoteClipboardMonitorTask, supportsBackgroundTasks);
-longRunningTaskManager.register(historySyncTask, supportsBackgroundTasks || 'whileRunning');
-longRunningTaskManager.register(foregroundServiceTask);
-longRunningTaskManager.register(shizukuRecoveryTask);
+// 这些任务属于 Android 的持续同步运行时。iOS 冷启动只初始化前台界面。
+if (Platform.OS === 'android') {
+  // 网络选择与同步回调先于监听器启动，保证 Headless 冷启动也能收到首次变化。
+  longRunningTaskManager.register(networkAutoSwitchTask, true);
+  longRunningTaskManager.register(clipboardSyncTask);
+  longRunningTaskManager.register(smsForwardingTask, true);
+  // 历史订阅必须先就绪，才能接住监听器启动时发出的首条内容。
+  longRunningTaskManager.register(historyTrackerTask, true);
+  longRunningTaskManager.register(clipboardMonitorTask, true);
+  longRunningTaskManager.register(remoteClipboardMonitorTask, true);
+  longRunningTaskManager.register(historySyncTask, true);
+  longRunningTaskManager.register(foregroundServiceTask);
+  longRunningTaskManager.register(shizukuRecoveryTask);
+}

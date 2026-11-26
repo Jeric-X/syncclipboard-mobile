@@ -8,7 +8,6 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } 
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { localClipboard } from '@/services/clipboard/LocalClipboard';
-import * as ClipboardProxy from '@/utils/clipboardProxy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/hooks/useTheme';
@@ -83,16 +82,6 @@ export function HomeScreen() {
   }, [isLoaded, showUpdateDialog]);
 
   const activeServer = getActiveServer();
-
-  const handleWordPick = async (content: ClipboardContent) => {
-    try {
-      setWordPickerText(await localClipboard.readTextContent(content));
-    } catch (error) {
-      const title = t('error.cannotReadFullText');
-      setError({ title, message: error instanceof Error ? error.message : String(error) });
-      showMessage(title, 'error');
-    }
-  };
 
   // 复制远程内容到本地剪贴板
   const copyRemoteToLocal = async (content: ClipboardContent, logPrefix: string = '') => {
@@ -211,7 +200,7 @@ export function HomeScreen() {
         disabled: !!fileUploadPayload,
       },
     ],
-    [handleUploadImage, handleUploadFile, fileUploadPayload, t]
+    [handleUploadImage, handleUploadFile, fileUploadPayload]
   );
 
   // 设置标题栏菜单按钮
@@ -278,7 +267,7 @@ export function HomeScreen() {
 
   const handleCopyError = async () => {
     if (error) {
-      await ClipboardProxy.setStringAsync(`${error.title}\n\n${error.message}`);
+      await localClipboard.copyText(`${error.title}\n\n${error.message}`);
       showMessage(t('home.errorCopied'), 'success');
     }
   };
@@ -367,7 +356,7 @@ export function HomeScreen() {
                       );
                     }
                   }}
-                  onWordPick={handleWordPick}
+                  onWordPick={setWordPickerText}
                 />
               )}
             </View>
@@ -385,7 +374,7 @@ export function HomeScreen() {
                 actionProgress={uploadProgress}
                 onCancelAction={handleCancelClipboardUpload}
                 onCopy={copyLocalToClipboard}
-                onWordPick={handleWordPick}
+                onWordPick={setWordPickerText}
               />
 
               {/* 错误信息卡片 */}
@@ -433,7 +422,7 @@ export function HomeScreen() {
               clipboard={currentContent}
               isRemote={false}
               onCopy={copyLocalToClipboard}
-              onWordPick={handleWordPick}
+              onWordPick={setWordPickerText}
             />
           </>
         )}

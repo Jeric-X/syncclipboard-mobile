@@ -40,7 +40,7 @@ interface CurrentClipboardCardProps {
   actionProgress?: DownloadProgress | null;
   onCancelAction?: () => void;
   onCopy: (content: ClipboardContent) => Promise<void>;
-  onWordPick?: (content: ClipboardContent) => void;
+  onWordPick?: (text: string) => void;
 }
 
 export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
@@ -209,9 +209,6 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   };
 
   const showActionButton = isRemote ? !!(onAction && needsFileDownload()) : !!onAction;
-  const hasFullText =
-    clipboard.type === 'Text' &&
-    (clipboard.hasData ? !!clipboard.fileUri : !isTextInvalid(clipboard.text));
 
   // 可以"打开"的非文本类型（有 fileUri）- Group类型不支持打开
   const canOpenFile =
@@ -436,10 +433,10 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         )}
 
         {/* 文本类型：分词按钮 */}
-        {hasFullText && onWordPick && (
+        {clipboard.type === 'Text' && onWordPick && !isTextInvalid(clipboard.text) && (
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
-            onPress={() => onWordPick(clipboard)}
+            onPress={() => onWordPick(clipboard.text!)}
           >
             <Text
               style={[styles.actionButtonText, { color: theme.colors.white }]}
@@ -452,7 +449,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         )}
 
         {/* 远程 Text 类型：只有在不需要下载时才显示复制按钮 */}
-        {isRemote && hasFullText && (
+        {isRemote && clipboard.type === 'Text' && !showActionButton && (
           <TouchableOpacity
             style={[
               styles.actionButton,

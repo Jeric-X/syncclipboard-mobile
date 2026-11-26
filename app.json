@@ -15,10 +15,7 @@
     "ios": {
       "bundleIdentifier": "com.jericx.syncclipboardmobile",
       "buildNumber": "1",
-      "supportsTablet": true,
-      "infoPlist": {
-        "NSLocalNetworkUsageDescription": "SyncClipboard connects to the clipboard server you select on your local network to sync clipboard content."
-      }
+      "supportsTablet": true
     },
     "android": {
       "versionCode": 162,
