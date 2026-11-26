@@ -68,10 +68,10 @@ export class HistoryTransferQueue {
   private pendingTasks: TransferTask[] = [];
   private activeTasks: Map<string, TransferTask> = new Map();
   private taskStatusCallbacks: Set<TaskStatusChangedCallback> = new Set();
-  private taskCompletionResolvers: WeakMap<
-    TransferTask,
+  private taskCompletionResolvers: Map<
+    string,
     { resolve: (content: ClipboardContent) => void; reject: (error: Error) => void }
-  > = new WeakMap();
+  > = new Map();
 
   private config: TransferQueueConfig;
   private isRunning = false;
@@ -118,7 +118,6 @@ export class HistoryTransferQueue {
 
     // 取消待处理任务
     for (const task of this.pendingTasks) {
-      this.rejectPendingTask(task);
       task.abortController.abort();
       task.status = 'cancelled';
       this.notifyStatusChanged(task);
@@ -155,7 +154,6 @@ export class HistoryTransferQueue {
 
     // 清空待处理队列
     for (const task of this.pendingTasks) {
-      this.rejectPendingTask(task);
       task.abortController.abort();
       task.status = 'cancelled';
       this.notifyStatusChanged(task);
@@ -178,6 +176,7 @@ export class HistoryTransferQueue {
     const item = parsed ? await this.historyStorage.getItem(parsed.hash) : null;
     const displayName = item?.text || profileId;
 
+    const key = this.getTaskKey(profileId, 'download');
     let resolveAwaiter: (content: ClipboardContent) => void;
     let rejectAwaiter: (error: Error) => void;
     const awaiter = new Promise<ClipboardContent>((resolve, reject) => {
@@ -198,7 +197,7 @@ export class HistoryTransferQueue {
       awaiter,
     };
 
-    this.taskCompletionResolvers.set(task, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
+    this.taskCompletionResolvers.set(key, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
     this.pendingTasks.push(task);
     this.notifyStatusChanged(task);
     this.signalQueue();
@@ -220,6 +219,7 @@ export class HistoryTransferQueue {
     const item = parsed ? await this.historyStorage.getItem(parsed.hash) : null;
     const displayName = item?.text || profileId;
 
+    const key = this.getTaskKey(profileId, 'upload');
     let resolveAwaiter: (content: ClipboardContent) => void;
     let rejectAwaiter: (error: Error) => void;
     const awaiter = new Promise<ClipboardContent>((resolve, reject) => {
@@ -240,7 +240,7 @@ export class HistoryTransferQueue {
       awaiter,
     };
 
-    this.taskCompletionResolvers.set(task, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
+    this.taskCompletionResolvers.set(key, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
     this.pendingTasks.push(task);
     this.notifyStatusChanged(task);
     this.signalQueue();
@@ -305,7 +305,7 @@ export class HistoryTransferQueue {
       awaiter,
     };
 
-    this.taskCompletionResolvers.set(task, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
+    this.taskCompletionResolvers.set(key, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
     this.activeTasks.set(key, task);
     this.notifyStatusChanged(task);
 
@@ -376,7 +376,7 @@ export class HistoryTransferQueue {
       awaiter,
     };
 
-    this.taskCompletionResolvers.set(task, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
+    this.taskCompletionResolvers.set(key, { resolve: resolveAwaiter!, reject: rejectAwaiter! });
     this.activeTasks.set(key, task);
     this.notifyStatusChanged(task);
 
@@ -408,7 +408,6 @@ export class HistoryTransferQueue {
       (t) => t.profileId === profileId && t.type === type
     );
     if (pendingIndex >= 0) {
-      this.rejectPendingTask(task);
       this.pendingTasks.splice(pendingIndex, 1);
     }
 
@@ -417,13 +416,6 @@ export class HistoryTransferQueue {
     this.activeTasks.delete(key);
 
     return true;
-  }
-
-  private rejectPendingTask(task: TransferTask): void {
-    // 自动排队的任务可能没有等待者；显式加入的调用方仍能观察取消。
-    void task.awaiter.catch(() => {});
-    this.taskCompletionResolvers.get(task)?.reject(new Error('Task cancelled'));
-    this.taskCompletionResolvers.delete(task);
   }
 
   /**
@@ -574,11 +566,11 @@ export class HistoryTransferQueue {
     } finally {
       this.notifyStatusChanged(task);
       const key = this.getTaskKey(task.profileId, task.type);
-      if (this.activeTasks.get(key) === task) this.activeTasks.delete(key);
+      this.activeTasks.delete(key);
 
-      const resolver = this.taskCompletionResolvers.get(task);
+      const resolver = this.taskCompletionResolvers.get(key);
       if (resolver) {
-        this.taskCompletionResolvers.delete(task);
+        this.taskCompletionResolvers.delete(key);
         if (task.status === 'completed' && resultContent) {
           resolver.resolve(resultContent);
         } else if (task.status === 'failed') {

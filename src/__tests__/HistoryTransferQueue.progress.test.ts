@@ -181,17 +181,3 @@ it('downloaded images retain a byte hash in storage and returned content', async
   });
   expect(result.localClipboardHash).toBe('image-bytes');
 });
-
-it('settles a clipboard operation waiting on a pending history upload on stop', async () => {
-  const queue = new HistoryTransferQueue();
-  await queue.addUploadTask('Image-a');
-  const joined = queue.executeImmediateUpload({
-    type: 'Image',
-    text: '',
-    hasData: true,
-    profileHash: 'a',
-  });
-  const settled = expect(joined).rejects.toThrow('cancelled');
-  await queue.stop();
-  await settled;
-});
