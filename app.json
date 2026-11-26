@@ -12,12 +12,16 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "locales": {
+      "en": "./src/i18n/native/en.json",
+      "zh-Hans": "./src/i18n/native/zh-Hans.json"
+    },
     "ios": {
       "bundleIdentifier": "com.jericx.syncclipboardmobile",
       "buildNumber": "1",
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocalNetworkUsageDescription": "SyncClipboard connects to the server you choose on your local network to sync your clipboard."
+        "NSLocalNetworkUsageDescription": "SyncClipboard needs network access to connect to the sync server."
       }
     },
     "android": {
