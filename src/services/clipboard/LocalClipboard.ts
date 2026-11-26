@@ -309,7 +309,7 @@ export class LocalClipboard {
   }
 
   /** 取得完整正文，文件型文本必须从附件读取。 */
-  async readTextContent(content: ClipboardContent): Promise<string> {
+  async readTextContent(content: ClipboardContent, signal?: AbortSignal): Promise<string> {
     if (!content.hasData) return content.text;
     if (!content.fileUri) throw new Error(i18n.t('error.cannotReadFullText'));
     try {
@@ -318,7 +318,7 @@ export class LocalClipboard {
     } catch (fileSystemError) {
       console.warn('[ClipboardManager] Failed to read text via File API:', fileSystemError);
 
-      const response = await fetch(content.fileUri);
+      const response = await fetch(content.fileUri, { signal });
       if (response.status >= 400) throw new Error(i18n.t('error.cannotReadFullText'));
       return await response.text();
     }
@@ -330,8 +330,7 @@ export class LocalClipboard {
   }
 
   async setTextContent(content: ClipboardContent, signal?: AbortSignal): Promise<void> {
-    const text = await this.readTextContent(content);
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    const text = await this.readTextContent(content, signal);
     const written = await Clipboard.setStringAsync(text);
     if (written === false) throw new Error(i18n.t('clipboard.copyFailed'));
   }
@@ -372,14 +371,13 @@ export class LocalClipboard {
         case 'Image':
           if (content.fileUri) {
             // 旧记录可能没有文件字节哈希；恢复监听前补齐，使读回图片能沿用原记录身份。
-            const localClipboardHash = await calculateFileHash(content.fileUri);
+            const localClipboardHash = await calculateFileHash(content.fileUri, signal);
             if (content.profileHash) {
               const item = await historyStorage.getItem(content.profileHash);
               if (item && item.localClipboardHash !== localClipboardHash) {
                 await historyStorage.updateItem(content.profileHash, { localClipboardHash });
               }
             }
-            if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
             await this.setImageContent(content.fileUri);
             this.lastCopiedImage = content.profileHash
               ? { profileHash: content.profileHash, localClipboardHash }

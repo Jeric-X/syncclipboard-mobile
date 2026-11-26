@@ -30,12 +30,13 @@ import { createHistoryChangedHandler } from './historyChangedHandler';
 import { createTransferQueueChangedHandler } from './historyTransferQueueChangedHandler';
 
 class ClipboardSyncService {
-  private session = new AbortController();
+  private session: AbortController | null = null;
   private pendingLocal?: Promise<void>;
   private pendingRemote?: Promise<void>;
 
   private endSession(): void {
-    this.session.abort();
+    this.session?.abort();
+    this.session = null;
     const handler = getClipboardChangedHandler();
     if (this.pendingLocal) {
       // 上传被中断时，下次采样同一内容仍须派发给共用处理器。
@@ -50,7 +51,7 @@ class ClipboardSyncService {
   }
 
   getSessionSignal(): AbortSignal | undefined {
-    return this._isStarted ? this.session.signal : undefined;
+    return this.session?.signal;
   }
 
   private static instance: ClipboardSyncService | null = null;
@@ -80,7 +81,6 @@ class ClipboardSyncService {
     if (this._isStarted) return;
     this._isStarted = true;
     this.supportsBackgroundTasks = supportsBackgroundTasks;
-    this.session = new AbortController();
     const listener = AppState.addEventListener('change', (state) => {
       if (state === 'background' && !this.canSyncInBackground()) this.endSession();
     });
@@ -128,8 +128,8 @@ class ClipboardSyncService {
     }
     if (AppState.currentState === 'background' && !this.canSyncInBackground()) {
       this.endSession();
-    } else if (this.session.signal.aborted) {
-      this.session = new AbortController();
+    } else if (this._isStarted) {
+      this.session ??= new AbortController();
     }
   }
 
@@ -160,7 +160,7 @@ class ClipboardSyncService {
 
   private _subscribeToRemoteClipboard(): void {
     const callback: RemoteClipboardChangedCallback = async (content) => {
-      if (this.session.signal.aborted) {
+      if (!this.session) {
         remoteClipboardMonitor.setLastContentHash(null);
         return;
       }
@@ -184,7 +184,7 @@ class ClipboardSyncService {
 
   private _subscribeToClipboardChanges(): void {
     const callback: ClipboardChangeCallback = async (content) => {
-      if (this.session.signal.aborted) {
+      if (!this.session) {
         clipboardMonitor.reset();
         return;
       }

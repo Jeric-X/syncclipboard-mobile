@@ -83,14 +83,12 @@ class ClipboardChangedHandler {
     signal?: AbortSignal,
     supportsBackgroundTasks = true
   ): Promise<void> {
-    if (signal?.aborted) return;
     const isStartupBaseline = shouldUseStartupBaseline(this.lastRemoteProfileHash, 'remote');
 
     if (!content.hasData && content.type === 'Text' && !content.profileHash && content.text) {
-      content.profileHash = await calculateTextHash(content.text);
+      content.profileHash = await calculateTextHash(content.text, signal);
     }
 
-    if (signal?.aborted) return;
     const currentHash = content.profileHash || content.text;
 
     // 如果匹配刚上传的 hash，跳过处理
@@ -112,7 +110,6 @@ class ClipboardChangedHandler {
     }
 
     const config = await configService.getConfig();
-    if (signal?.aborted) return;
     if (currentHash === this.lastRemoteProfileHash) return;
     this.lastRemoteProfileHash = currentHash;
 
@@ -134,7 +131,6 @@ class ClipboardChangedHandler {
       content = downloadedContent;
     }
 
-    if (signal?.aborted) return;
     clipboardSyncState.setRemoteContent(content);
 
     if (isStartupBaseline) return;
@@ -191,7 +187,7 @@ class ClipboardChangedHandler {
     const localMatchesRemote = remoteHash === this.lastLocalProfileHash;
     const activeServer = await configService.getActiveServer();
 
-    if (signal?.aborted || localMatchesRemote || !activeServer) {
+    if (localMatchesRemote || !activeServer) {
       return;
     }
 
@@ -235,7 +231,6 @@ class ClipboardChangedHandler {
     signal?: AbortSignal,
     supportsBackgroundTasks = true
   ): Promise<void> {
-    if (signal?.aborted) return;
     const isStartupBaseline = shouldUseStartupBaseline(this.lastLocalProfileHash, 'local');
     const config = await configService.getConfig();
 
@@ -247,7 +242,6 @@ class ClipboardChangedHandler {
     const activeServer = await configService.getActiveServer();
     if (!activeServer) return;
 
-    if (signal?.aborted) return;
     const currentHash = content.profileHash || content.text;
 
     // 如果匹配刚设置到本地剪贴板的 hash，跳过自动上传
@@ -277,7 +271,7 @@ class ClipboardChangedHandler {
           ToastAndroid.show(i18n.t('common.uploaded', { preview }), ToastAndroid.SHORT);
         }
       }
-      if (uploaded && !signal?.aborted) remoteClipboardMonitor.refresh().catch(() => {});
+      if (uploaded) remoteClipboardMonitor.refresh().catch(() => {});
     } catch (e: unknown) {
       if (!(e instanceof DOMException && e.name === 'AbortError')) {
         console.error('[ClipboardChangedHandler] Auto-upload failed:', e);

@@ -55,9 +55,7 @@ export async function setRemoteClipboard(
 
     await historyService.addLocalContent(content);
 
-    if (sig.aborted) throw new DOMException('Aborted', 'AbortError');
     await getClientService().setRemoteClipboard(content, notify, sig);
-    if (sig.aborted) throw new DOMException('Aborted', 'AbortError');
 
     // 上传完成后，更新 remoteContent
     clipboardSyncState.setRemoteContent(content);
@@ -77,7 +75,6 @@ export async function uploadLocalClipboard(
 ): Promise<boolean> {
   const actualContent = content ?? clipboardMonitor.getLastContent();
   if (!actualContent) return false;
-  if (signal?.aborted) return false;
   const uploadSignal = signal ?? new AbortController().signal;
   clipboardSyncState.setUploadingClipboard(true);
   clipboardSyncState.setUploadProgress(null);
@@ -111,12 +108,10 @@ export async function downloadRemoteClipboard(
 ): Promise<ClipboardContent | null> {
   const actualContent = content ?? clipboardSyncState.getState().remoteContent;
   if (!actualContent) return null;
-  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
   // 检查历史记录中是否已有该文件
   if (actualContent.profileHash) {
     const cachedItem = await historyService.getItem(actualContent.profileHash);
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     if (cachedItem?.fileUri) {
       const cachedFile = new File(cachedItem.fileUri);
       if (cachedFile.exists) {
@@ -141,7 +136,6 @@ export async function downloadRemoteClipboard(
         },
         sig
       );
-      if (sig.aborted) throw new DOMException('Aborted', 'AbortError');
       clipboardSyncState.setState({ remoteContent: result });
 
       return result;

@@ -31,12 +31,7 @@ export class DedupedOperation<TContent, TResult, TProgress = never> {
     run: (signal: AbortSignal, notify: (info: TProgress) => void) => Promise<TResult>
   ): Promise<TResult> {
     // 相同内容正在运行：继承，共享进度回调，等待完成
-    if (
-      this._promise &&
-      !this._controller?.signal.aborted &&
-      this._content &&
-      this.isSame(content, this._content)
-    ) {
+    if (this._promise && this._content && this.isSame(content, this._content)) {
       if (onProgress) this._callbacks.add(onProgress);
       try {
         return await this._promise;
