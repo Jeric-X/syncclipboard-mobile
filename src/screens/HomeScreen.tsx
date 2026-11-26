@@ -7,7 +7,7 @@ import React, { useState, useLayoutEffect, useMemo, useCallback, useEffect } fro
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
-import * as ClipboardProxy from '@/utils/clipboardProxy';
+import { localClipboard } from '@/services/clipboard/LocalClipboard';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/hooks/useTheme';
@@ -85,7 +85,6 @@ export function HomeScreen() {
 
   // 复制远程内容到本地剪贴板
   const copyRemoteToLocal = async (content: ClipboardContent, logPrefix: string = '') => {
-    const { localClipboard } = await import('@/services');
     await localClipboard.setClipboardContent(content, true);
     console.log(`[HomeScreen] ${logPrefix}Copy to local clipboard completed`);
   };
@@ -93,7 +92,6 @@ export function HomeScreen() {
   // 复制本地剪贴板内容（简单模式，直接设置到剪贴板）
   const copyLocalToClipboard = async (content: ClipboardContent) => {
     try {
-      const { localClipboard } = await import('@/services');
       await localClipboard.setClipboardContent(content);
       showMessage(t('clipboard.copied'), 'success');
     } catch (error) {
@@ -269,7 +267,7 @@ export function HomeScreen() {
 
   const handleCopyError = async () => {
     if (error) {
-      await ClipboardProxy.setStringAsync(`${error.title}\n\n${error.message}`);
+      await localClipboard.copyText(`${error.title}\n\n${error.message}`);
       showMessage(t('home.errorCopied'), 'success');
     }
   };

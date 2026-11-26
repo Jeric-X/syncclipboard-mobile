@@ -41,6 +41,7 @@ export class ClipboardMonitor {
   private isChecking: boolean = false;
   private recheckAfterReconnect = false;
   private checkGeneration: number = 0;
+  private notifiedWhileStopped?: WeakSet<ClipboardChangeCallback>;
 
   constructor(clipboardManager: LocalClipboard, options?: ClipboardMonitorOptions) {
     this.clipboardManager = clipboardManager;
@@ -48,7 +49,7 @@ export class ClipboardMonitor {
     // 注册复制生命周期回调，避免循环引用
     clipboardManager.registerCopyLifecycleCallbacks({
       onBeforeCopy: () => this.pauseMonitoring(),
-      onAfterCopy: () => this.resumeMonitoring(),
+      onAfterCopy: (written) => this.resumeMonitoring(written),
     });
 
     if (options) {
@@ -305,7 +306,10 @@ export class ClipboardMonitor {
         logStartupPoint('local.firstContent', { type: content.type, hasData: content.hasData });
         this.lastContent = content;
         this.notifyCallbacks(content);
+      } else if (this.notifiedWhileStopped) {
+        this.notifyCallbacks(content, this.notifiedWhileStopped);
       }
+      this.notifiedWhileStopped = undefined;
     } catch (error) {
       console.error('[ClipboardMonitor] Failed to check clipboard:', error);
     } finally {
@@ -351,8 +355,12 @@ export class ClipboardMonitor {
    * 通知所有回调（带防抖）
    * 使用 native-timer 替代 JS setTimeout，确保 Android 后台也能可靠触发
    */
-  private notifyCallbacks(content: ClipboardContent): void {
+  private notifyCallbacks(
+    content: ClipboardContent,
+    alreadyNotified?: WeakSet<ClipboardChangeCallback>
+  ): void {
     this.callbacks.forEach((callback) => {
+      if (alreadyNotified?.has(callback)) return;
       try {
         callback(content);
       } catch (error) {
@@ -425,18 +433,23 @@ export class ClipboardMonitor {
    * 同时立即触发一次检查，不必等待下一个周期。
    * 后台且后台上传未启用时，不恢复监控（避免后台写入剪贴板后误重启）。
    */
-  async resumeMonitoring(): Promise<void> {
-    if (!this.isMonitoring) return;
-
+  async resumeMonitoring(written?: ClipboardContent): Promise<void> {
     // 后台且后台上传未启用时，不恢复任何监控。
     const currentState = AppState.currentState;
     if (
+      this.isMonitoring &&
       (currentState === 'background' || currentState === 'inactive') &&
       !this._isBgRunningEnabled()
     ) {
       return;
     }
 
+    if (written && this.hasContentChanged(written)) {
+      await this.setLastContent(written);
+      this.notifiedWhileStopped = this.isMonitoring ? undefined : new WeakSet(this.callbacks);
+      this.notifyCallbacks(written);
+    }
+    if (!this.isMonitoring) return;
     await this.startMonitoring();
   }
 

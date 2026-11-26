@@ -88,7 +88,7 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
       this.validateProfile(profile);
 
       // 确保目录存在
-      await this.ensureDirectoryExists('/');
+      await this.ensureDirectoryExists('/', signal);
 
       // WebDAV PUT 请求上传文件
       await this.put(`/${WebDAVClient.PROFILE_FILENAME}`, profile, signal ? { signal } : undefined);
@@ -119,7 +119,7 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
 
     console.log(`[WebDAVClient] Uploading file: ${fileName}`);
 
-    await this.ensureDirectoryExists('/file');
+    await this.ensureDirectoryExists('/file', signal);
 
     const url = `${this.baseURL}/file/${encodeURIComponent(fileName)}`;
 
@@ -202,12 +202,13 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
   /**
    * 确保目录存在（创建目录）
    */
-  private async ensureDirectoryExists(path: string): Promise<void> {
+  private async ensureDirectoryExists(path: string, signal?: AbortSignal): Promise<void> {
     try {
       // 使用 MKCOL 方法创建目录
       // 如果目录已存在，会返回 405 Method Not Allowed，这是正常的
       await this.client.request({
         method: 'MKCOL',
+        signal,
         url: path,
       });
     } catch (error: unknown) {

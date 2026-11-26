@@ -17,7 +17,7 @@ import {
   ScrollView,
   useWindowDimensions,
 } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
+import { localClipboard } from '@/services/clipboard/LocalClipboard';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from 'react-i18next';
 import type { ClipboardContent } from '@/types/clipboard';
@@ -374,7 +374,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
                     styles.buttonOutline,
                     { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
                   ]}
-                  onPress={() => Clipboard.setStringAsync(errorMessage)}
+                  onPress={() => localClipboard.copyText(errorMessage)}
                 >
                   <Text style={[styles.buttonText, { color: theme.colors.text }]}>
                     {t('common.copy')}

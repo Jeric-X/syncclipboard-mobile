@@ -18,7 +18,7 @@ import {
   BackHandler,
   Switch,
 } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
+import { localClipboard } from '@/services/clipboard/LocalClipboard';
 import { Segment, useDefault } from 'segmentit';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from 'react-i18next';
@@ -195,7 +195,7 @@ export const WordPickerScreen: React.FC<WordPickerScreenProps> = ({ text, onComp
   const handleCopy = useCallback(async () => {
     const selectedText = tokens.filter((_, i) => selected.has(i)).join('');
     if (selectedText) {
-      await Clipboard.setStringAsync(selectedText);
+      await localClipboard.copyText(selectedText);
       ToastAndroid.show(t('wordPicker.copied'), ToastAndroid.SHORT);
     }
   }, [tokens, selected]);

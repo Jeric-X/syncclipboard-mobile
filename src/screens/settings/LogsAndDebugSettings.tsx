@@ -13,7 +13,7 @@ import { useSettingsStore } from '@/stores';
 import { MAX_STATISTICS_RECORDS, useStatisticsStore } from '@/stores/statisticsStore';
 import { extractVerificationCode } from '@/tasks/SmsUploadTask';
 import { saveLogsToFile, setLogLevel as setLoggerLogLevel, type LogLevel } from '@/utils';
-import * as Clipboard from 'expo-clipboard';
+import { localClipboard } from '@/services/clipboard/LocalClipboard';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -163,7 +163,7 @@ export const LogsAndDebugSettings = ({ showMessage }: SettingsModuleProps) => {
   // 复制所有记录，列表本身按需渲染，避免一次渲染一万条文本。
   const handleCopyStatistics = async () => {
     try {
-      await Clipboard.setStringAsync(
+      await localClipboard.copyText(
         useStatisticsStore.getState().getStatisticsText(statisticsFormatting)
       );
       setShowStatsModal(false);

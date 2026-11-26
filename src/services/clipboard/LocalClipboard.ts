@@ -15,6 +15,9 @@ import { nativeSetClipboardImageFromFile } from 'native-util';
 import i18n from '@/i18n';
 import { measureStartup } from '@/services/StartupTiming';
 
+/** 超过此字符数时，本机剪贴板将文本保存为附件。 */
+const TEXT_STORAGE_THRESHOLD = 1000;
+
 /**
  * 剪贴板复制生命周期回调，由外部模块（如 ClipboardMonitor）注册
  */
@@ -22,13 +25,14 @@ export interface CopyLifecycleCallbacks {
   /** 复制开始前调用（暂停剪贴板监控） */
   onBeforeCopy: () => void | Promise<void>;
   /** 复制结束后调用，无论成功与否（恢复剪贴板监控） */
-  onAfterCopy: () => void | Promise<void>;
+  onAfterCopy: (written?: ClipboardContent) => void | Promise<void>;
 }
 
 /**
  * 剪贴板管理器类
  */
 export class LocalClipboard {
+  private copyVersion = 0;
   private lastCopiedImage: { profileHash: string; localClipboardHash: string } | null = null;
   private copyLifecycleCallbacks: CopyLifecycleCallbacks | null = null;
   private remoteCopiedCallback: ((content: ClipboardContent) => void) | null = null;
@@ -137,8 +141,6 @@ export class LocalClipboard {
     }
 
     // 历史记录中没有找到或文件不存在，继续处理
-    // 文本长度阈值（字符数），超过此长度将保存为文件
-    const TEXT_STORAGE_THRESHOLD = 1000;
     const TEXT_PREVIEW_MAX_LENGTH = 200;
 
     // 如果文本长度超过阈值，保存为文件
@@ -324,12 +326,19 @@ export class LocalClipboard {
     }
   }
 
-  async setTextContent(content: ClipboardContent): Promise<void> {
+  /** App 内复制的文本沿用同一套写入及通知流程。 */
+  async copyText(text: string): Promise<void> {
+    await this.setClipboardContent({ type: 'Text', text, hasData: false });
+  }
+
+  async setTextContent(content: ClipboardContent): Promise<ClipboardContent | undefined> {
     try {
       let text = content.text;
+      let readFullText = false;
       if (content.type === 'Text' && content.fileUri && content.hasData) {
         try {
           text = await this.readTextFromFileUri(content.fileUri);
+          readFullText = true;
           console.log(
             `[ClipboardManager] Read complete text from file for profileHash: ${content.profileHash}, length: ${text.length}`
           );
@@ -344,7 +353,10 @@ export class LocalClipboard {
       if (isTextInvalid(text)) {
         return;
       }
-      await Clipboard.setStringAsync(text!);
+      if ((await Clipboard.setStringAsync(text!)) === false)
+        throw new Error(i18n.t('clipboard.copyFailed'));
+      if (content.profileHash && (!content.hasData || readFullText)) return content;
+      return { type: 'Text', text, hasData: false };
     } catch (error) {
       console.error('[ClipboardManager] Failed to set text content:', error);
 
@@ -372,16 +384,38 @@ export class LocalClipboard {
     }
   }
 
+  private async getWrittenContent(
+    content: ClipboardContent
+  ): Promise<ClipboardContent | undefined> {
+    const version = ++this.copyVersion;
+    const timestamp = Date.now();
+    if (content.type === 'Text' && !content.hasData && !content.text) return;
+    if (
+      content.type === 'Text' &&
+      (!content.profileHash || (!content.hasData && content.text.length > TEXT_STORAGE_THRESHOLD))
+    ) {
+      try {
+        content = await this.getTextContentFromString(content.text);
+      } catch (error) {
+        console.warn('[LocalClipboard] Failed to load copied text metadata:', error);
+        return;
+      }
+      if (version !== this.copyVersion) return;
+    }
+    return { ...content, timestamp };
+  }
+
   /**
    * 设置剪贴板内容。写入期间自动暂停剪贴板监听，完成后恢复并立即触发一次检查。
    * 写入失败时直接抛出异常，由调用方处理。
    */
   async setClipboardContent(content: ClipboardContent, isFromRemote = false): Promise<void> {
+    let written: ClipboardContent | undefined;
     await this.copyLifecycleCallbacks?.onBeforeCopy();
     try {
       switch (content.type) {
         case 'Text':
-          await this.setTextContent(content);
+          written = await this.setTextContent(content);
           break;
 
         case 'Image':
@@ -398,7 +432,7 @@ export class LocalClipboard {
             this.lastCopiedImage = content.profileHash
               ? { profileHash: content.profileHash, localClipboardHash }
               : null;
-            content = { ...content, localClipboardHash };
+            written = { ...content, localClipboardHash };
           }
           break;
 
@@ -407,11 +441,12 @@ export class LocalClipboard {
         default:
           throw new Error(`Unsupported clipboard type: ${content.type}`);
       }
-      if (isFromRemote) {
-        this.remoteCopiedCallback?.(content);
+      if (written) written = await this.getWrittenContent(written);
+      if (isFromRemote && written) {
+        this.remoteCopiedCallback?.(written);
       }
     } finally {
-      await this.copyLifecycleCallbacks?.onAfterCopy();
+      await this.copyLifecycleCallbacks?.onAfterCopy(written);
     }
   }
 

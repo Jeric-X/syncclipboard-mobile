@@ -1,5 +1,5 @@
 import { ClipboardMonitor } from '../services/clipboard/ClipboardMonitor';
-import type { LocalClipboard } from '../services/clipboard/LocalClipboard';
+import type { CopyLifecycleCallbacks, LocalClipboard } from '../services/clipboard/LocalClipboard';
 import { setTimer, clearTimer } from 'native-timer';
 import { configService } from '../services/ConfigService';
 import { requireNativeModule } from 'expo-modules-core';
@@ -31,6 +31,7 @@ jest.mock('../services/StartupTiming', () => ({
 
 const native = jest.mocked(requireNativeModule).mock.results[0].value;
 let monitor: ClipboardMonitor;
+let copyCallbacks: CopyLifecycleCallbacks;
 let readClipboard: jest.Mock;
 let events: Map<string, () => void>;
 
@@ -50,7 +51,9 @@ beforeEach(() => {
   } as Awaited<ReturnType<typeof configService.getConfig>>);
   readClipboard = jest.fn(async () => null);
   monitor = new ClipboardMonitor({
-    registerCopyLifecycleCallbacks: jest.fn(),
+    registerCopyLifecycleCallbacks: (callbacks: CopyLifecycleCallbacks) => {
+      copyCallbacks = callbacks;
+    },
     getClipboardContent: readClipboard,
   } as unknown as LocalClipboard);
 });
@@ -183,4 +186,25 @@ it('恢复时若旧轮询仍在读取，结束后仍须补读最新内容', asyn
   finishRead(null);
   for (let i = 0; i < 10; i++) await Promise.resolve();
   expect(changed).toHaveBeenCalledWith(content);
+});
+
+it('delivers app writes immediately and deduplicates the subsequent system read', async () => {
+  const changed = jest.fn();
+  monitor.addCallback(changed);
+  const written = { type: 'Text' as const, text: 'written', hasData: false, profileHash: 'hash' };
+  await copyCallbacks.onBeforeCopy();
+  readClipboard.mockImplementation(async () => {
+    expect(changed).toHaveBeenCalledWith(written);
+    return written;
+  });
+  await copyCallbacks.onAfterCopy(written);
+  expect(changed).toHaveBeenCalledWith(written);
+  expect(readClipboard).not.toHaveBeenCalled();
+  const subscribedAfterCopy = jest.fn();
+  monitor.addCallback(subscribedAfterCopy);
+  await monitor.start();
+  await monitor.triggerCheck();
+  expect(readClipboard).toHaveBeenCalled();
+  expect(subscribedAfterCopy).toHaveBeenCalledWith(written);
+  expect(changed).toHaveBeenCalledTimes(1);
 });
