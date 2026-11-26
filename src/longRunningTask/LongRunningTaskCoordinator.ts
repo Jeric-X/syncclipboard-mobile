@@ -5,6 +5,8 @@ import { measureStartup } from '../services/StartupTiming';
 export interface TaskRuntimePolicy {
   foreground: boolean;
   backgroundEnabled: boolean;
+  /** 每次真正退后台递增，使队列可合并过时的前台事件。 */
+  foregroundSession?: number;
 }
 
 /** 串行化生命周期操作，防止多个入口或配置通知交错启动、停止同一任务。 */
@@ -12,6 +14,7 @@ export class LongRunningTaskCoordinator {
   private tasks = new Map<string, { task: ILongRunningTask; keepAlive: boolean }>();
   private queue: Promise<void> = Promise.resolve();
   private enabled = false;
+  private foregroundSession?: number;
 
   constructor(
     private readonly getPolicy: () => Promise<TaskRuntimePolicy>,
@@ -46,7 +49,7 @@ export class LongRunningTaskCoordinator {
     });
   }
 
-  refresh(configChanged = false, enteredBackground = false): Promise<void> {
+  refresh(configChanged = false): Promise<void> {
     return this.enqueue(async () => {
       if (!this.enabled) return;
       if (configChanged) {
@@ -54,7 +57,7 @@ export class LongRunningTaskCoordinator {
           if (task.isRunning()) await this.safely(task, () => task.onConfigChanged());
         }
       }
-      await this.reconcile(enteredBackground);
+      await this.reconcile();
     });
   }
 
@@ -86,14 +89,21 @@ export class LongRunningTaskCoordinator {
     }
   }
 
-  private async reconcile(enteredBackground = false): Promise<void> {
+  private async reconcile(): Promise<void> {
     const policy = await this.getPolicy();
-    // 已发生的退后台必须停止监听；排队的前台事件仅在仍处于前台时才启动。
-    const inForeground = !enteredBackground && policy.foreground;
+    if (policy.foregroundSession !== this.foregroundSession) {
+      // 即使连续切换时队列只看到了最新的前台状态，也先结束上一轮监听。
+      this.foregroundSession = policy.foregroundSession;
+      for (const { task, keepAlive } of this.tasks.values()) {
+        if (!keepAlive && task.isRunning()) await this.safely(task, () => task.stop());
+      }
+      // 断开连接可能耗时，按完成时的最新状态决定是否启动新一轮。
+      return this.reconcile();
+    }
     const active: ILongRunningTask[] = [];
     // 注册顺序保证网络选择和同步回调先于剪贴板监听初始化。
     for (const { task, keepAlive } of this.tasks.values()) {
-      if (keepAlive || inForeground || policy.backgroundEnabled) {
+      if (keepAlive || policy.foreground || policy.backgroundEnabled) {
         if (!task.isRunning()) {
           await this.safely(task, () =>
             measureStartup(`task.${task.name}.start`, () => task.start())
@@ -108,7 +118,7 @@ export class LongRunningTaskCoordinator {
     for (const task of active) {
       await this.safely(task, () =>
         measureStartup(`task.${task.name}.initialPolicy`, () =>
-          inForeground ? task.onForeground() : task.onBackground()
+          policy.foreground ? task.onForeground() : task.onBackground()
         )
       );
     }

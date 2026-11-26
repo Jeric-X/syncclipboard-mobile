@@ -21,12 +21,14 @@ import { LongRunningTaskCoordinator } from './LongRunningTaskCoordinator';
 class LongRunningTaskManager extends LongRunningTaskCoordinator {
   constructor() {
     let iosForeground = AppState.currentState === 'active';
+    let iosForegroundSession = 0;
     super(
       async () => ({
-        foreground: Platform.OS === 'ios' ? iosForeground : AppState.currentState === 'active',
         backgroundEnabled:
           !backgroundRuntimeState.isTempDisabled() &&
           isBackgroundSyncEnabled(await configService.getConfig()),
+        foreground: Platform.OS === 'ios' ? iosForeground : AppState.currentState === 'active',
+        foregroundSession: Platform.OS === 'ios' ? iosForegroundSession : undefined,
       }),
       (name, error) => console.error(`[LongRunningTaskManager] Task "${name}" failed:`, error)
     );
@@ -36,16 +38,15 @@ class LongRunningTaskManager extends LongRunningTaskCoordinator {
       if (Platform.OS === 'ios') {
         // 系统授权弹窗也会进入 inactive；保留原状态，关闭弹窗不触发第二次读板。
         if (state === 'inactive') return;
+        if (iosForeground && state === 'background') iosForegroundSession++;
         iosForeground = state === 'active';
-        this.requestRefresh(false, !iosForeground);
-      } else {
-        this.requestRefresh();
       }
+      this.requestRefresh();
     });
   }
 
-  private requestRefresh(configChanged = false, enteredBackground = false): void {
-    this.refresh(configChanged, enteredBackground).catch((error) => {
+  private requestRefresh(configChanged = false): void {
+    this.refresh(configChanged).catch((error) => {
       console.error('[LongRunningTaskManager] Failed to reconcile tasks:', error);
     });
   }

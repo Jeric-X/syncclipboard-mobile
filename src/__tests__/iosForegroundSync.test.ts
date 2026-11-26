@@ -232,3 +232,28 @@ it('排队的前台事件执行前已经退后台时，不发起陈旧的本机�
   expect(localClipboard.getClipboardContent).not.toHaveBeenCalled();
   expect(getClipboard).not.toHaveBeenCalled();
 });
+
+it('断连期间连续切回两次只执行最后一次前台读取', async () => {
+  jest
+    .mocked(configService.getActiveServer)
+    .mockResolvedValue({ ...server, type: 'syncclipboard' });
+  await longRunningTaskManager.startAll();
+  await drain();
+  let finishDisconnect!: () => void;
+  signalR.disconnect.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finishDisconnect = resolve;
+      })
+  );
+  setAppState('background');
+  await drain();
+  setAppState('active');
+  setAppState('background');
+  setAppState('active');
+  finishDisconnect();
+  await longRunningTaskManager.refresh();
+  await drain();
+  expect(localClipboard.getClipboardContent).toHaveBeenCalledTimes(2);
+  expect(signalR.connect).toHaveBeenCalledTimes(2);
+});
