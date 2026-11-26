@@ -24,7 +24,7 @@ export class ClipboardMonitor {
   private nativeClipboardListenerGeneration = 0;
   private nativeClipboardListenerOperation: Promise<unknown> = Promise.resolve();
   private monitoringGeneration = 0;
-  private lastContent?: ClipboardContent | null;
+  private lastContent: ClipboardContent | null = null;
 
   /**
    * 注入的回调集合，用于查询“后台运行是否需要持续”。
@@ -409,7 +409,7 @@ export class ClipboardMonitor {
    * 获取上次已知的本地剪贴板内容缓存（不触发系统 API 读取）
    */
   getLastContent(): ClipboardContent | null {
-    return this.lastContent ?? null;
+    return this.lastContent;
   }
 
   /**
@@ -472,7 +472,7 @@ export class ClipboardMonitor {
    * 重置监听器状态
    */
   reset(): void {
-    this.lastContent = undefined;
+    this.lastContent = null;
   }
 }
 

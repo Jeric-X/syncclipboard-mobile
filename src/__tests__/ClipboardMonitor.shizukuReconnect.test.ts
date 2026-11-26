@@ -212,7 +212,6 @@ it('delivers app writes immediately and deduplicates the subsequent system read'
   const changed = jest.fn();
   monitor.addCallback(changed);
   await monitor.start();
-  changed.mockClear();
   const written = { type: 'Text' as const, text: 'written', hasData: false, profileHash: 'hash' };
   await copyCallbacks.onBeforeCopy();
   readClipboard.mockImplementation(async () => {
