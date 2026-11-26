@@ -8,7 +8,6 @@ import * as ClipboardProxy from '@/utils/clipboardProxy';
 import * as FileSystem from 'expo-file-system';
 import { ClipboardContent } from '@/types';
 import { calculateTextHash, calculateFileHash } from '@/utils/hash';
-import { isTextInvalid } from '@/utils/index';
 import { historyStorage } from '../../storage/HistoryStorage';
 import { prepareTempFilePath, CLIPBOARD_TEMP_DIR, getHistoryFileUri } from '@/utils/fileStorage';
 import { nativeSetClipboardImageFromFile } from 'native-util';
@@ -325,15 +324,11 @@ export class LocalClipboard {
     await this.setClipboardContent(await this.createTextContent(text));
   }
 
-  async setTextContent(content: ClipboardContent, signal?: AbortSignal): Promise<boolean> {
+  async setTextContent(content: ClipboardContent, signal?: AbortSignal): Promise<void> {
     const text = await this.readTextContent(content);
-    if (isTextInvalid(text)) {
-      return false;
-    }
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    const written = await Clipboard.setStringAsync(text!);
+    const written = await Clipboard.setStringAsync(text);
     if (written === false) throw new Error(i18n.t('clipboard.copyFailed'));
-    return true;
   }
 
   /**
@@ -366,7 +361,7 @@ export class LocalClipboard {
     try {
       switch (content.type) {
         case 'Text':
-          if (!(await this.setTextContent(content, signal))) return;
+          await this.setTextContent(content, signal);
           break;
 
         case 'Image': {
