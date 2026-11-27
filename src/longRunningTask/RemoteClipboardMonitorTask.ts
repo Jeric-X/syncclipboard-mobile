@@ -25,12 +25,23 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
   private _activeServer: ServerConfig | null = null;
   private _activePollingInterval: number | undefined = undefined;
 
-  async start(foreground = true): Promise<void> {
+  async start(): Promise<void> {
     if (this._started) return;
     // 任务生命周期与当前是否有服务器分离，以便无服务器时仍能接收配置变化。
     this._started = true;
-    this.lifecycle++;
-    await this.onConfigChanged(foreground);
+    const lifecycle = ++this.lifecycle;
+    const server = await configService.getActiveServer();
+    const config = await configService.getConfig();
+    if (lifecycle !== this.lifecycle) return;
+    if (!server) {
+      this._activeServer = null;
+      this._activePollingInterval = config?.remotePollingInterval;
+      clipboardSyncState.setRemoteContent(null);
+      return;
+    }
+    this._activeServer = server;
+    this._activePollingInterval = config?.remotePollingInterval;
+    this.runInBackground(() => remoteClipboardMonitor.connect());
   }
 
   async stop(): Promise<void> {
@@ -45,7 +56,7 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
     return this._started;
   }
 
-  override async onConfigChanged(foreground = true): Promise<void> {
+  override async onConfigChanged(): Promise<void> {
     if (!this._started) return;
     const lifecycle = this.lifecycle;
     const newServer = await configService.getActiveServer();
@@ -53,19 +64,24 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
     if (lifecycle !== this.lifecycle) return;
     const newPollingInterval = config?.remotePollingInterval;
 
-    const changed =
-      JSON.stringify(newServer) !== JSON.stringify(this._activeServer) ||
-      newPollingInterval !== this._activePollingInterval;
-    const shouldConnect =
-      newServer && (foreground || remoteClipboardMonitor.isBackgroundRunningEnabled());
-    if (this._activeServer && (changed || !shouldConnect)) {
+    const serverChanged = JSON.stringify(newServer) !== JSON.stringify(this._activeServer);
+    const pollingIntervalChanged = newPollingInterval !== this._activePollingInterval;
+
+    if (!newServer) {
+      this._activeServer = null;
+      this._activePollingInterval = newPollingInterval;
+      await remoteClipboardMonitor.disconnect();
+      clipboardSyncState.setRemoteContent(null);
+      return;
+    }
+
+    if (serverChanged || pollingIntervalChanged) {
       await remoteClipboardMonitor.disconnect();
       if (lifecycle !== this.lifecycle) return;
-    }
-    this._activeServer = newServer;
-    this._activePollingInterval = newPollingInterval;
-    if (!newServer) clipboardSyncState.setRemoteContent(null);
-    if (shouldConnect && (changed || !remoteClipboardMonitor.isConnected())) {
+      this._activeServer = newServer;
+      this._activePollingInterval = newPollingInterval;
+      this.runInBackground(() => remoteClipboardMonitor.connect());
+    } else if (!remoteClipboardMonitor.isConnected()) {
       this.runInBackground(() => remoteClipboardMonitor.connect());
     }
   }

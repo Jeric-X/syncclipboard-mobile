@@ -13,7 +13,7 @@ export interface ILongRunningTask {
    * 启动任务（幂等）。
    * 若任务已在运行，应直接返回而不抛出异常。
    */
-  start(foreground: boolean): Promise<void>;
+  start(): Promise<void>;
 
   /**
    * 停止任务（幂等）。
@@ -28,7 +28,7 @@ export interface ILongRunningTask {
    * 配置变更时的处理回调。
    * 由任务自身决定是否响应配置变更。
    */
-  onConfigChanged(foreground: boolean): Promise<void>;
+  onConfigChanged(): Promise<void>;
 
   /**
    * App 切换到后台时的回调。
@@ -50,11 +50,11 @@ export interface ILongRunningTask {
  */
 export abstract class LongRunningTask implements ILongRunningTask {
   abstract readonly name: string;
-  abstract start(foreground: boolean): Promise<void>;
+  abstract start(): Promise<void>;
   abstract stop(): Promise<void>;
   abstract isRunning(): boolean;
 
-  onConfigChanged(_foreground: boolean): Promise<void> {
+  onConfigChanged(): Promise<void> {
     return Promise.resolve();
   }
 

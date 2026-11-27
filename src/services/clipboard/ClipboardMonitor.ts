@@ -265,12 +265,8 @@ export class ClipboardMonitor {
   }
 
   /** 配置或 Shizuku 授权变化后，切换事件模式与轮询兜底。 */
-  async refreshListeningMode(foreground = true): Promise<void> {
+  async refreshListeningMode(): Promise<void> {
     if (!this.isMonitoring || Platform.OS !== 'android') return;
-    if (!foreground && !this._isBgRunningEnabled()) {
-      await this.stopMonitoring();
-      return;
-    }
 
     const generation = this.monitoringGeneration;
     const shouldUseEvents = await isShizukuClipboardRequested();

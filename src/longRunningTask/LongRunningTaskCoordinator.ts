@@ -64,9 +64,7 @@ export class LongRunningTaskCoordinator {
   }
 
   start(name: string): Promise<void> {
-    return this.enqueue(async () =>
-      this.getTask(name).task.start((await this.getPolicy()).foreground)
-    );
+    return this.enqueue(() => this.getTask(name).task.start());
   }
 
   stop(name: string): Promise<void> {
@@ -118,9 +116,9 @@ export class LongRunningTaskCoordinator {
       await this.safely(task, async () => {
         if (!task.isRunning()) {
           entry.foreground = undefined;
-          await measureStartup(`task.${task.name}.start`, () => task.start(foreground));
+          await measureStartup(`task.${task.name}.start`, () => task.start());
         } else if (configChanged) {
-          await task.onConfigChanged(foreground);
+          await task.onConfigChanged();
         }
       });
       if (task.isRunning() && entry.foreground !== foreground) pending.push(entry);

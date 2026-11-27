@@ -19,7 +19,6 @@ import {
 import { updateForegroundNotification } from '../notification/ForegroundNotification';
 import { historyService } from '../history/HistoryService';
 import { localClipboard } from '../clipboard/LocalClipboard';
-import { areBackgroundTasksEnabled } from '../../utils/config';
 import { calculateTextHash } from '../../utils/hash';
 import i18n from '@/i18n';
 import { logStartupPoint, getStartupElapsedMs } from '../StartupTiming';
@@ -169,9 +168,7 @@ class ClipboardChangedHandler {
     if (content.type === 'Image' && (config.autoCopyTextOnly || !content.fileUri)) return;
 
     const autoSyncEnabled = config?.autoSync ?? false;
-    const bgDownloadEnabled = !!(
-      areBackgroundTasksEnabled(config) && config.enableBackgroundDownload
-    );
+    const bgDownloadEnabled = config.enableBackgroundTasks && config.enableBackgroundDownload;
     const isAppActive = AppState.currentState === 'active';
     const shouldAutoCopy = autoSyncEnabled || (!isAppActive && bgDownloadEnabled);
 
@@ -222,7 +219,7 @@ class ClipboardChangedHandler {
     const config = await configService.getConfig();
 
     const autoSync = config?.autoSync ?? false;
-    const bgUpload = areBackgroundTasksEnabled(config) && config.enableBackgroundUpload;
+    const bgUpload = config.enableBackgroundTasks && config.enableBackgroundUpload;
     if (!autoSync && !bgUpload) return;
 
     const activeServer = await configService.getActiveServer();

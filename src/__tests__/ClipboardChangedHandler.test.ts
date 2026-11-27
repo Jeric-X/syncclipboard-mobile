@@ -1,5 +1,5 @@
 import type { ClipboardContent } from '@/types/clipboard';
-import { AppState, Platform } from 'react-native';
+import { AppState } from 'react-native';
 import { DEFAULT_APP_CONFIG } from '../types/storage';
 
 jest.mock('react-native', () => ({
@@ -118,22 +118,16 @@ describe('ClipboardChangedHandler 启动基线窗口', () => {
     jest.restoreAllMocks();
   });
 
-  it('iOS 导入 Android 后台上传配置后仍遵守前台自动同步开关', async () => {
-    const previousPlatform = Platform.OS;
-    Platform.OS = 'ios';
-    try {
-      jest.spyOn(performance, 'now').mockReturnValue(SYSTEM_START_TIME_MS + 2_000);
-      jest.mocked(configService.getConfig).mockResolvedValue({
-        ...DEFAULT_APP_CONFIG,
-        autoSync: false,
-        enableBackgroundTasks: true,
-        enableBackgroundUpload: true,
-      });
-      await handler.handleAutoUpload(content);
-      expect(uploadLocalClipboard).not.toHaveBeenCalled();
-    } finally {
-      Platform.OS = previousPlatform;
-    }
+  it('关闭前台自动同步和后台任务时不上传', async () => {
+    jest.spyOn(performance, 'now').mockReturnValue(SYSTEM_START_TIME_MS + 2_000);
+    jest.mocked(configService.getConfig).mockResolvedValue({
+      ...DEFAULT_APP_CONFIG,
+      autoSync: false,
+      enableBackgroundTasks: false,
+      enableBackgroundUpload: true,
+    });
+    await handler.handleAutoUpload(content);
+    expect(uploadLocalClipboard).not.toHaveBeenCalled();
   });
 
   it('两秒内首次本地内容仅建立基线', async () => {

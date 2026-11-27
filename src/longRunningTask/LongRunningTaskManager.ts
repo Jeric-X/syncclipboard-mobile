@@ -14,7 +14,6 @@ import { remoteClipboardMonitorTask } from './RemoteClipboardMonitorTask';
 import { networkAutoSwitchTask } from './NetworkAutoSwitchTask';
 import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
-import { areBackgroundTasksEnabled } from '../utils/config';
 import { AppState, Platform } from 'react-native';
 import { LongRunningTaskCoordinator } from './LongRunningTaskCoordinator';
 
@@ -25,7 +24,7 @@ class LongRunningTaskManager extends LongRunningTaskCoordinator {
       async () => ({
         backgroundEnabled:
           !backgroundRuntimeState.isTempDisabled() &&
-          areBackgroundTasksEnabled(await configService.getConfig()),
+          (await configService.getConfig()).enableBackgroundTasks,
         foreground,
       }),
       (name, error) => console.error(`[LongRunningTaskManager] Task "${name}" failed:`, error)

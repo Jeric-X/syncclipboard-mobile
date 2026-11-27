@@ -26,9 +26,9 @@ class ClipboardMonitorTask extends LongRunningTask {
     await this._applyPollingInterval();
   }
 
-  override async onConfigChanged(foreground: boolean): Promise<void> {
+  override async onConfigChanged(): Promise<void> {
     await this._applyPollingInterval();
-    await clipboardMonitor.refreshListeningMode(foreground);
+    await clipboardMonitor.refreshListeningMode();
   }
 
   override onBackground(): Promise<void> {

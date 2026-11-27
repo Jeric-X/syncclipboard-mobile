@@ -90,9 +90,6 @@ beforeEach(() => {
   setAppState('active');
   jest.mocked(configService.getConfig).mockResolvedValue({
     ...DEFAULT_APP_CONFIG,
-    enableBackgroundTasks: true,
-    enableBackgroundDownload: true,
-    enableBackgroundUpload: true,
     localPollingInterval: 1234,
     remotePollingInterval: 4567,
   });
@@ -115,15 +112,9 @@ afterEach(async () => {
 });
 
 it('每次进入前台只读一次本机，持续轮询远端，退后台保留监听任务并退订同步服务', async () => {
-  setAppState('background');
-  await longRunningTaskManager.startAll();
-  expect(localClipboard.getClipboardContent).not.toHaveBeenCalled();
-  expect(getClipboard).not.toHaveBeenCalled();
-
   const local = { type: 'Text' as const, text: 'phone', hasData: false };
   jest.mocked(localClipboard.getClipboardContent).mockResolvedValue(local);
-  setAppState('active');
-  await longRunningTaskManager.refresh();
+  await longRunningTaskManager.startAll();
   await drain();
   expect(localClipboard.getClipboardContent).toHaveBeenCalledTimes(1);
   expect(timers.has('clipboard_monitor')).toBe(false);
@@ -138,7 +129,6 @@ it('每次进入前台只读一次本机，持续轮询远端，退后台保留�
 
   setAppState('background');
   await longRunningTaskManager.refresh();
-  await longRunningTaskManager.refresh(true);
   expect(longRunningTaskManager.isRunning('clipboardMonitor')).toBe(true);
   expect(longRunningTaskManager.isRunning('remoteClipboardMonitor')).toBe(true);
   expect(timers.size).toBe(0);
@@ -228,8 +218,12 @@ it('快速切出再返回时丢弃尚未完成的旧读取并补读一次', asyn
 });
 
 it('排队的前台事件执行前已经退后台时，不发起陈旧的本机读取', async () => {
-  setAppState('background');
   await longRunningTaskManager.startAll();
+  await drain();
+  setAppState('background');
+  await longRunningTaskManager.refresh();
+  jest.mocked(localClipboard.getClipboardContent).mockClear();
+  getClipboard.mockClear();
   setAppState('active');
   setAppState('background');
   await longRunningTaskManager.refresh();
