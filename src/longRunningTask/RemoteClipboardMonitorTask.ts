@@ -29,21 +29,8 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
     if (this._started) return;
     // 任务生命周期与当前是否有服务器分离，以便无服务器时仍能接收配置变化。
     this._started = true;
-    const lifecycle = ++this.lifecycle;
-    const server = await configService.getActiveServer();
-    const config = await configService.getConfig();
-    if (lifecycle !== this.lifecycle) return;
-    if (!server) {
-      this._activeServer = null;
-      this._activePollingInterval = config?.remotePollingInterval;
-      clipboardSyncState.setRemoteContent(null);
-      return;
-    }
-    this._activeServer = server;
-    this._activePollingInterval = config?.remotePollingInterval;
-    if (foreground || remoteClipboardMonitor.isBackgroundRunningEnabled()) {
-      this.runInBackground(() => remoteClipboardMonitor.connect());
-    }
+    this.lifecycle++;
+    await this.onConfigChanged(foreground);
   }
 
   async stop(): Promise<void> {
@@ -66,24 +53,19 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
     if (lifecycle !== this.lifecycle) return;
     const newPollingInterval = config?.remotePollingInterval;
 
-    const serverChanged = JSON.stringify(newServer) !== JSON.stringify(this._activeServer);
-    const pollingIntervalChanged = newPollingInterval !== this._activePollingInterval;
-
-    if (!newServer || (!foreground && !remoteClipboardMonitor.isBackgroundRunningEnabled())) {
-      this._activeServer = newServer;
-      this._activePollingInterval = newPollingInterval;
-      await remoteClipboardMonitor.disconnect();
-      if (!newServer) clipboardSyncState.setRemoteContent(null);
-      return;
-    }
-
-    if (serverChanged || pollingIntervalChanged) {
+    const changed =
+      JSON.stringify(newServer) !== JSON.stringify(this._activeServer) ||
+      newPollingInterval !== this._activePollingInterval;
+    const shouldConnect =
+      newServer && (foreground || remoteClipboardMonitor.isBackgroundRunningEnabled());
+    if (this._activeServer && (changed || !shouldConnect)) {
       await remoteClipboardMonitor.disconnect();
       if (lifecycle !== this.lifecycle) return;
-      this._activeServer = newServer;
-      this._activePollingInterval = newPollingInterval;
-      this.runInBackground(() => remoteClipboardMonitor.connect());
-    } else if (!remoteClipboardMonitor.isConnected()) {
+    }
+    this._activeServer = newServer;
+    this._activePollingInterval = newPollingInterval;
+    if (!newServer) clipboardSyncState.setRemoteContent(null);
+    if (shouldConnect && (changed || !remoteClipboardMonitor.isConnected())) {
       this.runInBackground(() => remoteClipboardMonitor.connect());
     }
   }

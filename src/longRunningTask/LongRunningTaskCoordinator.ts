@@ -5,8 +5,6 @@ import { measureStartup } from '../services/StartupTiming';
 export interface TaskRuntimePolicy {
   foreground: boolean;
   backgroundEnabled: boolean;
-  /** 每次真正退后台递增，使队列可合并过时的前台事件。 */
-  foregroundSession?: number;
 }
 
 interface RegisteredTask {
@@ -21,7 +19,7 @@ export class LongRunningTaskCoordinator {
   private tasks = new Map<string, RegisteredTask>();
   private queue: Promise<void> = Promise.resolve();
   private enabled = false;
-  private foregroundSession?: number;
+  private backgroundPending = false;
 
   constructor(
     private readonly getPolicy: () => Promise<TaskRuntimePolicy>,
@@ -50,6 +48,7 @@ export class LongRunningTaskCoordinator {
   stopAll(): Promise<void> {
     return this.enqueue(async () => {
       this.enabled = false;
+      this.backgroundPending = false;
       for (const entry of [...this.tasks.values()].reverse()) {
         entry.foreground = undefined;
         await this.safely(entry.task, () => entry.task.stop());
@@ -98,35 +97,20 @@ export class LongRunningTaskCoordinator {
     }
   }
 
+  /** 快速切回前台时，队列仍须先暂停上一轮监听。 */
+  protected noteBackgroundTransition(): void {
+    this.backgroundPending = this.enabled;
+  }
+
   private async reconcile(configChanged = false): Promise<void> {
     const policy = await this.getPolicy();
-    if (policy.foregroundSession !== this.foregroundSession) {
-      const missedBackground = this.foregroundSession !== undefined && policy.foreground;
-      this.foregroundSession = policy.foregroundSession;
-      if (missedBackground) {
-        // 切出后很快返回时，补发后台回调，让监听器自行结束上一轮监听。
-        for (const entry of this.tasks.values()) {
-          const { task, keepAlive } = entry;
-          if (entry.foreground !== true || !task.isRunning()) continue;
-          await this.safely(task, async () => {
-            if (keepAlive || policy.backgroundEnabled) {
-              await task.onBackground();
-              entry.foreground = false;
-            } else {
-              await task.stop();
-              entry.foreground = undefined;
-            }
-          });
-        }
-        // 断开连接可能耗时，恢复前重新读取当前状态。
-        return this.reconcile(configChanged);
-      }
-    }
+    const foreground = policy.foreground && !this.backgroundPending;
+    this.backgroundPending = false;
     const pending: RegisteredTask[] = [];
     // 同步服务先更新订阅，监听器随后才能读取最新的后台运行条件。
     for (const entry of this.tasks.values()) {
       const { task, keepAlive } = entry;
-      if (!keepAlive && !policy.foreground && !policy.backgroundEnabled) {
+      if (!keepAlive && !foreground && !policy.backgroundEnabled) {
         entry.foreground = undefined;
         await this.safely(task, () => task.stop());
         continue;
@@ -134,21 +118,22 @@ export class LongRunningTaskCoordinator {
       await this.safely(task, async () => {
         if (!task.isRunning()) {
           entry.foreground = undefined;
-          await measureStartup(`task.${task.name}.start`, () => task.start(policy.foreground));
+          await measureStartup(`task.${task.name}.start`, () => task.start(foreground));
         } else if (configChanged) {
-          await task.onConfigChanged(policy.foreground);
+          await task.onConfigChanged(foreground);
         }
       });
-      if (task.isRunning() && entry.foreground !== policy.foreground) pending.push(entry);
+      if (task.isRunning() && entry.foreground !== foreground) pending.push(entry);
     }
 
     for (const entry of pending) {
+      if (foreground && this.backgroundPending) break;
       const { task } = entry;
       await this.safely(task, async () => {
         await measureStartup(`task.${task.name}.initialPolicy`, () =>
-          policy.foreground ? task.onForeground() : task.onBackground()
+          foreground ? task.onForeground() : task.onBackground()
         );
-        entry.foreground = policy.foreground;
+        entry.foreground = foreground;
       });
     }
   }

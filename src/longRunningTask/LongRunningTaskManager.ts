@@ -21,14 +21,12 @@ import { LongRunningTaskCoordinator } from './LongRunningTaskCoordinator';
 class LongRunningTaskManager extends LongRunningTaskCoordinator {
   constructor() {
     let foreground = AppState.currentState === 'active';
-    let foregroundSession = 0;
     super(
       async () => ({
         backgroundEnabled:
           !backgroundRuntimeState.isTempDisabled() &&
           areBackgroundTasksEnabled(await configService.getConfig()),
         foreground,
-        foregroundSession,
       }),
       (name, error) => console.error(`[LongRunningTaskManager] Task "${name}" failed:`, error)
     );
@@ -37,8 +35,10 @@ class LongRunningTaskManager extends LongRunningTaskCoordinator {
     AppState.addEventListener('change', (state) => {
       // iOS 的授权弹窗也会进入 inactive；只有真正退后台才结束本次前台会话。
       if (state === 'inactive') return;
-      if (foreground && state === 'background') foregroundSession++;
-      foreground = state === 'active';
+      const active = state === 'active';
+      if (foreground === active) return;
+      foreground = active;
+      if (!active) this.noteBackgroundTransition();
       this.requestRefresh();
     });
   }

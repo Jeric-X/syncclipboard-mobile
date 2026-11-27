@@ -398,13 +398,13 @@ export class ClipboardMonitor {
    */
   handleForeground(): void {
     if (!this.isMonitoring) return;
-    if (this.readOncePerForeground) {
-      this.recheckAfterReconnect = this.isChecking;
-      void this.checkClipboard();
-      return;
-    }
+    if (this.readOncePerForeground) this.recheckAfterReconnect = this.isChecking;
     void this.checkClipboard();
-    if (!this.pollingTimerTag && !this.nativeClipboardListenerCleanup) {
+    if (
+      !this.readOncePerForeground &&
+      !this.pollingTimerTag &&
+      !this.nativeClipboardListenerCleanup
+    ) {
       void this.startMonitoring();
     }
   }
