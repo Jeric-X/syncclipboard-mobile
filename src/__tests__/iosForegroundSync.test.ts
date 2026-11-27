@@ -114,7 +114,7 @@ afterEach(async () => {
   timers.clear();
 });
 
-it('每次进入前台只读一次本机，持续轮询远端，退后台保留传输订阅', async () => {
+it('每次进入前台只读一次本机，持续轮询远端，退后台保留监听任务并退订同步服务', async () => {
   setAppState('background');
   await longRunningTaskManager.startAll();
   expect(localClipboard.getClipboardContent).not.toHaveBeenCalled();
@@ -139,15 +139,19 @@ it('每次进入前台只读一次本机，持续轮询远端，退后台保留�
   setAppState('background');
   await longRunningTaskManager.refresh();
   await longRunningTaskManager.refresh(true);
+  expect(longRunningTaskManager.isRunning('clipboardMonitor')).toBe(true);
+  expect(longRunningTaskManager.isRunning('remoteClipboardMonitor')).toBe(true);
   expect(timers.size).toBe(0);
-  expect(getHistoryTransferQueue().offTaskStatusChanged).not.toHaveBeenCalled();
+  expect(longRunningTaskManager.isRunning('clipboardSync')).toBe(false);
+  expect(getHistoryTransferQueue().offTaskStatusChanged).toHaveBeenCalledTimes(1);
 
   setAppState('active');
   await longRunningTaskManager.refresh();
   await drain();
   expect(timers.size).toBe(1);
   expect(localClipboard.getClipboardContent).toHaveBeenCalledTimes(2);
-  expect(getHistoryTransferQueue().onTaskStatusChanged).toHaveBeenCalledTimes(1);
+  expect(longRunningTaskManager.isRunning('clipboardSync')).toBe(true);
+  expect(getHistoryTransferQueue().onTaskStatusChanged).toHaveBeenCalledTimes(2);
 });
 
 it('前台切换到 SignalR，退后台后忽略旧连接的通知，恢复时只连接一次', async () => {

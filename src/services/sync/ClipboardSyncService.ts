@@ -11,6 +11,7 @@
  * 生命周期由 LongRunningTaskManager 统一控制。
  */
 
+import { Platform } from 'react-native';
 import { ClipboardChangeCallback } from '../../types/clipboard';
 import type { ClipboardContent } from '../../types/clipboard';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
@@ -54,8 +55,10 @@ class ClipboardSyncService {
 
     const cfg = await configService.getConfig();
     this._applyConfig(cfg);
-    this._registerBgUploadChecker();
-    this._registerBgDownloadChecker();
+    if (Platform.OS === 'android') {
+      this._registerBgUploadChecker();
+      this._registerBgDownloadChecker();
+    }
     this._registerRemoteCopiedCallback();
     this._subscribeToRemoteClipboard();
     this._subscribeToClipboardChanges();

@@ -25,7 +25,7 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
   private _activeServer: ServerConfig | null = null;
   private _activePollingInterval: number | undefined = undefined;
 
-  async start(): Promise<void> {
+  async start(foreground = true): Promise<void> {
     if (this._started) return;
     // 任务生命周期与当前是否有服务器分离，以便无服务器时仍能接收配置变化。
     this._started = true;
@@ -41,7 +41,9 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
     }
     this._activeServer = server;
     this._activePollingInterval = config?.remotePollingInterval;
-    this.runInBackground(() => remoteClipboardMonitor.connect());
+    if (foreground || remoteClipboardMonitor.isBackgroundRunningEnabled()) {
+      this.runInBackground(() => remoteClipboardMonitor.connect());
+    }
   }
 
   async stop(): Promise<void> {
@@ -56,7 +58,7 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
     return this._started;
   }
 
-  override async onConfigChanged(): Promise<void> {
+  override async onConfigChanged(foreground = true): Promise<void> {
     if (!this._started) return;
     const lifecycle = this.lifecycle;
     const newServer = await configService.getActiveServer();
@@ -67,11 +69,11 @@ export class RemoteClipboardMonitorTask extends LongRunningTask {
     const serverChanged = JSON.stringify(newServer) !== JSON.stringify(this._activeServer);
     const pollingIntervalChanged = newPollingInterval !== this._activePollingInterval;
 
-    if (!newServer) {
-      this._activeServer = null;
+    if (!newServer || (!foreground && !remoteClipboardMonitor.isBackgroundRunningEnabled())) {
+      this._activeServer = newServer;
       this._activePollingInterval = newPollingInterval;
       await remoteClipboardMonitor.disconnect();
-      clipboardSyncState.setRemoteContent(null);
+      if (!newServer) clipboardSyncState.setRemoteContent(null);
       return;
     }
 

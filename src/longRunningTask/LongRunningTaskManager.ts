@@ -14,33 +14,31 @@ import { remoteClipboardMonitorTask } from './RemoteClipboardMonitorTask';
 import { networkAutoSwitchTask } from './NetworkAutoSwitchTask';
 import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
-import { isBackgroundSyncEnabled } from '../utils/config';
+import { areBackgroundTasksEnabled } from '../utils/config';
 import { AppState, Platform } from 'react-native';
 import { LongRunningTaskCoordinator } from './LongRunningTaskCoordinator';
 
 class LongRunningTaskManager extends LongRunningTaskCoordinator {
   constructor() {
-    let iosForeground = AppState.currentState === 'active';
-    let iosForegroundSession = 0;
+    let foreground = AppState.currentState === 'active';
+    let foregroundSession = 0;
     super(
       async () => ({
         backgroundEnabled:
           !backgroundRuntimeState.isTempDisabled() &&
-          isBackgroundSyncEnabled(await configService.getConfig()),
-        foreground: Platform.OS === 'ios' ? iosForeground : AppState.currentState === 'active',
-        foregroundSession: Platform.OS === 'ios' ? iosForegroundSession : undefined,
+          areBackgroundTasksEnabled(await configService.getConfig()),
+        foreground,
+        foregroundSession,
       }),
       (name, error) => console.error(`[LongRunningTaskManager] Task "${name}" failed:`, error)
     );
     configService.subscribe(() => this.requestRefresh(true));
     backgroundRuntimeState.subscribe(() => this.requestRefresh(true));
     AppState.addEventListener('change', (state) => {
-      if (Platform.OS === 'ios') {
-        // 系统授权弹窗也会进入 inactive；保留原状态，关闭弹窗不触发第二次读板。
-        if (state === 'inactive') return;
-        if (iosForeground && state === 'background') iosForegroundSession++;
-        iosForeground = state === 'active';
-      }
+      // iOS 的授权弹窗也会进入 inactive；只有真正退后台才结束本次前台会话。
+      if (state === 'inactive') return;
+      if (foreground && state === 'background') foregroundSession++;
+      foreground = state === 'active';
       this.requestRefresh();
     });
   }
@@ -67,8 +65,8 @@ if (Platform.OS === 'android') {
   longRunningTaskManager.register(foregroundServiceTask);
   longRunningTaskManager.register(shizukuRecoveryTask);
 } else if (Platform.OS === 'ios') {
-  // 传输与进度订阅跨前后台保留。只有两个监听任务随前台状态启停。
-  longRunningTaskManager.register(clipboardSyncTask, true);
-  longRunningTaskManager.register(clipboardMonitorTask);
-  longRunningTaskManager.register(remoteClipboardMonitorTask);
+  // 退后台时同步服务退订；两个 monitor 根据注册的后台运行条件暂停或恢复监听。
+  longRunningTaskManager.register(clipboardSyncTask);
+  longRunningTaskManager.register(clipboardMonitorTask, true);
+  longRunningTaskManager.register(remoteClipboardMonitorTask, true);
 }

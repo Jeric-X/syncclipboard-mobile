@@ -65,7 +65,7 @@ class RemoteClipboardMonitor {
     this._bgRunningCheckers.delete(fn);
   }
 
-  private _isBgRunningEnabled(): boolean {
+  isBackgroundRunningEnabled(): boolean {
     return Array.from(this._bgRunningCheckers).some((fn) => fn());
   }
 
@@ -74,7 +74,7 @@ class RemoteClipboardMonitor {
    * 若无任何 checker 返回 true，则断开连接。
    */
   async handleBackground(): Promise<void> {
-    if (!this._isBgRunningEnabled()) {
+    if (!this.isBackgroundRunningEnabled()) {
       await this.disconnect();
     }
   }

@@ -28,8 +28,33 @@ describe('shared sync runtime lifecycle', () => {
     manager.register(task);
     await Promise.all([manager.startAll(), manager.startAll()]);
     expect(task.start).toHaveBeenCalledTimes(1);
-    expect(task.onBackground).toHaveBeenCalled();
+    expect(task.onBackground).toHaveBeenCalledTimes(1);
     expect(task.onForeground).not.toHaveBeenCalled();
+  });
+
+  it('delivers foreground and background once per transition while still applying configuration', async () => {
+    let foreground = true;
+    const manager = new LongRunningTaskCoordinator(
+      async () => ({ foreground, backgroundEnabled: false }),
+      jest.fn()
+    );
+    const task = new TestTask('monitor');
+    manager.register(task, true);
+    await manager.startAll();
+    await manager.refresh(true);
+    await manager.startAll();
+    expect(task.onConfigChanged).toHaveBeenCalledTimes(1);
+    expect(task.onForeground).toHaveBeenCalledTimes(1);
+
+    foreground = false;
+    await manager.refresh();
+    await manager.refresh(true);
+    expect(task.onConfigChanged).toHaveBeenCalledTimes(2);
+    expect(task.onBackground).toHaveBeenCalledTimes(1);
+
+    foreground = true;
+    await manager.refresh();
+    expect(task.onForeground).toHaveBeenCalledTimes(2);
   });
 
   it('applies background policy immediately on a cold start without AppState events', async () => {

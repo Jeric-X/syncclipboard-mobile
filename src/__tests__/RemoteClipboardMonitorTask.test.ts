@@ -10,6 +10,7 @@ jest.mock('../services/sync/RemoteClipboardMonitor', () => ({
     connect: jest.fn(),
     disconnect: jest.fn(),
     isConnected: jest.fn(),
+    isBackgroundRunningEnabled: jest.fn(),
     handleBackground: jest.fn(),
     handleForeground: jest.fn(),
   },
@@ -56,6 +57,23 @@ describe('RemoteClipboardMonitorTask', () => {
 
     await task.onConfigChanged();
     expect(task.isRunning()).toBe(true);
+    expect(mockedMonitor.connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('根据注册者的最新配置在后台暂停或恢复连接', async () => {
+    mockedConfig.getActiveServer.mockResolvedValue(server);
+    mockedMonitor.isBackgroundRunningEnabled.mockReturnValue(false);
+    const task = new RemoteClipboardMonitorTask();
+    await task.start(false);
+    expect(mockedMonitor.connect).not.toHaveBeenCalled();
+
+    mockedMonitor.isBackgroundRunningEnabled.mockReturnValue(true);
+    await task.onConfigChanged(false);
+    expect(mockedMonitor.connect).toHaveBeenCalledTimes(1);
+
+    mockedMonitor.isBackgroundRunningEnabled.mockReturnValue(false);
+    await task.onConfigChanged(false);
+    expect(mockedMonitor.disconnect).toHaveBeenCalledTimes(1);
     expect(mockedMonitor.connect).toHaveBeenCalledTimes(1);
   });
 

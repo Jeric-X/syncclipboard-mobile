@@ -82,10 +82,7 @@ export class ClipboardMonitor {
     }
 
     this.isMonitoring = true;
-    if (this.readOncePerForeground) {
-      this.recheckAfterReconnect = this.isChecking;
-      void this.checkClipboard();
-    } else {
+    if (!this.readOncePerForeground) {
       await this.startMonitoring();
     }
 
@@ -268,8 +265,12 @@ export class ClipboardMonitor {
   }
 
   /** 配置或 Shizuku 授权变化后，切换事件模式与轮询兜底。 */
-  async refreshListeningMode(): Promise<void> {
+  async refreshListeningMode(foreground = true): Promise<void> {
     if (!this.isMonitoring || Platform.OS !== 'android') return;
+    if (!foreground && !this._isBgRunningEnabled()) {
+      await this.stopMonitoring();
+      return;
+    }
 
     const generation = this.monitoringGeneration;
     const shouldUseEvents = await isShizukuClipboardRequested();
@@ -396,11 +397,15 @@ export class ClipboardMonitor {
    * 立即触发一次检查；只有轮询计时器和事件监听都不存在时才恢复监控。
    */
   handleForeground(): void {
-    if (this.isMonitoring && !this.readOncePerForeground) {
+    if (!this.isMonitoring) return;
+    if (this.readOncePerForeground) {
+      this.recheckAfterReconnect = this.isChecking;
       void this.checkClipboard();
-      if (!this.pollingTimerTag && !this.nativeClipboardListenerCleanup) {
-        void this.startMonitoring();
-      }
+      return;
+    }
+    void this.checkClipboard();
+    if (!this.pollingTimerTag && !this.nativeClipboardListenerCleanup) {
+      void this.startMonitoring();
     }
   }
 
@@ -443,18 +448,18 @@ export class ClipboardMonitor {
   async resumeMonitoring(written?: ClipboardContent): Promise<void> {
     // 后台且后台上传未启用时，不恢复任何监控。
     const currentState = AppState.currentState;
-    if (
-      this.isMonitoring &&
+    const pausedInBackground =
       (currentState === 'background' ||
         (currentState === 'inactive' && !this.readOncePerForeground)) &&
-      !this._isBgRunningEnabled()
-    ) {
+      !this._isBgRunningEnabled();
+    if (this.isMonitoring && pausedInBackground && !this.readOncePerForeground) {
       return;
     }
 
     if (written && this.hasContentChanged(written)) {
       await this.setLastContent(written);
-      this.notifiedWhileStopped = this.isMonitoring ? undefined : new WeakSet(this.callbacks);
+      this.notifiedWhileStopped =
+        this.isMonitoring && !pausedInBackground ? undefined : new WeakSet(this.callbacks);
       this.notifyCallbacks(written);
     }
     if (!this.isMonitoring || this.readOncePerForeground) return;

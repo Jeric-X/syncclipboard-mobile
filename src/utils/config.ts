@@ -12,7 +12,7 @@ export function isHistorySyncEnabled(cfg: AppConfig | null | undefined): boolean
   return serverConfig?.type === 'syncclipboard';
 }
 
-/** 后台同步设置仅在支持后台剪贴板任务的平台生效，包括从其他设备导入的配置。 */
-export function isBackgroundSyncEnabled(cfg: AppConfig): boolean {
+/** 后台任务开关仅在 Android 上生效，即使配置来自其他设备。 */
+export function areBackgroundTasksEnabled(cfg: AppConfig): boolean {
   return Platform.OS === 'android' && cfg.enableBackgroundTasks;
 }

@@ -9,9 +9,16 @@ export interface TaskRuntimePolicy {
   foregroundSession?: number;
 }
 
+interface RegisteredTask {
+  task: ILongRunningTask;
+  keepAlive: boolean;
+  /** 最近一次成功分发的前后台状态，任务重新启动后需重新通知。 */
+  foreground?: boolean;
+}
+
 /** 串行化生命周期操作，防止多个入口或配置通知交错启动、停止同一任务。 */
 export class LongRunningTaskCoordinator {
-  private tasks = new Map<string, { task: ILongRunningTask; keepAlive: boolean }>();
+  private tasks = new Map<string, RegisteredTask>();
   private queue: Promise<void> = Promise.resolve();
   private enabled = false;
   private foregroundSession?: number;
@@ -43,8 +50,9 @@ export class LongRunningTaskCoordinator {
   stopAll(): Promise<void> {
     return this.enqueue(async () => {
       this.enabled = false;
-      for (const { task } of [...this.tasks.values()].reverse()) {
-        await this.safely(task, () => task.stop());
+      for (const entry of [...this.tasks.values()].reverse()) {
+        entry.foreground = undefined;
+        await this.safely(entry.task, () => entry.task.stop());
       }
     });
   }
@@ -52,27 +60,28 @@ export class LongRunningTaskCoordinator {
   refresh(configChanged = false): Promise<void> {
     return this.enqueue(async () => {
       if (!this.enabled) return;
-      if (configChanged) {
-        for (const { task } of this.tasks.values()) {
-          if (task.isRunning()) await this.safely(task, () => task.onConfigChanged());
-        }
-      }
-      await this.reconcile();
+      await this.reconcile(configChanged);
     });
   }
 
   start(name: string): Promise<void> {
-    return this.enqueue(() => this.getTask(name).start());
+    return this.enqueue(async () =>
+      this.getTask(name).task.start((await this.getPolicy()).foreground)
+    );
   }
 
   stop(name: string): Promise<void> {
-    return this.enqueue(() => this.getTask(name).stop());
+    return this.enqueue(async () => {
+      const entry = this.getTask(name);
+      entry.foreground = undefined;
+      await entry.task.stop();
+    });
   }
 
-  private getTask(name: string): ILongRunningTask {
+  private getTask(name: string): RegisteredTask {
     const entry = this.tasks.get(name);
     if (!entry) throw new Error(`Task "${name}" is not registered.`);
-    return entry.task;
+    return entry;
   }
 
   private enqueue(operation: () => Promise<void>): Promise<void> {
@@ -89,38 +98,58 @@ export class LongRunningTaskCoordinator {
     }
   }
 
-  private async reconcile(): Promise<void> {
+  private async reconcile(configChanged = false): Promise<void> {
     const policy = await this.getPolicy();
     if (policy.foregroundSession !== this.foregroundSession) {
-      // 即使连续切换时队列只看到了最新的前台状态，也先结束上一轮监听。
+      const missedBackground = this.foregroundSession !== undefined && policy.foreground;
       this.foregroundSession = policy.foregroundSession;
-      for (const { task, keepAlive } of this.tasks.values()) {
-        if (!keepAlive && task.isRunning()) await this.safely(task, () => task.stop());
-      }
-      // 断开连接可能耗时，按完成时的最新状态决定是否启动新一轮。
-      return this.reconcile();
-    }
-    const active: ILongRunningTask[] = [];
-    // 注册顺序保证网络选择和同步回调先于剪贴板监听初始化。
-    for (const { task, keepAlive } of this.tasks.values()) {
-      if (keepAlive || policy.foreground || policy.backgroundEnabled) {
-        if (!task.isRunning()) {
-          await this.safely(task, () =>
-            measureStartup(`task.${task.name}.start`, () => task.start())
-          );
+      if (missedBackground) {
+        // 切出后很快返回时，补发后台回调，让监听器自行结束上一轮监听。
+        for (const entry of this.tasks.values()) {
+          const { task, keepAlive } = entry;
+          if (entry.foreground !== true || !task.isRunning()) continue;
+          await this.safely(task, async () => {
+            if (keepAlive || policy.backgroundEnabled) {
+              await task.onBackground();
+              entry.foreground = false;
+            } else {
+              await task.stop();
+              entry.foreground = undefined;
+            }
+          });
         }
-        active.push(task);
-      } else {
-        await this.safely(task, () => task.stop());
+        // 断开连接可能耗时，恢复前重新读取当前状态。
+        return this.reconcile(configChanged);
       }
     }
-    // 无 Activity 的冷启动不会收到一次 background 事件，必须主动应用状态。
-    for (const task of active) {
-      await this.safely(task, () =>
-        measureStartup(`task.${task.name}.initialPolicy`, () =>
+    const pending: RegisteredTask[] = [];
+    // 同步服务先更新订阅，监听器随后才能读取最新的后台运行条件。
+    for (const entry of this.tasks.values()) {
+      const { task, keepAlive } = entry;
+      if (!keepAlive && !policy.foreground && !policy.backgroundEnabled) {
+        entry.foreground = undefined;
+        await this.safely(task, () => task.stop());
+        continue;
+      }
+      await this.safely(task, async () => {
+        if (!task.isRunning()) {
+          entry.foreground = undefined;
+          await measureStartup(`task.${task.name}.start`, () => task.start(policy.foreground));
+        } else if (configChanged) {
+          await task.onConfigChanged(policy.foreground);
+        }
+      });
+      if (task.isRunning() && entry.foreground !== policy.foreground) pending.push(entry);
+    }
+
+    for (const entry of pending) {
+      const { task } = entry;
+      await this.safely(task, async () => {
+        await measureStartup(`task.${task.name}.initialPolicy`, () =>
           policy.foreground ? task.onForeground() : task.onBackground()
-        )
-      );
+        );
+        entry.foreground = policy.foreground;
+      });
     }
   }
 }
