@@ -144,6 +144,7 @@ test('importing an image retains a byte hash instead of its filename-dependent p
     'image/png',
     12
   );
+  expect(imported.fileUri).toBe('file:///picked/photo.png');
   expect(imported.profileHash).toBe('original-profile');
   expect(clipboardContentToItem(imported).localClipboardHash).toBe(fileHash);
 });

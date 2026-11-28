@@ -3,7 +3,8 @@
  * Implements SyncClipboard API using WebDAV protocol
  */
 
-import { nativeUploadFile, type ProgressInfo } from 'native-util';
+import { type ProgressInfo } from 'native-util';
+import { uploadFile } from './attachmentUpload';
 import { APIClient, ISyncClipboardAPI, PutContentOptions } from './APIClient';
 import { ProfileDto, ServerInfo } from '@/types/api';
 import type { ClipboardContent } from '@/types/clipboard';
@@ -127,7 +128,7 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
     headers['Content-Type'] = 'application/octet-stream';
 
     try {
-      await nativeUploadFile(url, headers, fileUri, signal, onProgress);
+      await uploadFile(url, headers, fileUri, signal, onProgress);
       console.log(`[WebDAVClient] File uploaded successfully: ${fileName}`);
     } catch (error) {
       console.error(`[WebDAVClient] Failed to put file ${fileName}:`, error);

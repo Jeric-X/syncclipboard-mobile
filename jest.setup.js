@@ -17,6 +17,11 @@ jest.mock('expo-clipboard', () => ({
   setImageAsync: jest.fn(),
 }));
 
+jest.mock('expo-file-system/legacy', () => ({
+  readAsStringAsync: jest.fn(),
+  EncodingType: { Base64: 'base64' },
+}));
+
 jest.mock('expo-file-system', () => {
   const makeDir = (base, ...parts) => {
     const path = [base, ...parts].join('/').replace(/\/+/g, '/');

@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { File, Directory } from 'expo-file-system';
 import { nativeCopyFile, nativeUnzipFile, nativeZipFiles } from 'native-util';
 import {
@@ -48,23 +49,27 @@ export async function createContentFromFile(
   options?: CreateContentFromFileOptions
 ): Promise<ClipboardContent> {
   const contentType: ClipboardContentType = guessContentType(mimeType);
-  const tempPath = prepareTempFilePath(fileName);
+
   const sourceFile = new File(sourceUri);
 
-  await nativeCopyFile(sourceFile.uri, tempPath);
+  let fileUri = sourceFile.uri;
+  if (Platform.OS !== 'ios') {
+    fileUri = prepareTempFilePath(fileName);
+    await nativeCopyFile(sourceFile.uri, fileUri);
+  }
 
-  const profileHash = await calculateFileProfileHash(tempPath, fileName, options?.signal);
+  const profileHash = await calculateFileProfileHash(fileUri, fileName, options?.signal);
   const resolvedSize = fileSize ?? sourceFile.size;
 
   return {
     type: contentType,
     text: fileName,
-    fileUri: tempPath,
+    fileUri,
     fileName,
     fileSize: resolvedSize,
     profileHash,
     localClipboardHash:
-      contentType === 'Image' ? await calculateFileHash(tempPath, options?.signal) : profileHash,
+      contentType === 'Image' ? await calculateFileHash(fileUri, options?.signal) : profileHash,
     hasData: true,
     timestamp: Date.now(),
   };

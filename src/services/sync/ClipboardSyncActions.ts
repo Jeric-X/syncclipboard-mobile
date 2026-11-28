@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import type { ClipboardContent } from '@/types/clipboard';
 import type { ProgressInfo } from '@/types/progress';
 import type { ProgressDetail } from '@/types/progress';
@@ -53,12 +54,23 @@ export async function setRemoteClipboard(
     const server = await configService.getActiveServer();
     if (!server) throw new Error(i18n.t('common.serverNotConfigured'));
 
-    await historyService.addLocalContent(content);
+    const historyItem = await historyService.addLocalContent(content);
+    const uploadContent =
+      Platform.OS === 'ios' && content.hasData && historyItem.fileUri
+        ? { ...content, fileUri: historyItem.fileUri }
+        : content;
 
-    await getClientService().setRemoteClipboard(content, notify, sig);
+    const uploadedTo = await getClientService().setRemoteClipboard(uploadContent, notify, sig);
+    if (
+      uploadedTo &&
+      JSON.stringify(await configService.getActiveServer()) !== JSON.stringify(uploadedTo)
+    ) {
+      return true;
+    }
 
     // 上传完成后，更新 remoteContent
-    clipboardSyncState.setRemoteContent(content);
+    if (sig.aborted) throw Object.assign(new Error('Upload aborted'), { name: 'AbortError' });
+    clipboardSyncState.setRemoteContent(uploadContent);
 
     return true;
   });

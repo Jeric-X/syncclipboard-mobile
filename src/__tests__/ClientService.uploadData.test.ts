@@ -1,4 +1,12 @@
+import { Platform } from 'react-native';
+import { createClientFromConfig } from '@/services/ClientFactory';
+import { historyService } from '@/services/history/HistoryService';
+import { HistorySyncStatus } from '@/types/clipboard';
 import type { ClipboardContent } from '@/types/clipboard';
+
+jest.mock('@/services/history/HistoryService', () => ({
+  historyService: { getItem: jest.fn(), updateItem: jest.fn() },
+}));
 
 jest.mock('@/services/ConfigService', () => ({
   configService: {
@@ -9,6 +17,7 @@ jest.mock('@/services/ConfigService', () => ({
 
 jest.mock('@/services/ClientFactory', () => ({
   getAPIClient: jest.fn(),
+  createClientFromConfig: jest.fn(),
 }));
 
 jest.mock('@/services/client/StorageClient', () => ({
@@ -101,6 +110,45 @@ describe('ClientService.uploadData', () => {
     expect(mockUploadForStorage).toHaveBeenCalledTimes(1);
     expect(mockUploadForStorage).toHaveBeenCalledWith(content, undefined, undefined);
     expect(mockUploadForSyncClipboard).not.toHaveBeenCalled();
+  });
+
+  it('iOS publishes attachments once and reconciles the confirmed history record', async () => {
+    const platform = Platform.OS;
+    Platform.OS = 'ios';
+    try {
+      const putContent = jest.fn();
+      jest
+        .mocked(createClientFromConfig)
+        .mockReturnValue({ putContent } as unknown as ReturnType<typeof createClientFromConfig>);
+      const server = { type: 'syncclipboard' as const, url: 'https://sync.example.com' };
+      mockConfigService.getConfig.mockResolvedValue({
+        enableHistorySync: true,
+        servers: [server],
+        activeServerIndex: 0,
+      } as never);
+      mockConfigService.getActiveServer.mockResolvedValue(server);
+      await getClientService().setRemoteClipboard(content);
+      expect(putContent).toHaveBeenCalledTimes(1);
+      const confirmed = {
+        hash: content.profileHash,
+        version: 2,
+        lastModified: '2026-01-01T00:00:00Z',
+      };
+      jest
+        .mocked(historyService.getItem)
+        .mockResolvedValueOnce({ starred: true } as never)
+        .mockResolvedValueOnce({ starred: false } as never);
+      await putContent.mock.calls[0][1].history.confirm(confirmed);
+      expect(historyService.updateItem).not.toHaveBeenCalled();
+      await putContent.mock.calls[0][1].history.confirm(confirmed);
+      expect(historyService.updateItem).toHaveBeenCalledWith(content.profileHash, {
+        version: 2,
+        lastModified: Date.parse(confirmed.lastModified),
+        syncStatus: HistorySyncStatus.Synced,
+      });
+    } finally {
+      Platform.OS = platform;
+    }
   });
 
   it('should use uploadForSyncClipboard when server is syncclipboard and history sync is enabled', async () => {

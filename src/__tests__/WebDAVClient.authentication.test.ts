@@ -1,6 +1,8 @@
 import { WebDAVClient } from '@/api/clients/WebDAVClient';
 import type { Credentials } from '@/api/AuthService';
 
+jest.mock('@/api/clients/attachmentUpload', () => ({ uploadFile: jest.fn() }));
+
 jest.mock('expo-application', () => ({
   nativeApplicationVersion: '1.0.0',
 }));

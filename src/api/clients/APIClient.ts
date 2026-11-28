@@ -7,6 +7,7 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import { AuthService } from '../AuthService';
 import { APP_NAME, APP_VERSION } from '@/constants';
 import { ProfileDto, ServerInfo } from '@/types/api';
+import type { HistoryRecordDto } from '@/types/history';
 import type { ClipboardContent } from '@/types/clipboard';
 import { nativeDownloadFile, type ProgressInfo } from 'native-util';
 import {
@@ -44,6 +45,8 @@ export interface APIClientConfig {
 }
 
 export interface PutContentOptions {
+  /** SyncClipboard Server 已确认的历史记录，用于更新本地同步状态。 */
+  history?: { record?: HistoryRecordDto; confirm: (record: HistoryRecordDto) => Promise<void> };
   signal?: AbortSignal;
   onProgress?: (info: ProgressInfo) => void;
 }

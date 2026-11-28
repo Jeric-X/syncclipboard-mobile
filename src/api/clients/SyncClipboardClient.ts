@@ -3,12 +3,9 @@
  * Implements SyncClipboard server API operations
  */
 
-import {
-  nativeDownloadFile,
-  nativeUploadFile,
-  nativeUploadMultipart,
-  ProgressInfo,
-} from 'native-util';
+import { contentToProfileDto } from '@/utils/clipboard/convert';
+import { nativeDownloadFile, ProgressInfo } from 'native-util';
+import { uploadFile, uploadMultipart } from './attachmentUpload';
 import { APIClient, APIClientConfig, PutContentOptions, ISyncClipboardAPI } from './APIClient';
 import { ProfileDto, ServerInfo, ClipboardContentType } from '@/types/api';
 import type { ClipboardContent } from '@/types/clipboard';
@@ -117,7 +114,7 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
     headers['Content-Type'] = 'application/octet-stream';
 
     try {
-      await nativeUploadFile(url, headers, fileUri, signal, onProgress);
+      await uploadFile(url, headers, fileUri, signal, onProgress);
       console.log(`[SyncClipboardClient] File uploaded successfully: ${fileName}`);
     } catch (error) {
       console.error(`[SyncClipboardClient] Failed to put file ${fileName}:`, error);
@@ -141,7 +138,6 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
       fileName: content.fileName,
     });
 
-    const { contentToProfileDto } = await import('@/utils/clipboard/convert');
     const profile = await contentToProfileDto(content, { signal });
 
     if (!profile.hash) {
@@ -185,6 +181,7 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
         pinned: false,
         version: 0,
         isDeleted: false,
+        ...options?.history?.record,
       };
 
       const fileUri = content.fileUri || undefined;
@@ -194,6 +191,10 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
         console.log('[SyncClipboardClient] History record uploaded successfully');
       } catch (error) {
         if (error instanceof SyncConflictError) {
+          const remote = error.serverRecord?.hash
+            ? error.serverRecord
+            : await this.getRecord(profileId, signal);
+          if (remote.isDeleted) throw error;
           console.log('[SyncClipboardClient] History record conflict, server already has it');
         } else {
           throw error;
@@ -202,7 +203,15 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
     }
 
     await this.putClipboard(profile, signal);
-
+    if (options?.history) {
+      // 发布剪贴板可能再次更新服务端版本。历史确认失败时保留待同步状态。
+      try {
+        const confirmed = await this.getRecord(profileId, signal);
+        if (!confirmed.isDeleted) await options.history.confirm(confirmed);
+      } catch (error) {
+        console.warn('[SyncClipboardClient] Could not reconcile published history record:', error);
+      }
+    }
     console.log('[SyncClipboardClient] putContent completed successfully');
   }
 
@@ -484,14 +493,7 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
     });
 
     try {
-      await nativeUploadMultipart(
-        url,
-        headers,
-        formFields,
-        fileUri || undefined,
-        signal,
-        onProgress
-      );
+      await uploadMultipart(url, headers, formFields, fileUri || undefined, signal, onProgress);
       console.log('[SyncClipboardClient] History record uploaded successfully');
       return this.getRecord(`${record.type}-${record.hash}`, signal);
     } catch (error) {
