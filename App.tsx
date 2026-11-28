@@ -1,11 +1,13 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet, Linking, ToastAndroid, StatusBar, View, Platform } from 'react-native';
-import { useEffect, useState } from 'react';
+import { clearSharedPayloads, getSharedPayloads } from 'expo-sharing';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 import { I18nProvider } from './src/contexts/I18nContext';
 import '@/i18n';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { QuickTileLoadingScreen } from './src/screens/QuickTileLoadingScreen';
+import { ProcessTextScreen } from './src/screens/ProcessTextScreen';
 import { ShareReceiveScreen } from './src/screens/ShareReceiveScreen';
 import { SyncDirection } from './src/types/sync';
 import { useSettingsStore } from './src/stores';
@@ -56,7 +58,8 @@ type AppMode = 'checking' | 'home';
 export default function App() {
   const [appMode, setAppMode] = useState<AppMode>('checking');
   // 快速操作覆盖层：始终以 overlay 形式显示，不卸载 AppNavigator/HomeScreen
-  const [shareReceiveOverlay, setShareReceiveOverlay] = useState(false);
+  const shareSequence = useRef(0);
+  const [shareRequest, setShareRequest] = useState<{ id: number; text?: string } | null>(null);
   const [quickActionOverlay, setQuickActionOverlay] = useState<{
     direction: SyncDirection;
     exitAfterSync: boolean;
@@ -82,6 +85,25 @@ export default function App() {
     }
   }, [isLoaded, config?.hideFromRecents]);
 
+  const openSharedContent = useCallback(async () => {
+    let text: string | undefined;
+    if (Platform.OS === 'ios') {
+      // 短文本及链接已在 App Group 中；分享 URL 时只上传地址，无需请求网页。
+      const payload = getSharedPayloads()[0];
+      if (!payload || (payload.shareType !== 'text' && payload.shareType !== 'url')) return;
+      text = payload.value;
+      clearSharedPayloads();
+    }
+    const id = ++shareSequence.current;
+    await runOverlayNetworkPreflight();
+    if (id === shareSequence.current) setShareRequest({ id, text });
+  }, []);
+
+  const closeSharedContent = useCallback(() => {
+    setShareRequest(null);
+    if (Platform.OS === 'android') moveTaskToBack();
+  }, []);
+
   useEffect(() => {
     if (!isLoaded) return;
 
@@ -97,13 +119,12 @@ export default function App() {
     };
 
     getInitialUrlWithRetry().then(async (url) => {
-      if (config?.debugUrlScheme) {
+      if (Platform.OS === 'android' && config?.debugUrlScheme) {
         ToastAndroid.show(`getInitialURL: ${url ?? 'null'}`, ToastAndroid.LONG);
       }
       if (isShareIntentUrl(url)) {
         setAppMode('home');
-        await runOverlayNetworkPreflight();
-        setShareReceiveOverlay(true);
+        await openSharedContent();
         return;
       }
       const { isQuickTile, fromForeground, direction } = parseQuickTileUrl(url);
@@ -118,11 +139,11 @@ export default function App() {
 
     // Hot start: app already running, receives URL deep link event
     const urlSub = Linking.addEventListener('url', ({ url }) => {
-      if (config?.debugUrlScheme) {
+      if (Platform.OS === 'android' && config?.debugUrlScheme) {
         ToastAndroid.show(`addEventListener url: ${url ?? 'null'}`, ToastAndroid.LONG);
       }
       if (isShareIntentUrl(url)) {
-        runOverlayNetworkPreflight().then(() => setShareReceiveOverlay(true));
+        void openSharedContent();
         return;
       }
       const { isQuickTile, fromForeground, direction } = parseQuickTileUrl(url);
@@ -135,7 +156,7 @@ export default function App() {
     });
 
     return () => urlSub.remove();
-  }, [isLoaded, config?.debugUrlScheme]);
+  }, [isLoaded, config?.debugUrlScheme, openSharedContent]);
 
   return (
     <GestureHandlerRootView style={styles.container}>
@@ -143,15 +164,13 @@ export default function App() {
         <I18nProvider>
           <ThemedStatusBar />
           {appMode === 'checking' ? null : <AppNavigator />}
-          {shareReceiveOverlay && (
-            <View style={StyleSheet.absoluteFill}>
-              <ShareReceiveScreen
-                onComplete={() => {
-                  setShareReceiveOverlay(false);
-                  // 将快捷操作任务移到后台，保留返回主界面的导航状态
-                  moveTaskToBack();
-                }}
-              />
+          {shareRequest && (
+            <View key={shareRequest.id} style={StyleSheet.absoluteFill}>
+              {shareRequest.text !== undefined ? (
+                <ProcessTextScreen text={shareRequest.text} onComplete={closeSharedContent} />
+              ) : (
+                <ShareReceiveScreen onComplete={closeSharedContent} />
+              )}
             </View>
           )}
           {quickActionOverlay && (

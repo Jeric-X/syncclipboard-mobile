@@ -57,6 +57,10 @@
       [
         "expo-sharing",
         {
+          "ios": {
+            "enabled": true,
+            "activationRule": { "supportsText": true, "supportsWebUrlWithMaxCount": 1 }
+          },
           "android": {
             "enabled": false,
             "singleShareMimeTypes": ["*/*"]

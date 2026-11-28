@@ -3,13 +3,16 @@ import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { create } from 'zustand';
 import { Linking, Platform } from 'react-native';
+import { clearSharedPayloads, getSharedPayloads } from 'expo-sharing';
 import App from '../../App';
+import { ProcessTextScreen } from '../screens/ProcessTextScreen';
 import QuickActionApp from '../QuickActionApp';
 import { AppNavigator } from '../navigation/AppNavigator';
 import { QuickTileLoadingScreen } from '../screens/QuickTileLoadingScreen';
 import { requestServiceRuntime, startServiceRuntime } from '../services/ServiceRuntime';
 import { networkAutoSwitchService } from '../services/NetworkAutoSwitchService';
 
+jest.mock('expo-sharing', () => ({ clearSharedPayloads: jest.fn(), getSharedPayloads: jest.fn() }));
 jest.mock('react-native-gesture-handler', () => ({ GestureHandlerRootView: 'Root' }));
 jest.mock('../contexts/ThemeContext', () => ({ ThemeProvider: 'ThemeProvider' }));
 jest.mock('../contexts/I18nContext', () => ({ I18nProvider: 'I18nProvider' }));
@@ -112,4 +115,33 @@ it('快捷页仍等待服务器选择完成后显示', async () => {
     finish();
   });
   expect(root.root.findAllByType(QuickTileLoadingScreen)).toHaveLength(1);
+});
+
+it('iOS 冷启动接收网址，热启动时替换为新分享的原文，并忽略重复的空唤起', async () => {
+  Platform.OS = 'ios';
+  const url = 'syncclipboard://expo-sharing';
+  const article = 'https://example.com/private?x=1#section';
+  const text = '  第二条\n分享 📋  ';
+  jest.mocked(Linking.getInitialURL).mockResolvedValue(url);
+  jest
+    .mocked(getSharedPayloads)
+    .mockReturnValueOnce([{ shareType: 'url', value: article, mimeType: 'text/html' }])
+    .mockReturnValueOnce([{ shareType: 'text', value: text, mimeType: 'text/plain' }])
+    .mockReturnValue([]);
+  const subscribe = jest.spyOn(Linking, 'addEventListener');
+
+  await act(async () => {
+    root = TestRenderer.create(<App />);
+  });
+  expect(root.root.findByType(ProcessTextScreen).props.text).toBe(article);
+
+  const onUrl = subscribe.mock.calls.find(([type]) => type === 'url')![1];
+  await act(async () => onUrl({ url }));
+  expect(root.root.findByType(ProcessTextScreen).props.text).toBe(text);
+  await act(async () => onUrl({ url }));
+  expect(clearSharedPayloads).toHaveBeenCalledTimes(2);
+  expect(root.root.findByType(ProcessTextScreen).props.text).toBe(text);
+  await act(async () => root.root.findByType(ProcessTextScreen).props.onComplete());
+  expect(root.root.findAllByType(ProcessTextScreen)).toHaveLength(0);
+  expect(root.root.findAllByType(AppNavigator)).toHaveLength(1);
 });
