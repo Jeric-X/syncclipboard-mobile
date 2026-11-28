@@ -6,13 +6,8 @@
 
 import axios, { AxiosInstance } from 'axios';
 import { sha256 } from 'js-sha256';
-import {
-  nativeUploadFile,
-  nativeDownloadFile,
-  nativeCalculateStringMD5Base64,
-  nativeCalculateFileMD5Base64,
-  type ProgressInfo,
-} from 'native-util';
+import { nativeDownloadFile, type ProgressInfo } from 'native-util';
+import { uploadFile, stringMD5Base64, fileMD5Base64 } from './attachmentUpload';
 import { ISyncClipboardAPI, PutContentOptions, DownloadProgressCallback } from './APIClient';
 import { ProfileDto, ServerInfo } from '@/types/api';
 import type { ClipboardContent } from '@/types/clipboard';
@@ -134,7 +129,7 @@ export class S3Client implements ISyncClipboardAPI {
     const body = JSON.stringify(profile);
 
     try {
-      const contentMD5 = nativeCalculateStringMD5Base64(body);
+      const contentMD5 = stringMD5Base64(body);
       const extraHeaders: Record<string, string> = {
         'Content-Type': 'application/json; charset=utf-8',
         'Content-MD5': contentMD5,
@@ -161,7 +156,7 @@ export class S3Client implements ISyncClipboardAPI {
 
     const key = this.buildObjectKey(`${FILE_FOLDER}/${fileName}`);
     const path = `${this.endpoint.bucketPath}/${key}`;
-    const url = `${this.endpoint.baseURL}/${key}`;
+    const url = this.endpoint.baseURL + this.encodeCanonicalUri(key);
 
     try {
       const headers = this.signRequest('GET', path, {}, '', signal);
@@ -189,17 +184,17 @@ export class S3Client implements ISyncClipboardAPI {
 
     const key = this.buildObjectKey(`${FILE_FOLDER}/${fileName}`);
     const path = `${this.endpoint.bucketPath}/${key}`;
-    const url = `${this.endpoint.baseURL}/${key}`;
+    const url = this.endpoint.baseURL + this.encodeCanonicalUri(key);
 
     try {
-      const contentMD5 = await nativeCalculateFileMD5Base64(fileUri, signal);
+      const contentMD5 = await fileMD5Base64(fileUri, signal);
       const extraHeaders: Record<string, string> = {
         'Content-Type': 'application/octet-stream',
         'Content-MD5': contentMD5,
       };
       const headers = this.signRequest('PUT', path, extraHeaders, '', signal);
       console.log(`[S3Client] Uploading file: ${fileName}`);
-      await nativeUploadFile(url, headers, fileUri, signal, onProgress);
+      await uploadFile(url, headers, fileUri, signal, onProgress);
       console.log(`[S3Client] File uploaded successfully: ${fileName}`);
     } catch (error) {
       console.error(`[S3Client] Failed to put file ${fileName}:`, error);
@@ -345,7 +340,7 @@ export class S3Client implements ISyncClipboardAPI {
     } catch {
       // 不存在则创建
       try {
-        const contentMD5 = nativeCalculateStringMD5Base64('');
+        const contentMD5 = stringMD5Base64('');
         const extraHeaders: Record<string, string> = {
           'Content-Type': 'application/x-directory',
           'Content-MD5': contentMD5,
@@ -533,7 +528,10 @@ export class S3Client implements ISyncClipboardAPI {
    * AWS URI 编码（RFC 3986，不编码 ~）
    */
   private uriEncode(str: string): string {
-    return encodeURIComponent(str).replace(/%7E/gi, '~');
+    return encodeURIComponent(str).replace(
+      /[!'()*]/g,
+      (char) => '%' + char.charCodeAt(0).toString(16).toUpperCase()
+    );
   }
 
   /**

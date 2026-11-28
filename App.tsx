@@ -1,10 +1,21 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, Linking, ToastAndroid, StatusBar, View, Platform } from 'react-native';
+import {
+  AppState,
+  StyleSheet,
+  Alert,
+  Linking,
+  ToastAndroid,
+  StatusBar,
+  View,
+  Platform,
+} from 'react-native';
 import { clearSharedPayloads, getSharedPayloads } from 'expo-sharing';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 import { I18nProvider } from './src/contexts/I18nContext';
-import '@/i18n';
+import i18n from '@/i18n';
+import { DirectShareReceiveScreen } from './src/screens/DirectShareReceiveScreen';
+import { takeSharedImage } from './src/services/clipboard/incomingSharedImage';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { QuickTileLoadingScreen } from './src/screens/QuickTileLoadingScreen';
 import { ProcessTextScreen } from './src/screens/ProcessTextScreen';
@@ -59,7 +70,21 @@ export default function App() {
   const [appMode, setAppMode] = useState<AppMode>('checking');
   // 快速操作覆盖层：始终以 overlay 形式显示，不卸载 AppNavigator/HomeScreen
   const shareSequence = useRef(0);
-  const [shareRequest, setShareRequest] = useState<{ id: number; text?: string } | null>(null);
+  const androidShareOpen = useRef(false);
+  const activeImage = useRef<ReturnType<typeof takeSharedImage> | undefined>(undefined);
+  const [shareRequest, setShareRequest] = useState<{
+    id: number;
+    text?: string;
+    image?: ReturnType<typeof takeSharedImage>;
+  } | null>(null);
+
+  useEffect(
+    () => () => {
+      ++shareSequence.current;
+      activeImage.current?.dispose();
+    },
+    []
+  );
   const [quickActionOverlay, setQuickActionOverlay] = useState<{
     direction: SyncDirection;
     exitAfterSync: boolean;
@@ -86,23 +111,60 @@ export default function App() {
   }, [isLoaded, config?.hideFromRecents]);
 
   const openSharedContent = useCallback(async () => {
+    if (Platform.OS === 'android') {
+      if (androidShareOpen.current) return;
+      androidShareOpen.current = true;
+      await runOverlayNetworkPreflight();
+      setShareRequest({ id: 0 });
+      return;
+    }
     let text: string | undefined;
+    let image: ReturnType<typeof takeSharedImage> | undefined;
     if (Platform.OS === 'ios') {
-      // 短文本及链接已在 App Group 中；分享 URL 时只上传地址，无需请求网页。
-      const payload = getSharedPayloads()[0];
-      if (!payload || (payload.shareType !== 'text' && payload.shareType !== 'url')) return;
-      text = payload.value;
+      let payloads: ReturnType<typeof getSharedPayloads>;
+      try {
+        payloads = getSharedPayloads();
+      } catch (error) {
+        console.warn('[App] Could not read incoming share:', error);
+        return;
+      }
+      // 附图的分享优先传图。只有文字和网址时保留来源顺序，例如网页选中文字。
+      const payload =
+        payloads.find((item) => item.shareType === 'image') ??
+        payloads.find((item) => item.shareType === 'text' || item.shareType === 'url');
+      if (!payload) return;
+      if (payload.shareType === 'image') {
+        try {
+          image = takeSharedImage(payload.value, payload.mimeType);
+        } catch (error) {
+          clearSharedPayloads();
+          Alert.alert(i18n.t('shareReceive.failed'), String(error));
+          return;
+        }
+      } else if (payload.shareType === 'text' || payload.shareType === 'url') {
+        text = payload.value;
+      } else {
+        return;
+      }
       clearSharedPayloads();
     }
     const id = ++shareSequence.current;
+    setShareRequest(null);
+    activeImage.current?.dispose();
+    activeImage.current = image;
     await runOverlayNetworkPreflight();
-    if (id === shareSequence.current) setShareRequest({ id, text });
+    if (id === shareSequence.current) setShareRequest({ id, text, image });
   }, []);
 
+  const displayedShareId = shareRequest?.id;
   const closeSharedContent = useCallback(() => {
+    if (Platform.OS === 'ios' && displayedShareId !== shareSequence.current) return;
+    androidShareOpen.current = false;
     setShareRequest(null);
+    activeImage.current?.dispose();
+    activeImage.current = undefined;
     if (Platform.OS === 'android') moveTaskToBack();
-  }, []);
+  }, [displayedShareId]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -124,7 +186,7 @@ export default function App() {
       }
       if (isShareIntentUrl(url)) {
         setAppMode('home');
-        await openSharedContent();
+        if (Platform.OS !== 'ios') await openSharedContent();
         return;
       }
       const { isQuickTile, fromForeground, direction } = parseQuickTileUrl(url);
@@ -155,7 +217,18 @@ export default function App() {
       }
     });
 
-    return () => urlSub.remove();
+    // 扩展先写 App Group 再唤起主 App。即使链接早于 RN 监听器，仍可恢复本次分享。
+    const resumeSub =
+      Platform.OS === 'ios'
+        ? AppState.addEventListener('change', (state) => {
+            if (state === 'active') void openSharedContent();
+          })
+        : undefined;
+    if (Platform.OS === 'ios') void openSharedContent();
+    return () => {
+      urlSub.remove();
+      resumeSub?.remove();
+    };
   }, [isLoaded, config?.debugUrlScheme, openSharedContent]);
 
   return (
@@ -166,7 +239,12 @@ export default function App() {
           {appMode === 'checking' ? null : <AppNavigator />}
           {shareRequest && (
             <View key={shareRequest.id} style={StyleSheet.absoluteFill}>
-              {shareRequest.text !== undefined ? (
+              {shareRequest.image ? (
+                <DirectShareReceiveScreen
+                  shareData={shareRequest.image.data}
+                  onComplete={closeSharedContent}
+                />
+              ) : shareRequest.text !== undefined ? (
                 <ProcessTextScreen text={shareRequest.text} onComplete={closeSharedContent} />
               ) : (
                 <ShareReceiveScreen onComplete={closeSharedContent} />

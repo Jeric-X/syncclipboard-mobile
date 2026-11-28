@@ -3,6 +3,7 @@
  * 提供 SHA256 等哈希计算功能
  */
 
+import { readFileChunks } from './readFileChunks';
 import * as Crypto from 'expo-crypto';
 import { sha256 } from 'js-sha256';
 import type { ClipboardContent } from '@/types';
@@ -128,46 +129,8 @@ export async function calculateBase64ContentHash(
  * 流式读取文件，分块计算，周期性 yield 保持 UI 响应
  */
 async function calculateFileHashJS(fileUri: string, signal?: AbortSignal): Promise<string> {
-  const { File } = await import('expo-file-system');
-  const file = new File(fileUri);
-
-  const fileInfo = file.info();
-  if (!fileInfo.exists) {
-    throw new Error(`File not found: ${fileUri}`);
-  }
-
-  const fileHandle = file.open();
   const hasher = sha256.create();
-  const chunkSize = 1024 * 1024; // 1MB 块
-
-  try {
-    const totalSize = fileInfo.size ?? 0;
-    let remainingBytes = totalSize;
-    let chunkCount = 0;
-
-    while (remainingBytes > 0) {
-      throwIfAborted(signal);
-
-      const bytesToRead = Math.min(chunkSize, remainingBytes);
-      const chunk = fileHandle.readBytes(bytesToRead);
-
-      if (!chunk || chunk.length === 0) {
-        break;
-      }
-
-      hasher.update(chunk);
-      remainingBytes -= chunk.length;
-      chunkCount += 1;
-
-      // 周期性让出事件循环，保持 UI 响应
-      if (chunkCount % 1 === 0) {
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      }
-    }
-  } finally {
-    fileHandle.close();
-  }
-
+  await readFileChunks(fileUri, (chunk) => hasher.update(chunk), signal);
   return hasher.hex().toUpperCase();
 }
 

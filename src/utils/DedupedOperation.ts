@@ -31,19 +31,24 @@ export class DedupedOperation<TContent, TResult, TProgress = never> {
     run: (signal: AbortSignal, notify: (info: TProgress) => void) => Promise<TResult>
   ): Promise<TResult> {
     // 相同内容正在运行：继承，共享进度回调，等待完成
-    if (this._promise && this._content && this.isSame(content, this._content)) {
-      if (onProgress) this._callbacks.add(onProgress);
+    if (
+      this._promise &&
+      !this._controller?.signal.aborted &&
+      this._content &&
+      this.isSame(content, this._content)
+    ) {
+      const callbacks = this._callbacks;
+      if (onProgress) callbacks.add(onProgress);
       try {
         return await this._promise;
       } finally {
-        if (onProgress) this._callbacks.delete(onProgress);
+        if (onProgress) callbacks.delete(onProgress);
       }
     }
 
     // 不同内容：取消当前操作，重新开始
     if (this._controller) this._controller.abort();
-    this._callbacks.clear();
-    if (onProgress) this._callbacks.add(onProgress);
+    this._callbacks = new Set(onProgress ? [onProgress] : []);
 
     const controller = new AbortController();
     this._controller = controller;
@@ -63,7 +68,7 @@ export class DedupedOperation<TContent, TResult, TProgress = never> {
     this._promise = (async () => {
       try {
         return await run(controller.signal, (info: TProgress) => {
-          this._callbacks.forEach((cb) => cb(info));
+          if (!controller.signal.aborted) this._callbacks.forEach((cb) => cb(info));
         });
       } finally {
         if (onExternalAbort && externalSignal) {

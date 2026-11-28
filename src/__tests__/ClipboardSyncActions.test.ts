@@ -65,6 +65,7 @@ jest.mock('../services/clipboard/LocalClipboard', () => ({
 import { downloadRemoteClipboard, setRemoteClipboard } from '../services/sync/ClipboardSyncActions';
 import { configService } from '../services/ConfigService';
 import { networkAutoSwitchService } from '../services/NetworkAutoSwitchService';
+import { clipboardSyncState } from '../services/sync/SyncState';
 import { remoteClipboardMonitor } from '../services/sync/RemoteClipboardMonitor';
 
 describe('setRemoteClipboard', () => {
@@ -82,6 +83,17 @@ describe('setRemoteClipboard', () => {
       type: 'syncclipboard',
       url: 'https://home.example',
     });
+  });
+
+  it('服务器切换后不会用之前的上传覆盖远端卡片', async () => {
+    mockSetRemoteClipboard.mockResolvedValueOnce({
+      type: 'syncclipboard',
+      url: 'https://previous.example',
+    });
+    await expect(setRemoteClipboard(localContent, new AbortController().signal)).resolves.toBe(
+      true
+    );
+    expect(clipboardSyncState.setRemoteContent).not.toHaveBeenCalled();
   });
 
   it('上传底层不执行网络自动切换预检', async () => {

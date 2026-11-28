@@ -1,9 +1,10 @@
 /**
  * Direct Share Receive Screen
- * 直接处理从 ShareActivity 传递的分享数据（不使用 expo-sharing）
+ * 处理系统分享入口已接收的文本和文件
  */
 
 import React, { useCallback, useState } from 'react';
+import { Platform } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import {
   createContentFromFile,
@@ -13,6 +14,7 @@ import {
 import { setRemoteClipboard } from '@/services/sync/ClipboardSyncActions';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
 import type { ProgressInfo } from 'native-util';
+import type { ClipboardContent } from '@/types/clipboard';
 import type { ShareData } from '@/QuickActionApp';
 
 interface DirectShareReceiveScreenProps {
@@ -29,6 +31,7 @@ export const DirectShareReceiveScreen: React.FC<DirectShareReceiveScreenProps> =
   const { t } = useTranslation();
   const [loadingText, setLoadingText] = useState(() => t('shareReceive.processingFile'));
   const [progress, setProgress] = useState<ProgressInfo | null>(null);
+  const [successImage, setSuccessImage] = useState<ClipboardContent>();
   const [previewText, setPreviewText] = useState<string | undefined>(undefined);
   const [previewImage, setPreviewImage] = useState<string | undefined>(undefined);
 
@@ -48,6 +51,7 @@ export const DirectShareReceiveScreen: React.FC<DirectShareReceiveScreenProps> =
         const fileName = shareData.fileName || extractFileNameFromUri(shareData.uri);
         const mimeType = shareData.mimeType || 'application/octet-stream';
 
+        setProgress(null);
         setLoadingText(t('shareReceive.uploadingFile'));
         setPreviewText(fileName);
 
@@ -63,6 +67,7 @@ export const DirectShareReceiveScreen: React.FC<DirectShareReceiveScreenProps> =
         await setRemoteClipboard(content, signal, (info) => {
           setProgress(info ?? null);
         });
+        if (Platform.OS === 'ios' && content.type === 'Image') setSuccessImage(content);
         return;
       }
 
@@ -102,6 +107,8 @@ export const DirectShareReceiveScreen: React.FC<DirectShareReceiveScreenProps> =
       successText={t('shareReceive.success')}
       failureText={t('shareReceive.failed')}
       onComplete={onComplete}
+      successContent={successImage}
+      autoCloseDelayMs={Platform.OS === 'ios' ? 1200 : undefined}
       progress={progress}
       previewText={previewText}
       previewImage={previewImage}

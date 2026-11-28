@@ -59,7 +59,11 @@
         {
           "ios": {
             "enabled": true,
-            "activationRule": { "supportsText": true, "supportsWebUrlWithMaxCount": 1 }
+            "activationRule": {
+              "supportsText": true,
+              "supportsWebUrlWithMaxCount": 1,
+              "supportsImageWithMaxCount": 1
+            }
           },
           "android": {
             "enabled": false,

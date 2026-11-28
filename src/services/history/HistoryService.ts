@@ -4,6 +4,10 @@
  * 同时承担发布订阅职责：管理所有变更回调，HistoryStorage 不再直接维护订阅者列表。
  */
 
+import { File, Paths } from 'expo-file-system';
+import { copyAsync } from 'expo-file-system/legacy';
+import { randomUUID } from 'expo-crypto';
+import { Platform } from 'react-native';
 import type { HistoryItem, ClipboardContent } from '@/types/clipboard';
 import type { HistoryFilter, HistorySort } from '@/types/storage';
 import type { HistoryChangeCallback } from '@/storage/HistoryStorage';
@@ -84,7 +88,19 @@ export class HistoryService {
           content.profileHash,
           content.fileName
         );
-        await nativeCopyFile(content.fileUri, destUri);
+        if (Platform.OS === 'ios') {
+          const destination = new File(destUri);
+          const staging = new File(Paths.cache, `history-${randomUUID()}.tmp`);
+          try {
+            await copyAsync({ from: content.fileUri, to: staging.uri });
+            // 只发布完整副本。相同图片可能由并发的历史任务先写入。
+            if (!destination.exists) new File(staging.uri).move(destination);
+          } finally {
+            if (staging.exists) staging.delete();
+          }
+        } else {
+          await nativeCopyFile(content.fileUri, destUri);
+        }
         fileUri = destUri;
       } else {
         throw new Error(
