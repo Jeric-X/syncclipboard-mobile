@@ -1,0 +1,5 @@
+{
+  "ios": {
+    "NSLocalNetworkUsageDescription": "SyncClipboard需要使用网络以连接到同步服务器。"
+  }
+}

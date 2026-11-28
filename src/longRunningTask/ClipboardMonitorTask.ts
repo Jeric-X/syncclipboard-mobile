@@ -22,7 +22,6 @@ class ClipboardMonitorTask extends LongRunningTask {
   async start(): Promise<void> {
     if (!clipboardMonitor.isActive()) {
       await clipboardMonitor.start();
-      await clipboardMonitor.triggerCheck();
     }
     await this._applyPollingInterval();
   }

@@ -19,18 +19,27 @@ import { LongRunningTaskCoordinator } from './LongRunningTaskCoordinator';
 
 class LongRunningTaskManager extends LongRunningTaskCoordinator {
   constructor() {
+    let foreground = AppState.currentState === 'active';
     super(
       async () => ({
-        foreground: AppState.currentState === 'active',
         backgroundEnabled:
           !backgroundRuntimeState.isTempDisabled() &&
-          !!(await configService.getConfig()).enableBackgroundTasks,
+          (await configService.getConfig()).enableBackgroundTasks,
+        foreground,
       }),
       (name, error) => console.error(`[LongRunningTaskManager] Task "${name}" failed:`, error)
     );
     configService.subscribe(() => this.requestRefresh(true));
     backgroundRuntimeState.subscribe(() => this.requestRefresh(true));
-    AppState.addEventListener('change', () => this.requestRefresh());
+    AppState.addEventListener('change', (state) => {
+      // iOS 的授权弹窗也会进入 inactive；只有真正退后台才结束本次前台会话。
+      if (state === 'inactive') return;
+      const active = state === 'active';
+      if (foreground === active) return;
+      foreground = active;
+      if (!active) this.noteBackgroundTransition();
+      this.requestRefresh();
+    });
   }
 
   private requestRefresh(configChanged = false): void {
@@ -42,7 +51,6 @@ class LongRunningTaskManager extends LongRunningTaskCoordinator {
 
 export const longRunningTaskManager = new LongRunningTaskManager();
 
-// 这些任务属于 Android 的持续同步运行时。iOS 冷启动只初始化前台界面。
 if (Platform.OS === 'android') {
   // 网络选择与同步回调先于监听器启动，保证 Headless 冷启动也能收到首次变化。
   longRunningTaskManager.register(networkAutoSwitchTask, true);
@@ -55,4 +63,9 @@ if (Platform.OS === 'android') {
   longRunningTaskManager.register(historySyncTask, true);
   longRunningTaskManager.register(foregroundServiceTask);
   longRunningTaskManager.register(shizukuRecoveryTask);
+} else if (Platform.OS === 'ios') {
+  // 退后台时同步服务退订；两个 monitor 根据注册的后台运行条件暂停或恢复监听。
+  longRunningTaskManager.register(clipboardSyncTask);
+  longRunningTaskManager.register(clipboardMonitorTask, true);
+  longRunningTaskManager.register(remoteClipboardMonitorTask, true);
 }

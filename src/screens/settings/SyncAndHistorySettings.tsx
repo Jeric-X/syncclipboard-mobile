@@ -391,16 +391,18 @@ export const SyncAndHistorySettings = ({ showMessage }: SettingsModuleProps) => 
           />
         )}
 
-        <SettingInput
-          label={t('settings.localPollingInterval')}
-          value={localPollingInput}
-          onChangeText={setLocalPollingInput}
-          onBlur={handleLocalPollingBlur}
-          unit={t('settings.unitSecond')}
-          keyboardType="number-pad"
-          placeholder="1"
-          filter={filterPositiveInteger}
-        />
+        {Platform.OS !== 'ios' && (
+          <SettingInput
+            label={t('settings.localPollingInterval')}
+            value={localPollingInput}
+            onChangeText={setLocalPollingInput}
+            onBlur={handleLocalPollingBlur}
+            unit={t('settings.unitSecond')}
+            keyboardType="number-pad"
+            placeholder="1"
+            filter={filterPositiveInteger}
+          />
+        )}
 
         <SettingSwitch
           label={t('settings.autoSaveSyncFile')}

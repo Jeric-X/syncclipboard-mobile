@@ -28,7 +28,7 @@ describe('shared sync runtime lifecycle', () => {
     manager.register(task);
     await Promise.all([manager.startAll(), manager.startAll()]);
     expect(task.start).toHaveBeenCalledTimes(1);
-    expect(task.onBackground).toHaveBeenCalled();
+    expect(task.onBackground).toHaveBeenCalledTimes(1);
     expect(task.onForeground).not.toHaveBeenCalled();
   });
 

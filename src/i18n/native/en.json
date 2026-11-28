@@ -1,0 +1,5 @@
+{
+  "ios": {
+    "NSLocalNetworkUsageDescription": "SyncClipboard needs network access to connect to the sync server."
+  }
+}

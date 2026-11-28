@@ -168,7 +168,7 @@ class ClipboardChangedHandler {
     if (content.type === 'Image' && (config.autoCopyTextOnly || !content.fileUri)) return;
 
     const autoSyncEnabled = config?.autoSync ?? false;
-    const bgDownloadEnabled = !!(config?.enableBackgroundTasks && config?.enableBackgroundDownload);
+    const bgDownloadEnabled = config.enableBackgroundTasks && config.enableBackgroundDownload;
     const isAppActive = AppState.currentState === 'active';
     const shouldAutoCopy = autoSyncEnabled || (!isAppActive && bgDownloadEnabled);
 
@@ -219,7 +219,7 @@ class ClipboardChangedHandler {
     const config = await configService.getConfig();
 
     const autoSync = config?.autoSync ?? false;
-    const bgUpload = config?.enableBackgroundTasks && config?.enableBackgroundUpload;
+    const bgUpload = config.enableBackgroundTasks && config.enableBackgroundUpload;
     if (!autoSync && !bgUpload) return;
 
     const activeServer = await configService.getActiveServer();
