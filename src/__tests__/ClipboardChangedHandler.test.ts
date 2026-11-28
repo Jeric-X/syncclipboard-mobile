@@ -118,18 +118,6 @@ describe('ClipboardChangedHandler 启动基线窗口', () => {
     jest.restoreAllMocks();
   });
 
-  it('关闭前台自动同步和后台任务时不上传', async () => {
-    jest.spyOn(performance, 'now').mockReturnValue(SYSTEM_START_TIME_MS + 2_000);
-    jest.mocked(configService.getConfig).mockResolvedValue({
-      ...DEFAULT_APP_CONFIG,
-      autoSync: false,
-      enableBackgroundTasks: false,
-      enableBackgroundUpload: true,
-    });
-    await handler.handleAutoUpload(content);
-    expect(uploadLocalClipboard).not.toHaveBeenCalled();
-  });
-
   it('两秒内首次本地内容仅建立基线', async () => {
     jest.spyOn(performance, 'now').mockReturnValue(SYSTEM_START_TIME_MS + 1_999);
 

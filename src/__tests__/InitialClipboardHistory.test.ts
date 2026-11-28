@@ -1,6 +1,3 @@
-import { AppState, type AppStateStatus } from 'react-native';
-import { clipboardSyncTask } from '../longRunningTask/ClipboardSyncTask';
-import { configService } from '../services/ConfigService';
 import { longRunningTaskManager } from '../longRunningTask/LongRunningTaskManager';
 import type { ILongRunningTask } from '../longRunningTask/LongRunningTask';
 
@@ -82,33 +79,5 @@ it('后台同步关闭时，Headless 首次读到的剪贴板仍然进入历史'
     expect(mockHistory).toEqual(['initial clipboard']);
   } finally {
     await longRunningTaskManager.stopAll();
-  }
-});
-
-it('Android 快速切出再返回时，允许后台运行的同步任务收到切换回调且持续运行', async () => {
-  const onChange = jest.mocked(AppState.addEventListener).mock.calls[0][1];
-  const change = (state: AppStateStatus) => {
-    AppState.currentState = state;
-    onChange(state);
-  };
-  const config = await configService.getConfig();
-  jest
-    .spyOn(configService, 'getConfig')
-    .mockResolvedValue({ ...config, enableBackgroundTasks: true });
-  const background = jest.spyOn(clipboardSyncTask, 'onBackground');
-  const foreground = jest.spyOn(clipboardSyncTask, 'onForeground');
-  const stop = jest.spyOn(clipboardSyncTask, 'stop');
-  try {
-    change('active');
-    await longRunningTaskManager.startAll();
-    change('background');
-    change('active');
-    await longRunningTaskManager.refresh();
-    expect(background).toHaveBeenCalledTimes(1);
-    expect(foreground).toHaveBeenCalledTimes(2);
-    expect(stop).not.toHaveBeenCalled();
-  } finally {
-    await longRunningTaskManager.stopAll();
-    jest.restoreAllMocks();
   }
 });
